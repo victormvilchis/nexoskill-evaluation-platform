@@ -62,6 +62,8 @@ app:
       - http://127.0.0.1:5173
     max-failed-attempts: ${APP_MAX_FAILED_ATTEMPTS:5}
     lock-duration: ${APP_LOCK_DURATION:PT15M}
+    temporary-password-duration: ${APP_TEMP_PASSWORD_DURATION:P7D}
+    password-history-size: ${APP_PASSWORD_HISTORY_SIZE:5}
   seed:
     enabled: ${APP_SEED_ENABLED:false}
     admin-email: ${APP_SEED_ADMIN_EMAIL:admin@nexoskill.local}

@@ -17,8 +17,13 @@ export function LoginForm() {
     setSubmitting(true)
 
     try {
-      await login(email.trim(), password)
-      navigate('/dashboard', { replace: true })
+      const authenticatedUser = await login(email.trim(), password)
+      navigate(
+        authenticatedUser.passwordChangeRequired
+          ? '/change-password'
+          : '/dashboard',
+        { replace: true }
+      )
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError

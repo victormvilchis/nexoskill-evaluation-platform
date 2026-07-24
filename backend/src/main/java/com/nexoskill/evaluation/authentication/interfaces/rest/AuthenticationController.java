@@ -1,7 +1,10 @@
 package com.nexoskill.evaluation.authentication.interfaces.rest;
 
+import com.nexoskill.evaluation.authentication.application.model.ChangePasswordCommand;
 import com.nexoskill.evaluation.authentication.application.model.LoginCommand;
 import com.nexoskill.evaluation.authentication.application.model.LoginResult;
+import com.nexoskill.evaluation.authentication.application.port.out.TokenHasher;
+import com.nexoskill.evaluation.authentication.application.service.ChangeOwnPasswordService;
 import com.nexoskill.evaluation.authentication.application.service.LoginService;
 import com.nexoskill.evaluation.authentication.application.service.LogoutService;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
@@ -14,6 +17,7 @@ import java.time.Clock;
 import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,17 +30,23 @@ public class AuthenticationController {
 
     private final LoginService loginService;
     private final LogoutService logoutService;
+    private final ChangeOwnPasswordService changeOwnPasswordService;
     private final SessionCookieSupport cookieSupport;
+    private final TokenHasher tokenHasher;
     private final Clock clock;
 
     public AuthenticationController(
             LoginService loginService,
             LogoutService logoutService,
+            ChangeOwnPasswordService changeOwnPasswordService,
             SessionCookieSupport cookieSupport,
+            TokenHasher tokenHasher,
             Clock clock) {
         this.loginService = loginService;
         this.logoutService = logoutService;
+        this.changeOwnPasswordService = changeOwnPasswordService;
         this.cookieSupport = cookieSupport;
+        this.tokenHasher = tokenHasher;
         this.clock = clock;
     }
 
@@ -62,6 +72,27 @@ public class AuthenticationController {
         );
 
         return ResponseEntity.ok(new LoginResponse(result.user()));
+    }
+
+    @PostMapping("/change-password")
+    @PreAuthorize("hasAuthority('PASSWORD_CHANGE')")
+    public ResponseEntity<Void> changePassword(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody ChangePasswordRequest body,
+            HttpServletRequest request) {
+
+        String rawSessionToken = cookieSupport.readToken(request);
+        changeOwnPasswordService.change(new ChangePasswordCommand(
+                principal.internalId(),
+                body.currentPassword(),
+                body.newPassword(),
+                body.confirmPassword(),
+                tokenHasher.hash(rawSessionToken),
+                ClientRequestInfo.ipAddress(request),
+                ClientRequestInfo.userAgent(request)
+        ));
+
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout")

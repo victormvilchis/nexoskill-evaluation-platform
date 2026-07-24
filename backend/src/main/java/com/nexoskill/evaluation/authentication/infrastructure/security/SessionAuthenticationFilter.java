@@ -33,6 +33,15 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             "/error"
     );
 
+    private static final Set<String> PASSWORD_CHANGE_ALLOWED_PATHS = Set.of(
+            "/api/v1/auth/login",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/change-password",
+            "/api/v1/users/me",
+            "/actuator/health",
+            "/error"
+    );
+
     private final SessionCookieSupport cookieSupport;
     private final TokenHasher tokenHasher;
     private final AuthSessionRepository sessionRepository;
@@ -88,9 +97,25 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 session.expire();
                 sessionRepository.save(session);
             }
+
+            UserAccount expiredSessionUser = userRepository
+                    .findById(session.getUserId())
+                    .orElse(null);
+            boolean temporaryPasswordExpired = expiredSessionUser != null
+                    && expiredSessionUser.isTemporaryPasswordExpiredAt(now);
+
             clearCookie(response);
             return publicRequest(request)
-                    || reject(response, "SESSION_EXPIRED", "La sesión ha vencido.");
+                    || reject(
+                            response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            temporaryPasswordExpired
+                                    ? "TEMP_PASSWORD_EXPIRED"
+                                    : "SESSION_EXPIRED",
+                            temporaryPasswordExpired
+                                    ? "La contraseña temporal ha expirado."
+                                    : "La sesión ha vencido."
+                    );
         }
 
         UserAccount user = userRepository.findById(session.getUserId()).orElse(null);
@@ -99,7 +124,12 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             sessionRepository.save(session);
             clearCookie(response);
             return publicRequest(request)
-                    || reject(response, "UNAUTHORIZED", "La sesión no es válida.");
+                    || reject(
+                            response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            "UNAUTHORIZED",
+                            "La sesión no es válida."
+                    );
         }
 
         UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
@@ -110,6 +140,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             return publicRequest(request)
                     || reject(
                             response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
                             "ACCESS_EXPIRED",
                             "Tu acceso a la plataforma ha expirado."
                     );
@@ -122,8 +153,22 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             return publicRequest(request)
                     || reject(
                             response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
                             "ACCOUNT_UNAVAILABLE",
                             "Tu cuenta no está disponible."
+                    );
+        }
+
+        if (user.isTemporaryPasswordExpiredAt(now)) {
+            session.revoke(now);
+            sessionRepository.save(session);
+            clearCookie(response);
+            return publicRequest(request)
+                    || reject(
+                            response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            "TEMP_PASSWORD_EXPIRED",
+                            "La contraseña temporal ha expirado."
                     );
         }
 
@@ -140,7 +185,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 user.getLastLoginAt(),
                 accessStatus,
                 user.getAccess().startsAt(),
-                user.getAccess().expiresAt()
+                user.getAccess().expiresAt(),
+                user.isPasswordChangeRequired(),
+                user.getPasswordChangedAt(),
+                user.getTemporaryPasswordExpiresAt()
         );
 
         List<SimpleGrantedAuthority> authorities = java.util.stream.Stream.concat(
@@ -158,6 +206,17 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        if (user.isPasswordChangeRequired()
+                && !PASSWORD_CHANGE_ALLOWED_PATHS.contains(request.getRequestURI())) {
+            return reject(
+                    response,
+                    HttpServletResponse.SC_FORBIDDEN,
+                    "PASSWORD_CHANGE_REQUIRED",
+                    "Debes cambiar tu contraseña para continuar."
+            );
+        }
+
         return true;
     }
 
@@ -174,9 +233,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     private boolean reject(
             HttpServletResponse response,
+            int status,
             String code,
             String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(

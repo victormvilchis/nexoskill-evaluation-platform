@@ -26,6 +26,8 @@ public class AppProperties {
         private List<String> allowedOrigins = new ArrayList<>();
         private int maxFailedAttempts = 5;
         private Duration lockDuration = Duration.ofMinutes(15);
+        private Duration temporaryPasswordDuration = Duration.ofDays(7);
+        private int passwordHistorySize = 5;
 
         public String getCookieName() {
             return cookieName;
@@ -73,6 +75,22 @@ public class AppProperties {
 
         public void setLockDuration(Duration lockDuration) {
             this.lockDuration = lockDuration;
+        }
+
+        public Duration getTemporaryPasswordDuration() {
+            return temporaryPasswordDuration;
+        }
+
+        public void setTemporaryPasswordDuration(Duration temporaryPasswordDuration) {
+            this.temporaryPasswordDuration = temporaryPasswordDuration;
+        }
+
+        public int getPasswordHistorySize() {
+            return passwordHistorySize;
+        }
+
+        public void setPasswordHistorySize(int passwordHistorySize) {
+            this.passwordHistorySize = passwordHistorySize;
         }
     }
 

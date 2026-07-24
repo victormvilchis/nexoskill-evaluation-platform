@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import {
   AUTH_INVALID_EVENT,
+  PASSWORD_CHANGE_REQUIRED_EVENT,
   type AuthInvalidEventDetail
 } from '../../../shared/api/apiClient'
 import type { CurrentUser } from '../../../shared/types/auth'
@@ -57,14 +58,34 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     function handleInvalidAuthentication(event: Event) {
       const detail = (event as CustomEvent<AuthInvalidEventDetail>).detail
-      redirectToLogin(detail?.code === 'ACCESS_EXPIRED' ? 'expired' : 'session')
+      if (detail?.code === 'ACCESS_EXPIRED') {
+        redirectToLogin('expired')
+        return
+      }
+      if (detail?.code === 'TEMP_PASSWORD_EXPIRED') {
+        redirectToLogin('temporary-password-expired')
+        return
+      }
+      redirectToLogin('session')
+    }
+
+    function handlePasswordChangeRequired() {
+      navigate('/change-password', { replace: true })
     }
 
     window.addEventListener(AUTH_INVALID_EVENT, handleInvalidAuthentication)
+    window.addEventListener(
+      PASSWORD_CHANGE_REQUIRED_EVENT,
+      handlePasswordChangeRequired
+    )
     return () => {
       window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuthentication)
+      window.removeEventListener(
+        PASSWORD_CHANGE_REQUIRED_EVENT,
+        handlePasswordChangeRequired
+      )
     }
-  }, [redirectToLogin])
+  }, [navigate, redirectToLogin])
 
   useEffect(() => {
     void refresh()

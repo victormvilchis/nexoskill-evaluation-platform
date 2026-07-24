@@ -77,6 +77,11 @@ public class LoginService {
             throw AuthenticationException.invalidCredentials();
         }
 
+        if (user.isTemporaryPasswordExpiredAt(now)) {
+            recordFailure(user.getId(), command, "TEMP_PASSWORD_EXPIRED", now);
+            throw AuthenticationException.temporaryPasswordExpired();
+        }
+
         UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
         if (accessStatus == UserAccessStatus.EXPIRED) {
             recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
@@ -95,6 +100,7 @@ public class LoginService {
         Instant expiresAt = user.getAccess().capSessionExpiration(
                 now.plus(properties.getSecurity().getSessionDuration())
         );
+        expiresAt = user.capSessionExpirationForPassword(expiresAt);
 
         sessionRepository.save(AuthSession.create(
                 UUID.randomUUID().toString(),

@@ -17,7 +17,10 @@ public record CurrentUser(
         Instant lastLoginAt,
         UserAccessStatus accessStatus,
         Instant accessStartsAt,
-        Instant accessExpiresAt
+        Instant accessExpiresAt,
+        boolean passwordChangeRequired,
+        Instant passwordChangedAt,
+        Instant temporaryPasswordExpiresAt
 ) {
     public static CurrentUser from(UserAccount user, Instant now) {
         return new CurrentUser(
@@ -33,7 +36,10 @@ public record CurrentUser(
                 user.getLastLoginAt(),
                 user.getAccess().effectiveStatusAt(now),
                 user.getAccess().startsAt(),
-                user.getAccess().expiresAt()
+                user.getAccess().expiresAt(),
+                user.isPasswordChangeRequired(),
+                user.getPasswordChangedAt(),
+                user.getTemporaryPasswordExpiresAt()
         );
     }
 }

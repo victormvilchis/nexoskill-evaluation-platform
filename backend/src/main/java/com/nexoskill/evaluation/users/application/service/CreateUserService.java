@@ -4,6 +4,7 @@ import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.authentication.application.port.out.PasswordHasher;
 import com.nexoskill.evaluation.authentication.application.service.EmailNormalizer;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
 import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.CreateUserCommand;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
@@ -19,17 +20,23 @@ public class CreateUserService {
 
     private final UserManagementPort userManagementPort;
     private final PasswordHasher passwordHasher;
+    private final PasswordPolicy passwordPolicy;
     private final AuditLogPort auditLogPort;
+    private final AppProperties properties;
     private final Clock clock;
 
     public CreateUserService(
             UserManagementPort userManagementPort,
             PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy,
             AuditLogPort auditLogPort,
+            AppProperties properties,
             Clock clock) {
         this.userManagementPort = userManagementPort;
         this.passwordHasher = passwordHasher;
+        this.passwordPolicy = passwordPolicy;
         this.auditLogPort = auditLogPort;
+        this.properties = properties;
         this.clock = clock;
     }
 
@@ -37,7 +44,7 @@ public class CreateUserService {
     public AdminUserSummary create(CreateUserCommand command) {
         String normalizedEmail = EmailNormalizer.normalize(command.email());
         validateDates(command.startsAt(), command.expiresAt());
-        validatePassword(command.temporaryPassword());
+        passwordPolicy.validate(command.temporaryPassword(), command.email());
 
         if (userManagementPort.existsByNormalizedEmail(normalizedEmail)) {
             throw new BusinessException(
@@ -57,7 +64,10 @@ public class CreateUserService {
                         normalizedDisplayName(command),
                         command.roleCode().trim().toUpperCase(),
                         command.startsAt(),
-                        command.expiresAt()
+                        command.expiresAt(),
+                        clock.instant().plus(
+                                properties.getSecurity().getTemporaryPasswordDuration()
+                        )
                 )
         );
 
@@ -90,22 +100,6 @@ public class CreateUserService {
             throw new BusinessException(
                     "USER_ACCESS_DATES_INVALID",
                     "La fecha de vencimiento debe ser posterior a la fecha de inicio."
-            );
-        }
-    }
-
-    private void validatePassword(String password) {
-        boolean valid = password != null
-                && password.length() >= 10
-                && password.chars().anyMatch(Character::isUpperCase)
-                && password.chars().anyMatch(Character::isLowerCase)
-                && password.chars().anyMatch(Character::isDigit)
-                && password.chars().anyMatch(value -> !Character.isLetterOrDigit(value));
-
-        if (!valid) {
-            throw new BusinessException(
-                    "PASSWORD_POLICY_VIOLATION",
-                    "La contraseña temporal debe tener al menos 10 caracteres, mayúscula, minúscula, número y símbolo."
             );
         }
     }

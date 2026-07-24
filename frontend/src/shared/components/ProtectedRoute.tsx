@@ -20,5 +20,9 @@ export function ProtectedRoute() {
     )
   }
 
+  if (user.passwordChangeRequired && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />
+  }
+
   return <Outlet />
 }

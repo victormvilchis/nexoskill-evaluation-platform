@@ -27,4 +27,21 @@ public interface SpringDataAuthSessionRepository
             @Param("revokedStatus") SessionStatus revokedStatus,
             @Param("revokedAt") Instant revokedAt
     );
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE AuthSessionJpaEntity session
+               SET session.status = :revokedStatus,
+                   session.revokedAt = :revokedAt
+             WHERE session.userId = :userId
+               AND session.status = :activeStatus
+               AND session.tokenHash <> :currentTokenHash
+            """)
+    int revokeOtherActiveSessions(
+            @Param("userId") Long userId,
+            @Param("currentTokenHash") String currentTokenHash,
+            @Param("activeStatus") SessionStatus activeStatus,
+            @Param("revokedStatus") SessionStatus revokedStatus,
+            @Param("revokedAt") Instant revokedAt
+    );
+
 }

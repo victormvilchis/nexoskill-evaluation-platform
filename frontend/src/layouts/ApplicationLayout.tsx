@@ -28,11 +28,14 @@ export function ApplicationLayout() {
           {user?.permissions.includes('USER_VIEW') && (
             <NavLink to="/admin/users">Usuarios</NavLink>
           )}
+          {user?.permissions.includes('PROFILE_VIEW') && (
+            <NavLink to="/profile">Mi perfil</NavLink>
+          )}
         </nav>
 
         <div className="sidebar-status">
           <span className="status-dot" aria-hidden="true" />
-          Administración de usuarios activa
+          Sesión protegida
         </div>
       </aside>
 

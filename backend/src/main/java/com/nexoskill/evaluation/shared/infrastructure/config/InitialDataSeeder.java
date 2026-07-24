@@ -91,6 +91,9 @@ public class InitialDataSeeder implements ApplicationRunner {
                 displayName,
                 role,
                 Instant.now(),
+                null,
+                false,
+                Instant.now(),
                 null
         ));
     }

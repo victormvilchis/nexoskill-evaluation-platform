@@ -17,7 +17,10 @@ public record AuthenticatedUser(
         Instant lastLoginAt,
         UserAccessStatus accessStatus,
         Instant accessStartsAt,
-        Instant accessExpiresAt
+        Instant accessExpiresAt,
+        boolean passwordChangeRequired,
+        Instant passwordChangedAt,
+        Instant temporaryPasswordExpiresAt
 ) {
     public CurrentUser toCurrentUser() {
         return new CurrentUser(
@@ -31,7 +34,10 @@ public record AuthenticatedUser(
                 lastLoginAt,
                 accessStatus,
                 accessStartsAt,
-                accessExpiresAt
+                accessExpiresAt,
+                passwordChangeRequired,
+                passwordChangedAt,
+                temporaryPasswordExpiresAt
         );
     }
 }

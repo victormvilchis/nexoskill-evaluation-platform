@@ -23,4 +23,18 @@ public class UserSessionAdapter implements UserSessionPort {
                 revokedAt
         );
     }
+
+    @Override
+    public int revokeOtherActiveSessions(
+            Long userId,
+            String currentTokenHash,
+            Instant revokedAt) {
+        return repository.revokeOtherActiveSessions(
+                userId,
+                currentTokenHash,
+                SessionStatus.ACTIVE,
+                SessionStatus.REVOKED,
+                revokedAt
+        );
+    }
 }

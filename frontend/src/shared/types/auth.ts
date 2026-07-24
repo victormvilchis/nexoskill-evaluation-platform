@@ -17,6 +17,9 @@ export interface CurrentUser {
   accessStatus: UserAccessStatus
   accessStartsAt: string
   accessExpiresAt: string | null
+  passwordChangeRequired: boolean
+  passwordChangedAt: string | null
+  temporaryPasswordExpiresAt: string | null
 }
 
 export interface LoginResponse {
@@ -25,6 +28,12 @@ export interface LoginResponse {
 
 export interface CurrentUserResponse {
   user: CurrentUser
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
 }
 
 export interface ApiError {

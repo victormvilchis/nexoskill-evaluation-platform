@@ -2,6 +2,7 @@ import type { ApiError } from '../types/auth'
 
 const API_ROOT = '/api/v1'
 export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
+export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
 
 export interface AuthInvalidEventDetail {
   code: string
@@ -31,10 +32,19 @@ function publishAuthenticationFailure(code: string, message: string) {
   if (
     code === 'ACCESS_EXPIRED' ||
     code === 'SESSION_EXPIRED' ||
-    code === 'ACCOUNT_UNAVAILABLE'
+    code === 'ACCOUNT_UNAVAILABLE' ||
+    code === 'TEMP_PASSWORD_EXPIRED'
   ) {
     window.dispatchEvent(
       new CustomEvent<AuthInvalidEventDetail>(AUTH_INVALID_EVENT, {
+        detail: { code, message }
+      })
+    )
+  }
+
+  if (code === 'PASSWORD_CHANGE_REQUIRED') {
+    window.dispatchEvent(
+      new CustomEvent<AuthInvalidEventDetail>(PASSWORD_CHANGE_REQUIRED_EVENT, {
         detail: { code, message }
       })
     )

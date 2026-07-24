@@ -27,6 +27,13 @@ public class AuthenticationException extends RuntimeException {
         );
     }
 
+    public static AuthenticationException temporaryPasswordExpired() {
+        return new AuthenticationException(
+                "TEMP_PASSWORD_EXPIRED",
+                "La contraseña temporal ha expirado. Solicita un restablecimiento al administrador."
+        );
+    }
+
     public static AuthenticationException unauthorized() {
         return new AuthenticationException(
                 "UNAUTHORIZED",

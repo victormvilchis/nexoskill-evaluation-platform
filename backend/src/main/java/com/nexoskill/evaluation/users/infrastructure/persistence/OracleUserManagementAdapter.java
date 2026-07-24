@@ -62,7 +62,10 @@ public class OracleUserManagementAdapter implements UserManagementPort {
                 data.displayName(),
                 role,
                 data.startsAt(),
-                data.expiresAt()
+                data.expiresAt(),
+                true,
+                null,
+                data.temporaryPasswordExpiresAt()
         );
 
         return toSummary(userRepository.save(entity));
@@ -148,9 +151,10 @@ public class OracleUserManagementAdapter implements UserManagementPort {
     @Override
     public AdminUserSummary updatePassword(
             String publicId,
-            String passwordHash) {
+            String passwordHash,
+            Instant temporaryPasswordExpiresAt) {
         UserJpaEntity entity = findUser(publicId);
-        entity.resetPassword(passwordHash);
+        entity.resetPassword(passwordHash, temporaryPasswordExpiresAt);
         return toSummary(userRepository.save(entity));
     }
 

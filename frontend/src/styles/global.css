@@ -993,3 +993,62 @@ select:focus {
     grid-column: auto;
   }
 }
+
+.password-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at top left, rgba(23, 78, 166, 0.16), transparent 34%),
+    #f4f7fb;
+}
+
+.password-card {
+  width: min(560px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  background: white;
+  padding: 2.4rem;
+  box-shadow: var(--shadow);
+}
+
+.password-mark {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 1.3rem;
+  border-color: var(--border);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.password-policy {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1.5rem 0;
+  border: 1px solid #cddcf2;
+  border-radius: 0.9rem;
+  background: var(--primary-soft);
+  padding: 1rem;
+  color: var(--primary-dark);
+  font-size: 0.9rem;
+}
+
+.password-policy span::before {
+  content: "✓";
+  margin-right: 0.5rem;
+  font-weight: 800;
+}
+
+.profile-grid {
+  align-items: start;
+}
+
+.security-panel {
+  align-content: start;
+}
+
+.form-field input:disabled {
+  background: #eef2f7;
+  color: var(--muted);
+}

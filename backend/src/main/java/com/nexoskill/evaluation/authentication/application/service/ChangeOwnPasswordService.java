@@ -1,14 +1,13 @@
-package com.nexoskill.evaluation.users.application.service;
+package com.nexoskill.evaluation.authentication.application.service;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
+import com.nexoskill.evaluation.authentication.application.model.ChangePasswordCommand;
 import com.nexoskill.evaluation.authentication.application.port.out.PasswordHasher;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
-import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
-import com.nexoskill.evaluation.users.application.model.ResetUserPasswordCommand;
 import com.nexoskill.evaluation.users.application.port.out.PasswordHistoryPort;
-import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
 import com.nexoskill.evaluation.users.application.port.out.UserSessionPort;
+import com.nexoskill.evaluation.users.application.service.PasswordPolicy;
 import com.nexoskill.evaluation.users.domain.model.UserAccount;
 import com.nexoskill.evaluation.users.domain.repository.UserRepository;
 import java.time.Clock;
@@ -19,48 +18,64 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class ResetUserPasswordService {
+public class ChangeOwnPasswordService {
 
-    private final UserManagementPort userManagementPort;
     private final UserRepository userRepository;
-    private final UserSessionPort userSessionPort;
-    private final PasswordHistoryPort passwordHistoryPort;
     private final PasswordHasher passwordHasher;
     private final PasswordPolicy passwordPolicy;
+    private final PasswordHistoryPort passwordHistoryPort;
+    private final UserSessionPort userSessionPort;
     private final AuditLogPort auditLogPort;
     private final AppProperties properties;
     private final Clock clock;
 
-    public ResetUserPasswordService(
-            UserManagementPort userManagementPort,
+    public ChangeOwnPasswordService(
             UserRepository userRepository,
-            UserSessionPort userSessionPort,
-            PasswordHistoryPort passwordHistoryPort,
             PasswordHasher passwordHasher,
             PasswordPolicy passwordPolicy,
+            PasswordHistoryPort passwordHistoryPort,
+            UserSessionPort userSessionPort,
             AuditLogPort auditLogPort,
             AppProperties properties,
             Clock clock) {
-        this.userManagementPort = userManagementPort;
         this.userRepository = userRepository;
-        this.userSessionPort = userSessionPort;
-        this.passwordHistoryPort = passwordHistoryPort;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
+        this.passwordHistoryPort = passwordHistoryPort;
+        this.userSessionPort = userSessionPort;
         this.auditLogPort = auditLogPort;
         this.properties = properties;
         this.clock = clock;
     }
 
     @Transactional
-    public AdminUserSummary reset(ResetUserPasswordCommand command) {
-        UserManagementPort.ManagedUser managedUser =
-                userManagementPort.getByPublicId(command.publicId());
-        UserAccount user = userRepository.findById(managedUser.internalId())
-                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-        passwordPolicy.validate(command.temporaryPassword(), user.getEmail());
-        rejectReusedPassword(user, command.temporaryPassword());
+    public void change(ChangePasswordCommand command) {
+        if (!command.newPassword().equals(command.confirmPassword())) {
+            throw new BusinessException(
+                    "PASSWORD_CONFIRMATION_MISMATCH",
+                    "La confirmación de la contraseña no coincide."
+            );
+        }
 
+        UserAccount user = userRepository.findById(command.userId())
+                .orElseThrow(() -> new BusinessException(
+                        "USER_NOT_FOUND",
+                        "La cuenta solicitada no existe."
+                ));
+
+        if (!passwordHasher.matches(
+                command.currentPassword(),
+                user.getPasswordHash())) {
+            throw new BusinessException(
+                    "CURRENT_PASSWORD_INVALID",
+                    "La contraseña actual es incorrecta."
+            );
+        }
+
+        passwordPolicy.validate(command.newPassword(), user.getEmail());
+        rejectReusedPassword(user, command.newPassword());
+
+        boolean passwordChangeRequiredBefore = user.isPasswordChangeRequired();
         Instant now = clock.instant();
         passwordHistoryPort.record(
                 user.getId(),
@@ -68,40 +83,36 @@ public class ResetUserPasswordService {
                 now
         );
 
-        AdminUserSummary updated = userManagementPort.updatePassword(
-                command.publicId(),
-                passwordHasher.encode(command.temporaryPassword()),
-                now.plus(properties.getSecurity().getTemporaryPasswordDuration())
+        user.changePassword(
+                passwordHasher.encode(command.newPassword()),
+                now
         );
-        int revokedSessions = userSessionPort.revokeActiveSessions(
-                managedUser.internalId(),
+        userRepository.save(user);
+
+        int revokedSessions = userSessionPort.revokeOtherActiveSessions(
+                user.getId(),
+                command.currentSessionTokenHash(),
                 now
         );
 
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("targetUserPublicId", updated.publicId());
-        data.put("targetEmail", updated.email());
         data.put("revokedSessions", revokedSessions);
-        data.put(
-                "temporaryPasswordExpiresAt",
-                now.plus(properties.getSecurity().getTemporaryPasswordDuration()).toString()
-        );
+        data.put("passwordChangeRequiredBefore", passwordChangeRequiredBefore);
 
         auditLogPort.record(
-                command.actorUserId(),
-                "USER_PASSWORD_RESET",
-                "USER_MANAGEMENT",
-                "Se restableció la contraseña temporal de un usuario.",
+                user.getId(),
+                "PASSWORD_CHANGED",
+                "PROFILE",
+                "El usuario cambió su contraseña.",
                 command.ipAddress(),
                 command.userAgent(),
                 data,
                 now
         );
-        return updated;
     }
 
-    private void rejectReusedPassword(UserAccount user, String password) {
-        if (passwordHasher.matches(password, user.getPasswordHash())) {
+    private void rejectReusedPassword(UserAccount user, String newPassword) {
+        if (passwordHasher.matches(newPassword, user.getPasswordHash())) {
             throw reuseException();
         }
 
@@ -110,7 +121,7 @@ public class ResetUserPasswordService {
                         user.getId(),
                         historySize
                 ).stream()
-                .anyMatch(hash -> passwordHasher.matches(password, hash));
+                .anyMatch(hash -> passwordHasher.matches(newPassword, hash));
 
         if (reused) {
             throw reuseException();
@@ -120,7 +131,7 @@ public class ResetUserPasswordService {
     private BusinessException reuseException() {
         return new BusinessException(
                 "PASSWORD_REUSE_NOT_ALLOWED",
-                "No puedes reutilizar una de las últimas contraseñas del usuario."
+                "No puedes reutilizar una de tus últimas contraseñas."
         );
     }
 }

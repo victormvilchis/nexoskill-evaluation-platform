@@ -13,7 +13,12 @@ export function LoginPage() {
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />
+    return (
+      <Navigate
+        to={user.passwordChangeRequired ? '/change-password' : '/dashboard'}
+        replace
+      />
+    )
   }
 
   return (
@@ -38,6 +43,11 @@ export function LoginPage() {
           <div className="error-message" role="alert">
             Tu acceso a la plataforma ha expirado. Solicita una nueva vigencia
             al administrador.
+          </div>
+        )}
+        {reason === 'temporary-password-expired' && (
+          <div className="error-message" role="alert">
+            La contraseña temporal expiró. Solicita al administrador una nueva.
           </div>
         )}
         {reason === 'session' && (

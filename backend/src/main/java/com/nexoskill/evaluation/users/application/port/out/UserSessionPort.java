@@ -5,4 +5,10 @@ import java.time.Instant;
 public interface UserSessionPort {
 
     int revokeActiveSessions(Long userId, Instant revokedAt);
+
+    int revokeOtherActiveSessions(
+            Long userId,
+            String currentTokenHash,
+            Instant revokedAt
+    );
 }

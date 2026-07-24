@@ -1,8 +1,8 @@
 package com.nexoskill.evaluation.users.infrastructure.persistence;
 
 import com.nexoskill.evaluation.users.domain.model.RoleGrant;
-import com.nexoskill.evaluation.users.domain.model.UserAccount;
 import com.nexoskill.evaluation.users.domain.model.UserAccess;
+import com.nexoskill.evaluation.users.domain.model.UserAccount;
 import com.nexoskill.evaluation.users.domain.repository.UserRepository;
 import java.util.Optional;
 import java.util.Set;
@@ -38,6 +38,12 @@ public class OracleUserRepositoryAdapter implements UserRepository {
                 user.getLockedUntil(),
                 user.getLastLoginAt()
         );
+        entity.applyPasswordState(
+                user.getPasswordHash(),
+                user.isPasswordChangeRequired(),
+                user.getPasswordChangedAt(),
+                user.getTemporaryPasswordExpiresAt()
+        );
         return toDomain(repository.save(entity));
     }
 
@@ -64,6 +70,9 @@ public class OracleUserRepositoryAdapter implements UserRepository {
                 entity.getFailedLoginAttempts(),
                 entity.getLockedUntil(),
                 entity.getLastLoginAt(),
+                entity.isPasswordChangeRequired(),
+                entity.getPasswordChangedAt(),
+                entity.getTemporaryPasswordExpiresAt(),
                 roles,
                 new UserAccess(
                         entity.getAccess().getStartsAt(),

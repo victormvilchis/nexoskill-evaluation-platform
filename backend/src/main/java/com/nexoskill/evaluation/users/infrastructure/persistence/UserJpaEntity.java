@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.users.infrastructure.persistence;
 
 import com.nexoskill.evaluation.users.domain.model.UserStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,7 +14,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToOne;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
@@ -47,7 +47,7 @@ public class UserJpaEntity {
     @Column(name = "LAST_NAME", nullable = false, length = 150)
     private String lastName;
 
-    @Column(name = "DISPLAY_NAME", length = 250)
+    @Column(name = "DISPLAY_NAME", nullable = false, length = 250)
     private String displayName;
 
     @Enumerated(EnumType.STRING)
@@ -62,6 +62,15 @@ public class UserJpaEntity {
 
     @Column(name = "LAST_LOGIN_AT")
     private Instant lastLoginAt;
+
+    @Column(name = "PASSWORD_CHANGE_REQUIRED", nullable = false)
+    private Integer passwordChangeRequired;
+
+    @Column(name = "PASSWORD_CHANGED_AT")
+    private Instant passwordChangedAt;
+
+    @Column(name = "TEMP_PASSWORD_EXPIRES_AT")
+    private Instant temporaryPasswordExpiresAt;
 
     @Version
     @Column(name = "VERSION_NO", nullable = false)
@@ -97,7 +106,10 @@ public class UserJpaEntity {
             String displayName,
             RoleJpaEntity role,
             Instant startsAt,
-            Instant expiresAt) {
+            Instant expiresAt,
+            boolean passwordChangeRequired,
+            Instant passwordChangedAt,
+            Instant temporaryPasswordExpiresAt) {
 
         UserJpaEntity entity = new UserJpaEntity();
         entity.publicId = publicId;
@@ -109,68 +121,31 @@ public class UserJpaEntity {
         entity.displayName = displayName;
         entity.status = UserStatus.ACTIVE;
         entity.failedLoginAttempts = 0;
+        entity.passwordChangeRequired = passwordChangeRequired ? 1 : 0;
+        entity.passwordChangedAt = passwordChangedAt;
+        entity.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
         entity.roles.add(role);
         entity.access = UserAccessJpaEntity.create(entity, startsAt, expiresAt);
         return entity;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getPublicId() {
-        return publicId;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getNormalizedEmail() {
-        return normalizedEmail;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
-
-    public int getFailedLoginAttempts() {
-        return failedLoginAttempts;
-    }
-
-    public Instant getLockedUntil() {
-        return lockedUntil;
-    }
-
-    public Instant getLastLoginAt() {
-        return lastLoginAt;
-    }
-
-    public Set<RoleJpaEntity> getRoles() {
-        return roles;
-    }
-
-    public UserAccessJpaEntity getAccess() {
-        return access;
-    }
-
-
+    public Long getId() { return id; }
+    public String getPublicId() { return publicId; }
+    public String getEmail() { return email; }
+    public String getNormalizedEmail() { return normalizedEmail; }
+    public String getPasswordHash() { return passwordHash; }
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
+    public String getDisplayName() { return displayName; }
+    public UserStatus getStatus() { return status; }
+    public int getFailedLoginAttempts() { return failedLoginAttempts; }
+    public Instant getLockedUntil() { return lockedUntil; }
+    public Instant getLastLoginAt() { return lastLoginAt; }
+    public boolean isPasswordChangeRequired() { return Integer.valueOf(1).equals(passwordChangeRequired); }
+    public Instant getPasswordChangedAt() { return passwordChangedAt; }
+    public Instant getTemporaryPasswordExpiresAt() { return temporaryPasswordExpiresAt; }
+    public Set<RoleJpaEntity> getRoles() { return roles; }
+    public UserAccessJpaEntity getAccess() { return access; }
 
     public void updateProfile(
             String email,
@@ -198,11 +173,17 @@ public class UserJpaEntity {
         }
     }
 
-    public void resetPassword(String passwordHash) {
-        this.passwordHash = passwordHash;
+    public void resetPassword(
+            String encodedPassword,
+            Instant temporaryPasswordExpiresAt) {
+        this.passwordHash = encodedPassword;
+        this.passwordChangeRequired = 1;
+        this.passwordChangedAt = null;
+        this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
         this.failedLoginAttempts = 0;
         this.lockedUntil = null;
     }
+
     public void applyAuthenticationState(
             int failedAttempts,
             Instant lockedUntil,
@@ -210,5 +191,16 @@ public class UserJpaEntity {
         this.failedLoginAttempts = failedAttempts;
         this.lockedUntil = lockedUntil;
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public void applyPasswordState(
+            String encodedPassword,
+            boolean passwordChangeRequired,
+            Instant passwordChangedAt,
+            Instant temporaryPasswordExpiresAt) {
+        this.passwordHash = encodedPassword;
+        this.passwordChangeRequired = passwordChangeRequired ? 1 : 0;
+        this.passwordChangedAt = passwordChangedAt;
+        this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
     }
 }

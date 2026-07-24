@@ -18,6 +18,9 @@ public class UserAccount {
     private int failedLoginAttempts;
     private Instant lockedUntil;
     private Instant lastLoginAt;
+    private boolean passwordChangeRequired;
+    private Instant passwordChangedAt;
+    private Instant temporaryPasswordExpiresAt;
     private final Set<RoleGrant> roles;
     private final UserAccess access;
 
@@ -34,6 +37,9 @@ public class UserAccount {
             int failedLoginAttempts,
             Instant lockedUntil,
             Instant lastLoginAt,
+            boolean passwordChangeRequired,
+            Instant passwordChangedAt,
+            Instant temporaryPasswordExpiresAt,
             Set<RoleGrant> roles,
             UserAccess access) {
 
@@ -49,6 +55,9 @@ public class UserAccount {
         this.failedLoginAttempts = failedLoginAttempts;
         this.lockedUntil = lockedUntil;
         this.lastLoginAt = lastLoginAt;
+        this.passwordChangeRequired = passwordChangeRequired;
+        this.passwordChangedAt = passwordChangedAt;
+        this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
         this.roles = Set.copyOf(roles);
         this.access = access;
     }
@@ -59,6 +68,30 @@ public class UserAccount {
         }
         boolean accountUnlocked = lockedUntil == null || !lockedUntil.isAfter(now);
         return accountUnlocked && access != null && access.isActiveAt(now);
+    }
+
+    public boolean isTemporaryPasswordExpiredAt(Instant now) {
+        return passwordChangeRequired
+                && temporaryPasswordExpiresAt != null
+                && !temporaryPasswordExpiresAt.isAfter(now);
+    }
+
+    public Instant capSessionExpirationForPassword(Instant requestedExpiration) {
+        if (!passwordChangeRequired || temporaryPasswordExpiresAt == null) {
+            return requestedExpiration;
+        }
+        return temporaryPasswordExpiresAt.isBefore(requestedExpiration)
+                ? temporaryPasswordExpiresAt
+                : requestedExpiration;
+    }
+
+    public void changePassword(String encodedPassword, Instant changedAt) {
+        this.passwordHash = encodedPassword;
+        this.passwordChangeRequired = false;
+        this.passwordChangedAt = changedAt;
+        this.temporaryPasswordExpiresAt = null;
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
     }
 
     public void registerFailedLogin(int maximumAttempts, Instant lockUntil) {
@@ -84,59 +117,21 @@ public class UserAccount {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getPublicId() {
-        return publicId;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getNormalizedEmail() {
-        return normalizedEmail;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public String getFirstName() {
-        return firstName;
-    }
-
-    public String getLastName() {
-        return lastName;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public UserStatus getStatus() {
-        return status;
-    }
-
-    public int getFailedLoginAttempts() {
-        return failedLoginAttempts;
-    }
-
-    public Instant getLockedUntil() {
-        return lockedUntil;
-    }
-
-    public Instant getLastLoginAt() {
-        return lastLoginAt;
-    }
-
-    public Set<RoleGrant> getRoles() {
-        return Collections.unmodifiableSet(roles);
-    }
-
-    public UserAccess getAccess() {
-        return access;
-    }
+    public Long getId() { return id; }
+    public String getPublicId() { return publicId; }
+    public String getEmail() { return email; }
+    public String getNormalizedEmail() { return normalizedEmail; }
+    public String getPasswordHash() { return passwordHash; }
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
+    public String getDisplayName() { return displayName; }
+    public UserStatus getStatus() { return status; }
+    public int getFailedLoginAttempts() { return failedLoginAttempts; }
+    public Instant getLockedUntil() { return lockedUntil; }
+    public Instant getLastLoginAt() { return lastLoginAt; }
+    public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
+    public Instant getPasswordChangedAt() { return passwordChangedAt; }
+    public Instant getTemporaryPasswordExpiresAt() { return temporaryPasswordExpiresAt; }
+    public Set<RoleGrant> getRoles() { return Collections.unmodifiableSet(roles); }
+    public UserAccess getAccess() { return access; }
 }

@@ -39,11 +39,12 @@ export function CreateUserPage() {
     getRoles()
       .then((response) => {
         setRoles(response)
-        if (response.length > 0) {
+        const fallbackRoleCode = response[0]?.code
+        if (fallbackRoleCode) {
           setRoleCode((current) =>
             response.some((role) => role.code === current)
               ? current
-              : response[0].code
+              : fallbackRoleCode
           )
         }
       })

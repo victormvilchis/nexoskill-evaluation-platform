@@ -54,7 +54,8 @@ public interface UserManagementPort {
 
     AdminUserSummary updatePassword(
             String publicId,
-            String passwordHash
+            String passwordHash,
+            Instant temporaryPasswordExpiresAt
     );
 
     List<RoleOption> listActiveRoles();
@@ -69,7 +70,8 @@ public interface UserManagementPort {
             String displayName,
             String roleCode,
             Instant startsAt,
-            Instant expiresAt
+            Instant expiresAt,
+            Instant temporaryPasswordExpiresAt
     ) {
     }
 
