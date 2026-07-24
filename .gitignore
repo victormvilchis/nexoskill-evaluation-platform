@@ -1,0 +1,28 @@
+# Java
+backend/target/
+*.class
+*.log
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local configuration
+.env
+backend/src/main/resources/application-local-private.yml
+
+# XAMPP deployment output
+xampp-deploy/

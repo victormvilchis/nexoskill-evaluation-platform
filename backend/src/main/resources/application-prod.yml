@@ -1,0 +1,10 @@
+app:
+  security:
+    cookie-secure: true
+  seed:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.nexoskill.evaluation: INFO

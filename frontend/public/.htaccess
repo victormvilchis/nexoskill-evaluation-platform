@@ -1,0 +1,6 @@
+RewriteEngine On
+RewriteBase /evaluaciones/
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /evaluaciones/index.html [L]
