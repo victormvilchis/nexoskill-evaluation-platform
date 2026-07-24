@@ -20,6 +20,13 @@ public class AuthenticationException extends RuntimeException {
         );
     }
 
+    public static AuthenticationException accessExpired() {
+        return new AuthenticationException(
+                "ACCESS_EXPIRED",
+                "Tu acceso a la plataforma ha expirado."
+        );
+    }
+
     public static AuthenticationException unauthorized() {
         return new AuthenticationException(
                 "UNAUTHORIZED",

@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.authentication.infrastructure.security;
 
 import com.nexoskill.evaluation.authentication.application.model.CurrentUser;
+import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import java.time.Instant;
 import java.util.Set;
 
@@ -13,7 +14,10 @@ public record AuthenticatedUser(
         String displayName,
         Set<String> roles,
         Set<String> permissions,
-        Instant lastLoginAt
+        Instant lastLoginAt,
+        UserAccessStatus accessStatus,
+        Instant accessStartsAt,
+        Instant accessExpiresAt
 ) {
     public CurrentUser toCurrentUser() {
         return new CurrentUser(
@@ -24,7 +28,10 @@ public record AuthenticatedUser(
                 displayName,
                 roles,
                 permissions,
-                lastLoginAt
+                lastLoginAt,
+                accessStatus,
+                accessStartsAt,
+                accessExpiresAt
         );
     }
 }

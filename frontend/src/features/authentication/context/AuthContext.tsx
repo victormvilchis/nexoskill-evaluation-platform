@@ -4,9 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren
 } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  AUTH_INVALID_EVENT,
+  type AuthInvalidEventDetail
+} from '../../../shared/api/apiClient'
 import type { CurrentUser } from '../../../shared/types/auth'
 import {
   getCurrentUser,
@@ -22,11 +28,20 @@ interface AuthContextValue {
   refresh: () => Promise<void>
 }
 
+const MAX_TIMEOUT = 2_147_000_000
+const SESSION_CHECK_INTERVAL = 30_000
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const navigate = useNavigate()
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const expirationTimer = useRef<number | null>(null)
+
+  const redirectToLogin = useCallback((reason: string) => {
+    setUser(null)
+    navigate(`/login?reason=${encodeURIComponent(reason)}`, { replace: true })
+  }, [navigate])
 
   const refresh = useCallback(async () => {
     try {
@@ -40,8 +55,73 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
+    function handleInvalidAuthentication(event: Event) {
+      const detail = (event as CustomEvent<AuthInvalidEventDetail>).detail
+      redirectToLogin(detail?.code === 'ACCESS_EXPIRED' ? 'expired' : 'session')
+    }
+
+    window.addEventListener(AUTH_INVALID_EVENT, handleInvalidAuthentication)
+    return () => {
+      window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuthentication)
+    }
+  }, [redirectToLogin])
+
+  useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (expirationTimer.current !== null) {
+      window.clearTimeout(expirationTimer.current)
+      expirationTimer.current = null
+    }
+
+    if (!user?.accessExpiresAt) return
+
+    let cancelled = false
+    const schedule = () => {
+      if (cancelled) return
+      const remaining = new Date(user.accessExpiresAt!).getTime() - Date.now()
+      if (remaining <= 0) {
+        redirectToLogin('expired')
+        void getCurrentUser().catch(() => undefined)
+        return
+      }
+      expirationTimer.current = window.setTimeout(
+        schedule,
+        Math.min(remaining, MAX_TIMEOUT)
+      )
+    }
+
+    schedule()
+    return () => {
+      cancelled = true
+      if (expirationTimer.current !== null) {
+        window.clearTimeout(expirationTimer.current)
+      }
+    }
+  }, [redirectToLogin, user?.accessExpiresAt])
+
+  useEffect(() => {
+    if (!user) return
+
+    const verifySession = () => {
+      void getCurrentUser()
+        .then((response) => setUser(response.user))
+        .catch(() => undefined)
+    }
+
+    const interval = window.setInterval(verifySession, SESSION_CHECK_INTERVAL)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') verifySession()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [user?.publicId])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password)

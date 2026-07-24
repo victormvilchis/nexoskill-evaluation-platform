@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.authentication.application.model;
 
 import com.nexoskill.evaluation.users.domain.model.UserAccount;
+import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import java.time.Instant;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -13,9 +14,12 @@ public record CurrentUser(
         String displayName,
         Set<String> roles,
         Set<String> permissions,
-        Instant lastLoginAt
+        Instant lastLoginAt,
+        UserAccessStatus accessStatus,
+        Instant accessStartsAt,
+        Instant accessExpiresAt
 ) {
-    public static CurrentUser from(UserAccount user) {
+    public static CurrentUser from(UserAccount user, Instant now) {
         return new CurrentUser(
                 user.getPublicId(),
                 user.getEmail(),
@@ -26,7 +30,10 @@ public record CurrentUser(
                         .map(role -> role.code())
                         .collect(Collectors.toUnmodifiableSet()),
                 user.permissions(),
-                user.getLastLoginAt()
+                user.getLastLoginAt(),
+                user.getAccess().effectiveStatusAt(now),
+                user.getAccess().startsAt(),
+                user.getAccess().expiresAt()
         );
     }
 }

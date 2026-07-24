@@ -21,10 +21,29 @@ public record UserAccess(
         }
     }
 
-    public boolean isActiveAt(Instant now) {
-        if (status != UserAccessStatus.ACTIVE || now.isBefore(startsAt)) {
-            return false;
+    public UserAccessStatus effectiveStatusAt(Instant now) {
+        if (status == UserAccessStatus.SUSPENDED
+                || status == UserAccessStatus.CANCELED
+                || status == UserAccessStatus.EXPIRED) {
+            return status;
         }
-        return expiresAt == null || now.isBefore(expiresAt);
+        if (now.isBefore(startsAt)) {
+            return UserAccessStatus.PENDING;
+        }
+        if (expiresAt != null && !now.isBefore(expiresAt)) {
+            return UserAccessStatus.EXPIRED;
+        }
+        return status;
+    }
+
+    public boolean isActiveAt(Instant now) {
+        return effectiveStatusAt(now) == UserAccessStatus.ACTIVE;
+    }
+
+    public Instant capSessionExpiration(Instant requestedExpiration) {
+        if (expiresAt == null || expiresAt.isAfter(requestedExpiration)) {
+            return requestedExpiration;
+        }
+        return expiresAt;
     }
 }

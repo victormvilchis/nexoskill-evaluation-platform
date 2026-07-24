@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.users.infrastructure.persistence;
 
+import com.nexoskill.evaluation.users.domain.model.UserAccess;
 import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -73,5 +74,9 @@ public class UserAccessJpaEntity {
 
     public UserAccessStatus getStatus() {
         return status;
+    }
+
+    public UserAccess toDomain() {
+        return new UserAccess(startsAt, expiresAt, status);
     }
 }

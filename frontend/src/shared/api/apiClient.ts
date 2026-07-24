@@ -1,6 +1,12 @@
 import type { ApiError } from '../types/auth'
 
 const API_ROOT = '/api/v1'
+export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
+
+export interface AuthInvalidEventDetail {
+  code: string
+  message: string
+}
 
 export class ApiRequestError extends Error {
   readonly code: string
@@ -18,6 +24,20 @@ export class ApiRequestError extends Error {
     this.code = code
     this.status = status
     this.fieldErrors = fieldErrors
+  }
+}
+
+function publishAuthenticationFailure(code: string, message: string) {
+  if (
+    code === 'ACCESS_EXPIRED' ||
+    code === 'SESSION_EXPIRED' ||
+    code === 'ACCOUNT_UNAVAILABLE'
+  ) {
+    window.dispatchEvent(
+      new CustomEvent<AuthInvalidEventDetail>(AUTH_INVALID_EVENT, {
+        detail: { code, message }
+      })
+    )
   }
 }
 
@@ -46,9 +66,12 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const error = body as ApiError | null
+    const code = error?.code ?? 'REQUEST_FAILED'
+    const message = error?.message ?? 'No fue posible completar la solicitud.'
+    publishAuthenticationFailure(code, message)
     throw new ApiRequestError(
-      error?.message ?? 'No fue posible completar la solicitud.',
-      error?.code,
+      message,
+      code,
       response.status,
       error?.fieldErrors
     )

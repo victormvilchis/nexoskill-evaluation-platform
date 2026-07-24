@@ -1,3 +1,10 @@
+export type UserAccessStatus =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'SUSPENDED'
+  | 'EXPIRED'
+  | 'CANCELED'
+
 export interface CurrentUser {
   publicId: string
   email: string
@@ -7,6 +14,9 @@ export interface CurrentUser {
   roles: string[]
   permissions: string[]
   lastLoginAt: string | null
+  accessStatus: UserAccessStatus
+  accessStartsAt: string
+  accessExpiresAt: string | null
 }
 
 export interface LoginResponse {

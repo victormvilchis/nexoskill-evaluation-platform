@@ -27,6 +27,19 @@ const statusLabels: Record<UserStatus | UserAccessStatus, string> = {
   CANCELED: 'Cancelado'
 }
 
+
+function effectiveAccessStatus(
+  status: UserAccessStatus,
+  startsAt: string,
+  expiresAt: string | null,
+  now: number
+): UserAccessStatus {
+  if (status !== 'ACTIVE') return status
+  if (new Date(startsAt).getTime() > now) return 'PENDING'
+  if (expiresAt && new Date(expiresAt).getTime() <= now) return 'EXPIRED'
+  return 'ACTIVE'
+}
+
 function formatDate(value: string | null) {
   if (!value) return 'Sin vencimiento'
   return new Intl.DateTimeFormat('es-MX', {
@@ -44,9 +57,15 @@ export function AdminUsersPage() {
   const [data, setData] = useState<AdminUserPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
 
   const page = Math.max(Number(searchParams.get('page') ?? 0), 0)
   const created = searchParams.get('created') === '1'
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -176,7 +195,14 @@ export function AdminUsersPage() {
                   <td colSpan={6} className="empty-cell">No se encontraron usuarios.</td>
                 </tr>
               )}
-              {!loading && data?.content.map((user) => (
+              {!loading && data?.content.map((user) => {
+                const accessStatus = effectiveAccessStatus(
+                  user.accessStatus,
+                  user.startsAt,
+                  user.expiresAt,
+                  now
+                )
+                return (
                 <tr key={user.publicId}>
                   <td>
                     <strong>{user.displayName}</strong>
@@ -189,14 +215,15 @@ export function AdminUsersPage() {
                     </span>
                   </td>
                   <td>
-                    <span className={`status-badge status-${user.accessStatus.toLowerCase()}`}>
-                      {statusLabels[user.accessStatus]}
+                    <span className={`status-badge status-${accessStatus.toLowerCase()}`}>
+                      {statusLabels[accessStatus]}
                     </span>
                   </td>
                   <td>{formatDate(user.expiresAt)}</td>
                   <td>{user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Sin acceso'}</td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

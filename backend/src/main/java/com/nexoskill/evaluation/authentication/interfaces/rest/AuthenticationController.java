@@ -6,11 +6,11 @@ import com.nexoskill.evaluation.authentication.application.service.LoginService;
 import com.nexoskill.evaluation.authentication.application.service.LogoutService;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.authentication.infrastructure.security.SessionCookieSupport;
-import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
 import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.Clock;
 import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -27,17 +27,17 @@ public class AuthenticationController {
     private final LoginService loginService;
     private final LogoutService logoutService;
     private final SessionCookieSupport cookieSupport;
-    private final AppProperties properties;
+    private final Clock clock;
 
     public AuthenticationController(
             LoginService loginService,
             LogoutService logoutService,
             SessionCookieSupport cookieSupport,
-            AppProperties properties) {
+            Clock clock) {
         this.loginService = loginService;
         this.logoutService = logoutService;
         this.cookieSupport = cookieSupport;
-        this.properties = properties;
+        this.clock = clock;
     }
 
     @PostMapping("/login")
@@ -57,7 +57,7 @@ public class AuthenticationController {
                 HttpHeaders.SET_COOKIE,
                 cookieSupport.create(
                         result.rawSessionToken(),
-                        properties.getSecurity().getSessionDuration()
+                        positiveDurationBetween(clock.instant(), result.expiresAt())
                 ).toString()
         );
 
@@ -83,5 +83,14 @@ public class AuthenticationController {
         );
 
         return ResponseEntity.noContent().build();
+    }
+
+    private Duration positiveDurationBetween(
+            java.time.Instant startsAt,
+            java.time.Instant expiresAt) {
+        Duration duration = Duration.between(startsAt, expiresAt);
+        return duration.isNegative() || duration.isZero()
+                ? Duration.ofSeconds(1)
+                : duration;
     }
 }

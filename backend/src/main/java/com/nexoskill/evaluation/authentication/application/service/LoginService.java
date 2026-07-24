@@ -13,6 +13,7 @@ import com.nexoskill.evaluation.authentication.domain.model.AuthSession;
 import com.nexoskill.evaluation.authentication.domain.repository.AuthSessionRepository;
 import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
 import com.nexoskill.evaluation.users.domain.model.UserAccount;
+import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import com.nexoskill.evaluation.users.domain.repository.UserRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -76,6 +77,12 @@ public class LoginService {
             throw AuthenticationException.invalidCredentials();
         }
 
+        UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
+        if (accessStatus == UserAccessStatus.EXPIRED) {
+            recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
+            throw AuthenticationException.accessExpired();
+        }
+
         if (!user.canAuthenticateAt(now)) {
             recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
             throw AuthenticationException.invalidCredentials();
@@ -85,7 +92,9 @@ public class LoginService {
         userRepository.save(user);
 
         String rawToken = tokenGenerator.generate();
-        Instant expiresAt = now.plus(properties.getSecurity().getSessionDuration());
+        Instant expiresAt = user.getAccess().capSessionExpiration(
+                now.plus(properties.getSecurity().getSessionDuration())
+        );
 
         sessionRepository.save(AuthSession.create(
                 UUID.randomUUID().toString(),
@@ -118,7 +127,7 @@ public class LoginService {
                 now
         );
 
-        return new LoginResult(rawToken, expiresAt, CurrentUser.from(user));
+        return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now));
     }
 
     private void recordFailure(

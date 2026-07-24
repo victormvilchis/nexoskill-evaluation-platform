@@ -18,17 +18,30 @@ class UserAccessTest {
         );
 
         assertThat(access.isActiveAt(NOW)).isTrue();
+        assertThat(access.effectiveStatusAt(NOW)).isEqualTo(UserAccessStatus.ACTIVE);
     }
 
     @Test
-    void shouldRejectExpiredAccess() {
+    void shouldReportExpiredStatusAtExactExpirationInstant() {
         UserAccess access = new UserAccess(
                 NOW.minusSeconds(120),
-                NOW.minusSeconds(60),
+                NOW,
                 UserAccessStatus.ACTIVE
         );
 
         assertThat(access.isActiveAt(NOW)).isFalse();
+        assertThat(access.effectiveStatusAt(NOW)).isEqualTo(UserAccessStatus.EXPIRED);
+    }
+
+    @Test
+    void shouldReportPendingStatusBeforeStart() {
+        UserAccess access = new UserAccess(
+                NOW.plusSeconds(60),
+                null,
+                UserAccessStatus.ACTIVE
+        );
+
+        assertThat(access.effectiveStatusAt(NOW)).isEqualTo(UserAccessStatus.PENDING);
     }
 
     @Test
@@ -40,5 +53,17 @@ class UserAccessTest {
         );
 
         assertThat(access.isActiveAt(NOW)).isFalse();
+    }
+
+    @Test
+    void shouldCapSessionAtAccessExpiration() {
+        UserAccess access = new UserAccess(
+                NOW.minusSeconds(60),
+                NOW.plusSeconds(300),
+                UserAccessStatus.ACTIVE
+        );
+
+        assertThat(access.capSessionExpiration(NOW.plusSeconds(3600)))
+                .isEqualTo(NOW.plusSeconds(300));
     }
 }

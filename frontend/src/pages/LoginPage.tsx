@@ -1,10 +1,12 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { LoginForm } from '../features/authentication/components/LoginForm'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 
 export function LoginPage() {
   const { user, loading } = useAuth()
+  const [searchParams] = useSearchParams()
+  const reason = searchParams.get('reason')
 
   if (loading) {
     return <LoadingScreen />
@@ -32,6 +34,17 @@ export function LoginPage() {
         <p className="muted">
           Ingresa con la cuenta configurada en el backend.
         </p>
+        {reason === 'expired' && (
+          <div className="error-message" role="alert">
+            Tu acceso a la plataforma ha expirado. Solicita una nueva vigencia
+            al administrador.
+          </div>
+        )}
+        {reason === 'session' && (
+          <div className="error-message" role="alert">
+            Tu sesión dejó de estar disponible. Inicia sesión nuevamente.
+          </div>
+        )}
         <LoginForm />
         <div className="demo-credentials">
           <strong>Ambiente local</strong>

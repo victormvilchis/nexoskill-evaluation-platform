@@ -6,6 +6,7 @@ import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.RoleOption;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
 import com.nexoskill.evaluation.users.domain.model.UserStatus;
+import java.time.Clock;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,12 +20,15 @@ public class OracleUserManagementAdapter implements UserManagementPort {
 
     private final SpringDataUserJpaRepository userRepository;
     private final SpringDataRoleJpaRepository roleRepository;
+    private final Clock clock;
 
     public OracleUserManagementAdapter(
             SpringDataUserJpaRepository userRepository,
-            SpringDataRoleJpaRepository roleRepository) {
+            SpringDataRoleJpaRepository roleRepository,
+            Clock clock) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -101,7 +105,7 @@ public class OracleUserManagementAdapter implements UserManagementPort {
                 entity.getDisplayName(),
                 entity.getStatus(),
                 roles,
-                access.getStatus(),
+                access.toDomain().effectiveStatusAt(clock.instant()),
                 access.getStartsAt(),
                 access.getExpiresAt(),
                 entity.getLastLoginAt()
