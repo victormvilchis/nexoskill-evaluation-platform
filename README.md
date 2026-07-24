@@ -1,4 +1,4 @@
-# NexoSkill Evaluation Platform — Primera entrega
+# NexoSkill Evaluation Platform
 
 Base funcional de una plataforma web de evaluaciones con:
 
@@ -132,3 +132,22 @@ El contenido generado en `frontend/dist` se copia a
 - Suscripciones.
 - Archivos.
 - Monitoreo avanzado.
+
+
+## Actualización 0.2.0 — Administración de usuarios, parte 1
+
+Esta versión agrega:
+
+- Consulta paginada de usuarios.
+- Creación de usuarios desde el panel administrativo.
+- Rol inicial y contraseña temporal.
+- Inicio y vencimiento de acceso.
+- Validación de vigencia durante la autenticación.
+
+Endpoints agregados:
+
+```text
+GET  /api/v1/admin/users
+POST /api/v1/admin/users
+GET  /api/v1/admin/roles
+```

@@ -66,14 +66,18 @@ public class LoginService {
                     return AuthenticationException.invalidCredentials();
                 });
 
-        if (!user.canAuthenticateAt(now)
-                || !passwordHasher.matches(command.password(), user.getPasswordHash())) {
+        if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
             user.registerFailedLogin(
                     properties.getSecurity().getMaxFailedAttempts(),
                     now.plus(properties.getSecurity().getLockDuration())
             );
             userRepository.save(user);
             recordFailure(user.getId(), command, "INVALID_CREDENTIALS", now);
+            throw AuthenticationException.invalidCredentials();
+        }
+
+        if (!user.canAuthenticateAt(now)) {
+            recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
             throw AuthenticationException.invalidCredentials();
         }
 

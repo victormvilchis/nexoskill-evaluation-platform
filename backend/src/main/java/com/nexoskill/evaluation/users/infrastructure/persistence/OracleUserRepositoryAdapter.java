@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.users.infrastructure.persistence;
 
 import com.nexoskill.evaluation.users.domain.model.RoleGrant;
 import com.nexoskill.evaluation.users.domain.model.UserAccount;
+import com.nexoskill.evaluation.users.domain.model.UserAccess;
 import com.nexoskill.evaluation.users.domain.repository.UserRepository;
 import java.util.Optional;
 import java.util.Set;
@@ -63,7 +64,12 @@ public class OracleUserRepositoryAdapter implements UserRepository {
                 entity.getFailedLoginAttempts(),
                 entity.getLockedUntil(),
                 entity.getLastLoginAt(),
-                roles
+                roles,
+                new UserAccess(
+                        entity.getAccess().getStartsAt(),
+                        entity.getAccess().getExpiresAt(),
+                        entity.getAccess().getStatus()
+                )
         );
     }
 }

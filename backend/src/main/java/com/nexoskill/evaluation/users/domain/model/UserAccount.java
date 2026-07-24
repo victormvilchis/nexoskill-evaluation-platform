@@ -19,6 +19,7 @@ public class UserAccount {
     private Instant lockedUntil;
     private Instant lastLoginAt;
     private final Set<RoleGrant> roles;
+    private final UserAccess access;
 
     public UserAccount(
             Long id,
@@ -33,7 +34,8 @@ public class UserAccount {
             int failedLoginAttempts,
             Instant lockedUntil,
             Instant lastLoginAt,
-            Set<RoleGrant> roles) {
+            Set<RoleGrant> roles,
+            UserAccess access) {
 
         this.id = id;
         this.publicId = publicId;
@@ -48,13 +50,15 @@ public class UserAccount {
         this.lockedUntil = lockedUntil;
         this.lastLoginAt = lastLoginAt;
         this.roles = Set.copyOf(roles);
+        this.access = access;
     }
 
     public boolean canAuthenticateAt(Instant now) {
         if (status != UserStatus.ACTIVE) {
             return false;
         }
-        return lockedUntil == null || !lockedUntil.isAfter(now);
+        boolean accountUnlocked = lockedUntil == null || !lockedUntil.isAfter(now);
+        return accountUnlocked && access != null && access.isActiveAt(now);
     }
 
     public void registerFailedLogin(int maximumAttempts, Instant lockUntil) {
@@ -130,5 +134,9 @@ public class UserAccount {
 
     public Set<RoleGrant> getRoles() {
         return Collections.unmodifiableSet(roles);
+    }
+
+    public UserAccess getAccess() {
+        return access;
     }
 }

@@ -12,6 +12,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
@@ -73,6 +75,15 @@ public class UserJpaEntity {
     )
     private Set<RoleJpaEntity> roles = new LinkedHashSet<>();
 
+    @OneToOne(
+            mappedBy = "user",
+            fetch = FetchType.EAGER,
+            cascade = CascadeType.ALL,
+            orphanRemoval = true,
+            optional = false
+    )
+    private UserAccessJpaEntity access;
+
     protected UserJpaEntity() {
     }
 
@@ -84,7 +95,9 @@ public class UserJpaEntity {
             String firstName,
             String lastName,
             String displayName,
-            RoleJpaEntity role) {
+            RoleJpaEntity role,
+            Instant startsAt,
+            Instant expiresAt) {
 
         UserJpaEntity entity = new UserJpaEntity();
         entity.publicId = publicId;
@@ -97,6 +110,7 @@ public class UserJpaEntity {
         entity.status = UserStatus.ACTIVE;
         entity.failedLoginAttempts = 0;
         entity.roles.add(role);
+        entity.access = UserAccessJpaEntity.create(entity, startsAt, expiresAt);
         return entity;
     }
 
@@ -150,6 +164,10 @@ public class UserJpaEntity {
 
     public Set<RoleJpaEntity> getRoles() {
         return roles;
+    }
+
+    public UserAccessJpaEntity getAccess() {
+        return access;
     }
 
     public void applyAuthenticationState(

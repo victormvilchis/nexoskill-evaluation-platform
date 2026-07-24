@@ -25,14 +25,14 @@ export function ApplicationLayout() {
           <NavLink to="/dashboard">Inicio</NavLink>
           <button type="button" disabled>Evaluaciones</button>
           <button type="button" disabled>Resultados</button>
-          {user?.roles.includes('ADMINISTRATOR') && (
-            <button type="button" disabled>Administración</button>
+          {user?.permissions.includes('USER_VIEW') && (
+            <NavLink to="/admin/users">Usuarios</NavLink>
           )}
         </nav>
 
         <div className="sidebar-status">
           <span className="status-dot" aria-hidden="true" />
-          Primera entrega activa
+          Administración de usuarios activa
         </div>
       </aside>
 

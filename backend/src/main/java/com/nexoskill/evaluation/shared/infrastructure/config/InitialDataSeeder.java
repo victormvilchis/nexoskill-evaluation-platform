@@ -6,6 +6,7 @@ import com.nexoskill.evaluation.users.infrastructure.persistence.RoleJpaEntity;
 import com.nexoskill.evaluation.users.infrastructure.persistence.SpringDataRoleJpaRepository;
 import com.nexoskill.evaluation.users.infrastructure.persistence.SpringDataUserJpaRepository;
 import com.nexoskill.evaluation.users.infrastructure.persistence.UserJpaEntity;
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -88,7 +89,9 @@ public class InitialDataSeeder implements ApplicationRunner {
                 firstName,
                 lastName,
                 displayName,
-                role
+                role,
+                Instant.now(),
+                null
         ));
     }
 }
