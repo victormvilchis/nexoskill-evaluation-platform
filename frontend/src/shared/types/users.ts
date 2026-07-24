@@ -49,3 +49,23 @@ export interface CreateUserPayload {
   startsAt: string
   expiresAt: string | null
 }
+
+export interface UpdateUserProfilePayload {
+  email: string
+  firstName: string
+  lastName: string
+  displayName?: string
+}
+
+export interface UpdateUserAccessPayload {
+  startsAt: string
+  expiresAt: string | null
+}
+
+export interface UpdateUserRolePayload {
+  roleCode: string
+}
+
+export interface ResetUserPasswordPayload {
+  temporaryPassword: string
+}

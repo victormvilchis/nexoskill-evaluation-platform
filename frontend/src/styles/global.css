@@ -878,3 +878,118 @@ select:focus {
     width: 100%;
   }
 }
+
+
+.danger-button {
+  border: 1px solid #d79c9c;
+  border-radius: 0.8rem;
+  background: var(--danger-soft);
+  padding: 0.82rem 1rem;
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #ffe2e2;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.table-action-link {
+  color: var(--primary);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.table-action-link:hover {
+  text-decoration: underline;
+}
+
+.user-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.summary-card {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  padding: 1.1rem;
+}
+
+.summary-card span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.summary-card strong {
+  overflow-wrap: anywhere;
+}
+
+.management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.management-section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  padding: 1.35rem;
+}
+
+.management-section > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.management-section h2 {
+  margin-bottom: 0.35rem;
+  font-size: 1.15rem;
+}
+
+.inline-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.field-help {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 1080px) {
+  .user-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .management-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .user-overview-grid,
+  .management-section {
+    grid-template-columns: 1fr;
+  }
+
+  .management-section > div:first-child,
+  .management-section .form-wide {
+    grid-column: auto;
+  }
+}

@@ -76,6 +76,23 @@ public class UserAccessJpaEntity {
         return status;
     }
 
+
+
+    public void updatePeriod(
+            Instant startsAt,
+            Instant expiresAt,
+            Instant updatedAt) {
+        this.startsAt = startsAt;
+        this.expiresAt = expiresAt;
+        this.updatedAt = updatedAt;
+    }
+
+    public void changeStatus(
+            UserAccessStatus status,
+            Instant updatedAt) {
+        this.status = status;
+        this.updatedAt = updatedAt;
+    }
     public UserAccess toDomain() {
         return new UserAccess(startsAt, expiresAt, status);
     }

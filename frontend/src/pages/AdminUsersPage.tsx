@@ -182,17 +182,18 @@ export function AdminUsersPage() {
                 <th>Acceso</th>
                 <th>Vencimiento</th>
                 <th>Último acceso</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="empty-cell">Cargando usuarios…</td>
+                  <td colSpan={7} className="empty-cell">Cargando usuarios…</td>
                 </tr>
               )}
               {!loading && data?.content.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty-cell">No se encontraron usuarios.</td>
+                  <td colSpan={7} className="empty-cell">No se encontraron usuarios.</td>
                 </tr>
               )}
               {!loading && data?.content.map((user) => {
@@ -221,6 +222,14 @@ export function AdminUsersPage() {
                   </td>
                   <td>{formatDate(user.expiresAt)}</td>
                   <td>{user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Sin acceso'}</td>
+                  <td>
+                    <Link
+                      className="table-action-link"
+                      to={`/admin/users/${user.publicId}`}
+                    >
+                      Ver detalle
+                    </Link>
+                  </td>
                 </tr>
                 )
               })}

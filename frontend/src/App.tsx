@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ApplicationLayout } from './layouts/ApplicationLayout'
+import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -18,6 +19,7 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
+            <Route path="/admin/users/:publicId" element={<AdminUserDetailPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission="USER_CREATE" />}>

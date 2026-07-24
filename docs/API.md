@@ -66,3 +66,19 @@ Respuesta: `204 No Content`.
   "path": "/api/v1/auth/login"
 }
 ```
+
+
+## Administración del ciclo de vida de usuarios
+
+```http
+GET  /api/v1/admin/users/{publicId}
+PUT  /api/v1/admin/users/{publicId}
+PUT  /api/v1/admin/users/{publicId}/access
+PUT  /api/v1/admin/users/{publicId}/role
+POST /api/v1/admin/users/{publicId}/activate
+POST /api/v1/admin/users/{publicId}/suspend
+POST /api/v1/admin/users/{publicId}/reset-password
+```
+
+Las operaciones requieren permisos específicos. La suspensión, el cambio de rol
+y el restablecimiento de contraseña invalidan las sesiones activas del usuario.

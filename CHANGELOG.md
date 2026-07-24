@@ -28,3 +28,19 @@
 - Temporizador y verificación periódica de sesión en React.
 - Estado efectivo `EXPIRED` actualizado en tiempo real en la tabla administrativa.
 - La sesión nunca puede durar más que la vigencia del usuario.
+
+
+## 0.2.0 - Parte 3: ciclo de vida administrativo de usuarios
+
+### Agregado
+
+- Consulta del detalle de usuario.
+- Edición de nombre, correo y nombre visible.
+- Edición de vigencia.
+- Activación y suspensión de cuentas.
+- Cambio de rol con invalidación de sesiones.
+- Restablecimiento de contraseña temporal con BCrypt.
+- Revocación de sesiones al suspender o restablecer credenciales.
+- Protección para impedir la auto-suspensión de un administrador.
+- Auditoría con valores anteriores y posteriores.
+- Confirmaciones y mensajes de resultado en el frontend.

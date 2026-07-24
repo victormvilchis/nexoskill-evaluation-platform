@@ -5,8 +5,10 @@ import com.nexoskill.evaluation.users.application.model.AdminUserPage;
 import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.RoleOption;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
+import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import com.nexoskill.evaluation.users.domain.model.UserStatus;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,13 +39,18 @@ public class OracleUserManagementAdapter implements UserManagementPort {
     }
 
     @Override
+    public boolean existsByNormalizedEmailExcluding(
+            String normalizedEmail,
+            String excludedPublicId) {
+        return userRepository.existsByNormalizedEmailAndPublicIdNot(
+                normalizedEmail,
+                excludedPublicId
+        );
+    }
+
+    @Override
     public AdminUserSummary create(NewUserData data) {
-        RoleJpaEntity role = roleRepository.findByCode(data.roleCode())
-                .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
-                .orElseThrow(() -> new BusinessException(
-                        "ROLE_NOT_FOUND",
-                        "El rol seleccionado no existe o está inactivo."
-                ));
+        RoleJpaEntity role = activeRole(data.roleCode());
 
         UserJpaEntity entity = UserJpaEntity.create(
                 data.publicId(),
@@ -85,10 +92,90 @@ public class OracleUserManagementAdapter implements UserManagementPort {
     }
 
     @Override
+    public ManagedUser getByPublicId(String publicId) {
+        UserJpaEntity entity = findUser(publicId);
+        return new ManagedUser(entity.getId(), toSummary(entity));
+    }
+
+    @Override
+    public AdminUserSummary updateProfile(
+            String publicId,
+            String email,
+            String normalizedEmail,
+            String firstName,
+            String lastName,
+            String displayName) {
+        UserJpaEntity entity = findUser(publicId);
+        entity.updateProfile(
+                email,
+                normalizedEmail,
+                firstName,
+                lastName,
+                displayName
+        );
+        return toSummary(userRepository.save(entity));
+    }
+
+    @Override
+    public AdminUserSummary updateAccess(
+            String publicId,
+            Instant startsAt,
+            Instant expiresAt) {
+        UserJpaEntity entity = findUser(publicId);
+        entity.getAccess().updatePeriod(startsAt, expiresAt, clock.instant());
+        return toSummary(userRepository.save(entity));
+    }
+
+    @Override
+    public AdminUserSummary updateRole(String publicId, String roleCode) {
+        UserJpaEntity entity = findUser(publicId);
+        entity.replaceRole(activeRole(roleCode));
+        return toSummary(userRepository.save(entity));
+    }
+
+    @Override
+    public AdminUserSummary updateStatus(
+            String publicId,
+            UserStatus userStatus,
+            UserAccessStatus accessStatus,
+            Instant changedAt) {
+        UserJpaEntity entity = findUser(publicId);
+        entity.changeStatus(userStatus);
+        entity.getAccess().changeStatus(accessStatus, changedAt);
+        return toSummary(userRepository.save(entity));
+    }
+
+    @Override
+    public AdminUserSummary updatePassword(
+            String publicId,
+            String passwordHash) {
+        UserJpaEntity entity = findUser(publicId);
+        entity.resetPassword(passwordHash);
+        return toSummary(userRepository.save(entity));
+    }
+
+    @Override
     public List<RoleOption> listActiveRoles() {
         return roleRepository.findByStatusOrderByNameAsc("ACTIVE").stream()
                 .map(role -> new RoleOption(role.getCode(), role.getName()))
                 .toList();
+    }
+
+    private UserJpaEntity findUser(String publicId) {
+        return userRepository.findByPublicId(publicId)
+                .orElseThrow(() -> new BusinessException(
+                        "USER_NOT_FOUND",
+                        "El usuario solicitado no existe."
+                ));
+    }
+
+    private RoleJpaEntity activeRole(String roleCode) {
+        return roleRepository.findByCode(roleCode)
+                .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
+                .orElseThrow(() -> new BusinessException(
+                        "ROLE_NOT_FOUND",
+                        "El rol seleccionado no existe o está inactivo."
+                ));
     }
 
     private AdminUserSummary toSummary(UserJpaEntity entity) {

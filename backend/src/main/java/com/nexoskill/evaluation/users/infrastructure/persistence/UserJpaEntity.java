@@ -170,6 +170,39 @@ public class UserJpaEntity {
         return access;
     }
 
+
+
+    public void updateProfile(
+            String email,
+            String normalizedEmail,
+            String firstName,
+            String lastName,
+            String displayName) {
+        this.email = email;
+        this.normalizedEmail = normalizedEmail;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.displayName = displayName;
+    }
+
+    public void replaceRole(RoleJpaEntity role) {
+        this.roles.clear();
+        this.roles.add(role);
+    }
+
+    public void changeStatus(UserStatus status) {
+        this.status = status;
+        if (status == UserStatus.ACTIVE) {
+            this.failedLoginAttempts = 0;
+            this.lockedUntil = null;
+        }
+    }
+
+    public void resetPassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
+    }
     public void applyAuthenticationState(
             int failedAttempts,
             Instant lockedUntil,

@@ -15,6 +15,13 @@ public interface SpringDataUserJpaRepository
 
     boolean existsByNormalizedEmail(String normalizedEmail);
 
+    boolean existsByNormalizedEmailAndPublicIdNot(
+            String normalizedEmail,
+            String publicId
+    );
+
+    Optional<UserJpaEntity> findByPublicId(String publicId);
+
     @Query(
             value = """
                     SELECT u
