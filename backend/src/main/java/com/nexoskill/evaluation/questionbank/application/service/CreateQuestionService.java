@@ -7,6 +7,7 @@ import com.nexoskill.evaluation.questionbank.application.model.QuestionOptionCom
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTypeCode;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
@@ -42,7 +43,7 @@ public class CreateQuestionService {
                 "QUESTION_DIFFICULTY_REQUIRED",
                 "La dificultad es obligatoria."
         );
-        String categoryPublicId = requiredCode(
+        String categoryPublicId = PublicIdNormalizer.requiredUuid(
                 command.categoryPublicId(),
                 "QUESTION_CATEGORY_REQUIRED",
                 "La categoría es obligatoria."

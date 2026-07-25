@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.users.domain.model;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Set;
@@ -94,10 +95,20 @@ public class UserAccount {
         this.lockedUntil = null;
     }
 
-    public void registerFailedLogin(int maximumAttempts, Instant lockUntil) {
+    public void registerFailedLogin(
+            int maximumAttempts,
+            Instant now,
+            Duration lockDuration) {
+        if (lockedUntil != null && lockedUntil.isAfter(now)) {
+            return;
+        }
+        if (lockedUntil != null) {
+            failedLoginAttempts = 0;
+            lockedUntil = null;
+        }
         failedLoginAttempts++;
         if (failedLoginAttempts >= maximumAttempts) {
-            this.lockedUntil = lockUntil;
+            this.lockedUntil = now.plus(lockDuration);
         }
     }
 

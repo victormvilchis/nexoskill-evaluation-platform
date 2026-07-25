@@ -12,6 +12,10 @@ public interface SpringDataQuestionCategoryRepository
 
     List<QuestionCategoryJpaEntity> findAllByStatusOrderByNameAsc(CatalogStatus status);
 
+    List<QuestionCategoryJpaEntity> findAllByOrderByNameAsc();
+
+    Optional<QuestionCategoryJpaEntity> findByPublicId(String publicId);
+
     Optional<QuestionCategoryJpaEntity> findByPublicIdAndStatus(
             String publicId,
             CatalogStatus status

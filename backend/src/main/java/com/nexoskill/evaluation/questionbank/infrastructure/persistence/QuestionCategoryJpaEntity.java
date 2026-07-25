@@ -68,6 +68,10 @@ public class QuestionCategoryJpaEntity {
         return entity;
     }
 
+    public void changeStatus(CatalogStatus targetStatus) {
+        this.status = targetStatus;
+    }
+
     public Long getId() { return id; }
     public String getPublicId() { return publicId; }
     public String getCode() { return code; }

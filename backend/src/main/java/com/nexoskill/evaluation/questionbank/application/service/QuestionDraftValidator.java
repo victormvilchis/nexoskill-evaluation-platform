@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.questionbank.application.service;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionOptionCommand;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTypeCode;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import java.text.Normalizer;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -73,7 +74,7 @@ public class QuestionDraftValidator {
                         "Una opción no puede superar 2,000 caracteres."
                 );
             }
-            String normalized = option.text().trim().toLowerCase(Locale.ROOT);
+            String normalized = normalizeOptionText(option.text());
             if (!normalizedTexts.add(normalized)) {
                 throw new BusinessException(
                         "QUESTION_OPTION_DUPLICATED",
@@ -81,6 +82,12 @@ public class QuestionDraftValidator {
                 );
             }
         }
+    }
+
+    private String normalizeOptionText(String value) {
+        return Normalizer.normalize(value.trim(), Normalizer.Form.NFKC)
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
     }
 
     private void validateSingleChoice(long correctOptions) {

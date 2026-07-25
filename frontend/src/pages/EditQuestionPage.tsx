@@ -53,7 +53,27 @@ export function EditQuestionPage() {
     }
     Promise.all([getQuestionCatalogs(), getQuestion(publicId)])
       .then(([catalogResponse, questionResponse]) => {
-        setCatalogs(catalogResponse)
+        const categoryExists = catalogResponse.categories.some(
+          (category) => category.publicId === questionResponse.categoryPublicId
+        )
+        setCatalogs(
+          categoryExists
+            ? catalogResponse
+            : {
+                ...catalogResponse,
+                categories: [
+                  ...catalogResponse.categories,
+                  {
+                    publicId: questionResponse.categoryPublicId,
+                    code: 'INACTIVE',
+                    name: `${questionResponse.categoryName} (inactiva)`,
+                    description: null,
+                    status: 'INACTIVE',
+                    createdAt: questionResponse.createdAt
+                  }
+                ]
+              }
+        )
         setQuestion(questionResponse)
         setTypeCode(questionResponse.typeCode)
         setDifficultyCode(questionResponse.difficultyCode)
@@ -136,6 +156,9 @@ export function EditQuestionPage() {
       (options.length < 3 || correctCount < 2 || correctCount >= options.length)
     ) {
       return 'Configura al menos tres opciones, dos correctas y una incorrecta.'
+    }
+    if (question?.status === 'PUBLISHED' && !changeSummary.trim()) {
+      return 'Describe el cambio para crear la nueva versión.'
     }
     if (typeCode === 'TRUE_FALSE' && correctCount !== 1) {
       return 'Selecciona Verdadero o Falso como respuesta correcta.'
@@ -271,7 +294,8 @@ export function EditQuestionPage() {
 
           <div className="form-field form-wide">
             <label htmlFor="changeSummary">Resumen del cambio</label>
-            <textarea id="changeSummary" rows={2} maxLength={500} value={changeSummary} placeholder="Describe brevemente qué cambió en esta versión." onChange={(event) => setChangeSummary(event.target.value)} />
+            <textarea id="changeSummary" rows={2} maxLength={500} value={changeSummary} placeholder="Describe brevemente qué cambió en esta versión."
+              required={question.status === 'PUBLISHED'} onChange={(event) => setChangeSummary(event.target.value)} />
           </div>
 
           <div className="form-actions form-wide">

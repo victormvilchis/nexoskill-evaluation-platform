@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  changeQuestionCategoryStatus,
   createQuestionCategory,
-  getQuestionCatalogs
+  getQuestionCategories
 } from '../features/questions/api/questionApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import type { QuestionCategory } from '../shared/types/questions'
@@ -17,8 +18,8 @@ export function QuestionCategoriesPage() {
   const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    getQuestionCatalogs()
-      .then((response) => setCategories(response.categories))
+    getQuestionCategories()
+      .then(setCategories)
       .catch(() => setError('No fue posible consultar las categorías.'))
   }, [])
 
@@ -54,6 +55,38 @@ export function QuestionCategoriesPage() {
     }
   }
 
+  async function handleStatusChange(category: QuestionCategory) {
+    const targetStatus = category.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    const actionLabel = targetStatus === 'ACTIVE' ? 'activar' : 'desactivar'
+    if (!window.confirm(`¿Deseas ${actionLabel} la categoría ${category.name}?`)) {
+      return
+    }
+    setError(null)
+    setSuccess(null)
+    try {
+      const updated = await changeQuestionCategoryStatus(
+        category.publicId,
+        targetStatus
+      )
+      setCategories((current) =>
+        current.map((item) =>
+          item.publicId === updated.publicId ? updated : item
+        )
+      )
+      setSuccess(
+        targetStatus === 'ACTIVE'
+          ? 'La categoría quedó activa.'
+          : 'La categoría quedó inactiva y ya no podrá asignarse a nuevas preguntas.'
+      )
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible actualizar la categoría.'
+      )
+    }
+  }
+
   return (
     <main className="content-page narrow-content">
       <div className="page-heading">
@@ -75,7 +108,7 @@ export function QuestionCategoriesPage() {
 
       <div className="catalog-management-grid">
         <section className="detail-card">
-          <p className="eyebrow">Catálogo activo</p>
+          <p className="eyebrow">Administración de catálogo</p>
           <h2>Categorías disponibles</h2>
           <div className="category-list">
             {categories.map((category) => (
@@ -83,8 +116,18 @@ export function QuestionCategoriesPage() {
                 <div>
                   <strong>{category.name}</strong>
                   <small>{category.code}</small>
+                  <span className={`status-badge status-${category.status.toLowerCase()}`}>
+                    {category.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}
+                  </span>
                 </div>
                 <p>{category.description || 'Sin descripción.'}</p>
+                <button
+                  className={category.status === 'ACTIVE' ? 'danger-button compact-button' : 'secondary-button compact-button'}
+                  type="button"
+                  onClick={() => void handleStatusChange(category)}
+                >
+                  {category.status === 'ACTIVE' ? 'Desactivar' : 'Activar'}
+                </button>
               </article>
             ))}
           </div>

@@ -130,7 +130,12 @@ public class QuestionJpaEntity {
             );
         }
         status = target;
-        if (target == QuestionStatus.PUBLISHED) publishedVersion = currentVersion;
+        if (target == QuestionStatus.PUBLISHED) {
+            publishedVersion = currentVersion;
+        } else if (target == QuestionStatus.ARCHIVED
+                && publishedVersion == currentVersion) {
+            publishedVersion = null;
+        }
         touch(actorUserId, now);
     }
 

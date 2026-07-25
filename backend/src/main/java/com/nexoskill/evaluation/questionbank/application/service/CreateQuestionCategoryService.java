@@ -5,6 +5,7 @@ import com.nexoskill.evaluation.questionbank.application.model.CreateQuestionCat
 import com.nexoskill.evaluation.questionbank.application.model.QuestionCategorySummary;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionCatalogPort;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import java.text.Normalizer;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.Map;
@@ -100,7 +101,8 @@ public class CreateQuestionCategoryService {
                     "El código de la categoría es obligatorio."
             );
         }
-        String normalized = source.trim()
+        String normalized = Normalizer.normalize(source.trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
                 .toUpperCase(Locale.ROOT)
                 .replaceAll("[^A-Z0-9]+", "_")
                 .replaceAll("^_+|_+$", "");

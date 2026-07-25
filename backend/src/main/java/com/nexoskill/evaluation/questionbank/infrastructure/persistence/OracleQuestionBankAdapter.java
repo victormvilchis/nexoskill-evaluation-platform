@@ -72,8 +72,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             );
         }
 
-        CatalogSelection catalogs = resolveCatalogs(
-                data.typeCode(), data.difficultyCode(), data.categoryPublicId());
+        CatalogSelection catalogs = resolveCatalogsForUpdate(
+                question, data.typeCode(), data.difficultyCode(), data.categoryPublicId());
         Instant now = clock.instant();
         int previousVersion = requiredCurrentVersion(question).getVersionNumber();
         question.updateClassification(
@@ -81,6 +81,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 data.updatedBy(), now);
 
         boolean createNewVersion = question.getStatus() == QuestionStatus.PUBLISHED;
+        if (createNewVersion && (data.changeSummary() == null || data.changeSummary().isBlank())) {
+            throw new BusinessException(
+                    "QUESTION_CHANGE_SUMMARY_REQUIRED",
+                    "Describe el cambio realizado para crear una nueva versión."
+            );
+        }
         if (createNewVersion) {
             int nextVersion = versionRepository
                     .findByQuestion_IdOrderByVersionNumberDesc(question.getId())
@@ -234,6 +240,37 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                     option.text(), option.correct(), now));
         }
         return result;
+    }
+
+    private CatalogSelection resolveCatalogsForUpdate(
+            QuestionJpaEntity question,
+            String typeCode,
+            String difficultyCode,
+            String categoryPublicId) {
+        QuestionTypeJpaEntity type = typeRepository.findById(typeCode)
+                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(
+                        "QUESTION_TYPE_NOT_FOUND",
+                        "El tipo de pregunta no está disponible."));
+        QuestionDifficultyJpaEntity difficulty = difficultyRepository
+                .findById(difficultyCode)
+                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(
+                        "QUESTION_DIFFICULTY_NOT_FOUND",
+                        "La dificultad no está disponible."));
+        QuestionCategoryJpaEntity category = categoryRepository.findByPublicId(categoryPublicId)
+                .orElseThrow(() -> new BusinessException(
+                        "QUESTION_CATEGORY_NOT_FOUND",
+                        "La categoría seleccionada no existe."));
+        boolean sameCategory = question.getCategory().getPublicId()
+                .equals(category.getPublicId());
+        if (category.getStatus() != CatalogStatus.ACTIVE && !sameCategory) {
+            throw new BusinessException(
+                    "QUESTION_CATEGORY_NOT_FOUND",
+                    "La categoría seleccionada no está disponible."
+            );
+        }
+        return new CatalogSelection(type, difficulty, category);
     }
 
     private CatalogSelection resolveCatalogs(

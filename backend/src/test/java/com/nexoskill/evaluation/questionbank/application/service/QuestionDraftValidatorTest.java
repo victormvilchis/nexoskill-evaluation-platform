@@ -57,6 +57,22 @@ class QuestionDraftValidatorTest {
     }
 
     @Test
+    void rejectsDuplicatedOptionsWithDifferentWhitespace() {
+        assertThatThrownBy(() -> validator.validate(
+                QuestionTypeCode.MULTIPLE_CHOICE,
+                "Pregunta",
+                List.of(
+                        new QuestionOptionCommand("Respuesta con espacios", true),
+                        new QuestionOptionCommand("Respuesta   con   espacios", true),
+                        new QuestionOptionCommand("Otra", false)
+                )
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("QUESTION_OPTION_DUPLICATED");
+    }
+
+    @Test
     void rejectsPublicationWithoutExplanation() {
         assertThatThrownBy(() -> validator.validateForPublication(
                 QuestionTypeCode.SINGLE_CHOICE,

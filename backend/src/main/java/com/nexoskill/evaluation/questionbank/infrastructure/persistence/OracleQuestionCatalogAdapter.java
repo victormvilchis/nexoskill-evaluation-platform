@@ -61,6 +61,14 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     }
 
     @Override
+    public List<QuestionCategorySummary> listCategories() {
+        return categoryRepository.findAllByOrderByNameAsc()
+                .stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Override
     public QuestionCategorySummary createCategory(NewCategoryData category) {
         return toSummary(categoryRepository.save(
                 QuestionCategoryJpaEntity.create(
@@ -82,6 +90,23 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     @Override
     public boolean categoryNameExists(String normalizedName) {
         return categoryRepository.existsByNormalizedName(normalizedName);
+    }
+
+    @Override
+    public CategoryStatusChange changeCategoryStatus(
+            String publicId,
+            CatalogStatus targetStatus) {
+        QuestionCategoryJpaEntity category = categoryRepository.findByPublicId(publicId)
+                .orElseThrow(() -> new com.nexoskill.evaluation.shared.domain.BusinessException(
+                        "QUESTION_CATEGORY_NOT_FOUND",
+                        "La categoría solicitada no existe."
+                ));
+        CatalogStatus previous = category.getStatus();
+        category.changeStatus(targetStatus);
+        return new CategoryStatusChange(
+                toSummary(categoryRepository.saveAndFlush(category)),
+                previous
+        );
     }
 
     private QuestionCategorySummary toSummary(QuestionCategoryJpaEntity entity) {

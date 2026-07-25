@@ -70,7 +70,8 @@ public class LoginService {
         if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
             user.registerFailedLogin(
                     properties.getSecurity().getMaxFailedAttempts(),
-                    now.plus(properties.getSecurity().getLockDuration())
+                    now,
+                    properties.getSecurity().getLockDuration()
             );
             userRepository.save(user);
             recordFailure(user.getId(), command, "INVALID_CREDENTIALS", now);

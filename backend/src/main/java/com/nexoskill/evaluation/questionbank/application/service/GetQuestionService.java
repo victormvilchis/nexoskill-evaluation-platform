@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.questionbank.application.service;
 
 import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,8 @@ public class GetQuestionService {
 
     @Transactional(readOnly = true)
     public QuestionDetail get(String publicId) {
-        return questionBankPort.getByPublicId(publicId);
+        return questionBankPort.getByPublicId(PublicIdNormalizer.requiredUuid(
+                publicId, "QUESTION_ID_REQUIRED", "La pregunta es obligatoria."
+        ));
     }
 }

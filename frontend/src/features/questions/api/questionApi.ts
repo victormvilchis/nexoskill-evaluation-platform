@@ -28,6 +28,21 @@ export function getQuestionCatalogs() {
   return apiRequest<QuestionCatalogs>('/admin/question-catalogs')
 }
 
+export function getQuestionCategories() {
+  return apiRequest<QuestionCategory[]>('/admin/question-catalogs/categories')
+}
+
+export function changeQuestionCategoryStatus(
+  publicId: string,
+  status: 'ACTIVE' | 'INACTIVE'
+) {
+  const action = status === 'ACTIVE' ? 'activate' : 'deactivate'
+  return apiRequest<QuestionCategory>(
+    `/admin/question-catalogs/categories/${publicId}/${action}`,
+    { method: 'POST' }
+  )
+}
+
 export function createQuestionCategory(payload: CreateQuestionCategoryPayload) {
   return apiRequest<QuestionCategory>('/admin/question-catalogs/categories', {
     method: 'POST',

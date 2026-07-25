@@ -4,6 +4,7 @@ import com.nexoskill.evaluation.questionbank.application.model.QuestionPage;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +40,7 @@ public class SearchQuestionsService {
                 parseStatus(status),
                 normalizeCode(typeCode),
                 normalizeCode(difficultyCode),
-                normalizeOptional(categoryPublicId),
+                normalizePublicId(categoryPublicId),
                 page,
                 size
         );
@@ -71,7 +72,13 @@ public class SearchQuestionsService {
                 : value.trim().toUpperCase(Locale.ROOT);
     }
 
-    private String normalizeOptional(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
+    private String normalizePublicId(String value) {
+        return value == null || value.isBlank()
+                ? null
+                : PublicIdNormalizer.requiredUuid(
+                        value,
+                        "QUESTION_CATEGORY_REQUIRED",
+                        "La categoría es obligatoria."
+                );
     }
 }

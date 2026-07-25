@@ -6,8 +6,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -60,6 +62,34 @@ public class GlobalExceptionHandler {
                 "La solicitud contiene datos inválidos.",
                 request.getRequestURI(),
                 fields
+        );
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiErrorResponse> handleOptimisticLock(
+            ObjectOptimisticLockingFailureException exception,
+            HttpServletRequest request) {
+
+        return response(
+                HttpStatus.CONFLICT,
+                "CONCURRENT_MODIFICATION",
+                "La información fue modificada por otra sesión. Actualiza la página e intenta nuevamente.",
+                request.getRequestURI(),
+                null
+        );
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
+            DataIntegrityViolationException exception,
+            HttpServletRequest request) {
+
+        return response(
+                HttpStatus.CONFLICT,
+                "DATA_CONFLICT",
+                "La operación entra en conflicto con información existente.",
+                request.getRequestURI(),
+                null
         );
     }
 

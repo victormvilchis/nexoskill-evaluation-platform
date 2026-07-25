@@ -780,6 +780,7 @@ select:focus {
 }
 
 .status-suspended,
+.status-inactive,
 .status-disabled,
 .status-expired,
 .status-canceled {

@@ -8,7 +8,9 @@ import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPo
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTypeCode;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.time.Clock;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +38,10 @@ public class QuestionWorkflowService {
     public QuestionDetail transition(TransitionQuestionCommand command) {
         QuestionStatus target = parseStatus(command.targetStatus());
         requirePermission(command, target);
-        QuestionDetail before = questionBankPort.getByPublicId(command.publicId());
+        String questionPublicId = PublicIdNormalizer.requiredUuid(
+                command.publicId(), "QUESTION_ID_REQUIRED", "La pregunta es obligatoria."
+        );
+        QuestionDetail before = questionBankPort.getByPublicId(questionPublicId);
         if (target == QuestionStatus.PUBLISHED) {
             validator.validateForPublication(
                     QuestionTypeCode.valueOf(before.typeCode()),
@@ -48,7 +53,7 @@ public class QuestionWorkflowService {
         }
 
         QuestionBankPort.TransitionResult result = questionBankPort.transition(
-                command.publicId(), target, command.expectedEntityVersion(), command.actorUserId());
+                questionPublicId, target, command.expectedEntityVersion(), command.actorUserId());
 
         String eventType = switch (result.currentStatus()) {
             case UNDER_REVIEW -> "QUESTION_SUBMITTED_FOR_REVIEW";
@@ -89,7 +94,7 @@ public class QuestionWorkflowService {
         if (value == null || value.isBlank()) throw new BusinessException(
                 "QUESTION_TARGET_STATUS_REQUIRED", "El estado destino es obligatorio.");
         try {
-            return QuestionStatus.valueOf(value.trim().toUpperCase());
+            return QuestionStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
             throw new BusinessException("QUESTION_TARGET_STATUS_INVALID",
                     "El estado destino no es válido.");

@@ -7,6 +7,7 @@ import com.nexoskill.evaluation.questionbank.application.model.UpdateQuestionCom
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTypeCode;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
@@ -35,11 +36,16 @@ public class UpdateQuestionService {
 
     @Transactional
     public QuestionDetail update(UpdateQuestionCommand command) {
+        String questionPublicId = PublicIdNormalizer.requiredUuid(
+                command.publicId(), "QUESTION_ID_REQUIRED", "La pregunta es obligatoria."
+        );
         QuestionTypeCode type = parseType(command.typeCode());
         String difficulty = requiredCode(command.difficultyCode(),
                 "QUESTION_DIFFICULTY_REQUIRED", "La dificultad es obligatoria.");
-        String category = requiredCode(command.categoryPublicId(),
-                "QUESTION_CATEGORY_REQUIRED", "La categoría es obligatoria.");
+        String category = PublicIdNormalizer.requiredUuid(
+                command.categoryPublicId(),
+                "QUESTION_CATEGORY_REQUIRED",
+                "La categoría es obligatoria.");
         String statement = command.statement() == null ? null : command.statement().trim();
         String explanation = normalizeExplanation(command.explanation());
         String changeSummary = normalizeChangeSummary(command.changeSummary());
@@ -48,7 +54,7 @@ public class UpdateQuestionService {
 
         QuestionBankPort.UpdateResult result = questionBankPort.update(
                 new QuestionBankPort.UpdateQuestionData(
-                        command.publicId(), type.name(), difficulty, category,
+                        questionPublicId, type.name(), difficulty, category,
                         statement, explanation, changeSummary, options,
                         command.expectedEntityVersion(), command.actorUserId()
                 )

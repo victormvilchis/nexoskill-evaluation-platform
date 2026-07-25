@@ -4,6 +4,7 @@ import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.questionbank.application.model.DuplicateQuestionCommand;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
+import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
@@ -28,14 +29,17 @@ public class DuplicateQuestionService {
 
     @Transactional
     public QuestionDetail duplicate(DuplicateQuestionCommand command) {
+        String sourcePublicId = PublicIdNormalizer.requiredUuid(
+                command.publicId(), "QUESTION_ID_REQUIRED", "La pregunta es obligatoria."
+        );
         QuestionDetail duplicated = questionBankPort.duplicate(
-                command.publicId(), UUID.randomUUID().toString(), command.actorUserId());
+                sourcePublicId, UUID.randomUUID().toString(), command.actorUserId());
         auditLogPort.record(
                 command.actorUserId(), "QUESTION_DUPLICATED", "QUESTION_BANK",
                 "Se duplicó una pregunta como un nuevo borrador.",
                 command.ipAddress(), command.userAgent(),
                 Map.of(
-                        "sourceQuestionPublicId", command.publicId(),
+                        "sourceQuestionPublicId", sourcePublicId,
                         "newQuestionPublicId", duplicated.publicId()
                 ), clock.instant());
         return duplicated;

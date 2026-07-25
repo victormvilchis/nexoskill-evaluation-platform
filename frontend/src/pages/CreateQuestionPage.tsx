@@ -192,6 +192,14 @@ export function CreateQuestionPage() {
         </Link>
       </div>
 
+      {catalogs && catalogs.categories.length === 0 && (
+        <div className="warning-message">
+          No existen categorías activas. Crea o activa una categoría antes de
+          registrar preguntas. {' '}
+          <Link to="/admin/question-categories">Administrar categorías</Link>
+        </div>
+      )}
+
       <form
         className="entity-form question-form"
         onSubmit={(event) => void handleSubmit(event)}
@@ -361,7 +369,11 @@ export function CreateQuestionPage() {
           <Link className="secondary-button button-link" to="/admin/questions">
             Cancelar
           </Link>
-          <button className="primary-button" type="submit" disabled={submitting}>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={submitting || !catalogs || catalogs.categories.length === 0}
+          >
             {submitting ? 'Guardando…' : 'Guardar borrador'}
           </button>
         </div>
