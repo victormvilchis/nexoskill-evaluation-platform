@@ -18,6 +18,16 @@ function resolveCrumbs(pathname: string): Crumb[] {
     return base
   }
 
+  if (pathname.startsWith('/admin/collections')) {
+    const base: Crumb[] = [
+      { label: 'Evaluaciones' },
+      { label: 'Colecciones', to: '/admin/collections' }
+    ]
+    if (pathname.endsWith('/new')) base.push({ label: 'Nueva colección' })
+    else if (pathname !== '/admin/collections') base.push({ label: 'Configuración' })
+    return base
+  }
+
   if (pathname === '/admin/question-categories') {
     return [
       { label: 'Contenido' },

@@ -68,12 +68,15 @@ export default function App() {
 
 
           <Route element={<PermissionRoute permission="COLLECTION_VIEW" />}>
-            <Route path="/admin/question-collections" element={<AdminCollectionsPage />} />
-            <Route path="/admin/question-collections/:publicId" element={<CollectionDetailPage />} />
+            <Route path="/admin/collections" element={<AdminCollectionsPage />} />
+            <Route path="/admin/collections/:publicId" element={<CollectionDetailPage />} />
           </Route>
           <Route element={<PermissionRoute permission="COLLECTION_MANAGE" />}>
-            <Route path="/admin/question-collections/new" element={<CreateCollectionPage />} />
+            <Route path="/admin/collections/new" element={<CreateCollectionPage />} />
           </Route>
+          <Route path="/admin/question-collections" element={<Navigate to="/admin/collections" replace />} />
+          <Route path="/admin/question-collections/new" element={<Navigate to="/admin/collections/new" replace />} />
+          <Route path="/admin/question-collections/:publicId" element={<Navigate to="/admin/collections" replace />} />
           <Route element={<PermissionRoute permission="FORM_VIEW" />}>
             <Route path="/admin/forms" element={<AdminFormsPage />} />
             <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />

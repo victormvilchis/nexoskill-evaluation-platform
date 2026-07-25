@@ -55,8 +55,7 @@ export function ApplicationLayout() {
         icon: 'questions',
         items: [
           { label: 'Preguntas', to: '/admin/questions', icon: 'questions', permission: 'QUESTION_VIEW' },
-          { label: 'Categorías', to: '/admin/question-categories', icon: 'categories', permission: 'QUESTION_CATEGORY_MANAGE' },
-          { label: 'Colecciones', to: '/admin/question-collections', icon: 'collections', permission: 'COLLECTION_VIEW' }
+          { label: 'Categorías', to: '/admin/question-categories', icon: 'categories', permission: 'QUESTION_CATEGORY_MANAGE' }
         ]
       },
       {
@@ -65,6 +64,7 @@ export function ApplicationLayout() {
         icon: 'clipboard',
         items: [
           { label: 'Formularios', to: '/admin/forms', icon: 'clipboard', permission: 'FORM_VIEW' },
+          { label: 'Colecciones', to: '/admin/collections', icon: 'collections', permission: 'COLLECTION_VIEW' },
           { label: 'Resultados', icon: 'results', disabled: true, badge: 'Próximamente' }
         ]
       }

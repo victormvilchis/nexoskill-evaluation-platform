@@ -1,33 +1,54 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createCollection } from '../features/questions/api/questionApi'
-import { CollectionEditor } from '../features/questions/components/CollectionEditor'
-import { useToast } from '../shared/components/ToastProvider'
-import type { CollectionPayload } from '../shared/types/questions'
+import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { useToast } from '../shared/components/ToastProvider'
+import { CollectionBuilder } from '../features/collections/components/CollectionBuilder'
+import { createLearningCollection } from '../features/collections/api/collectionApi'
+import type { CollectionPayload } from '../shared/types/collections'
 
 export function CreateCollectionPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const [saving, setSaving] = useState(false)
 
   async function save(payload: CollectionPayload) {
-    const collection = await createCollection(payload)
-    toast.success('Colección creada', 'El contenido quedó disponible para formularios.')
-    navigate(`/admin/question-collections/${collection.publicId}`)
+    setSaving(true)
+    try {
+      const collection = await createLearningCollection(payload)
+      toast.success(
+        'Colección creada',
+        'Los formularios quedaron organizados por nivel.'
+      )
+      navigate(`/admin/collections/${collection.publicId}`, { replace: true })
+    } catch (error) {
+      toast.error(
+        'No fue posible crear la colección',
+        error instanceof ApiRequestError
+          ? error.message
+          : 'Revisa la información e intenta nuevamente.'
+      )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <main className="content-page editor-page collection-editor-page">
-      <BackButton fallback="/admin/question-collections" />
-      <div className="page-heading compact resource-heading">
+    <main className="content-page lc-page lc-editor-page">
+      <BackButton fallback="/admin/collections" label="Volver a colecciones" />
+      <div className="lc-page-header lc-page-header-compact">
         <div>
           <p className="eyebrow">Colecciones</p>
           <h1>Nueva colección</h1>
-          <p className="muted">
-            Combina categorías dinámicas y preguntas específicas en un solo recurso.
-          </p>
+          <p>Configura una ruta progresiva utilizando formularios existentes.</p>
         </div>
       </div>
-      <CollectionEditor onSubmit={save} label="Crear colección" />
+      <CollectionBuilder
+        saving={saving}
+        submitLabel="Crear colección"
+        onCancel={() => navigate('/admin/collections')}
+        onSubmit={save}
+      />
     </main>
   )
 }
