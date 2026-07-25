@@ -15,6 +15,7 @@ public record QuestionSummary(
         boolean hasCode,
         List<QuestionUsageRef> forms,
         List<QuestionUsageRef> collections,
+        long entityVersion,
         Instant createdAt,
         Instant updatedAt) {
     public QuestionSummary {

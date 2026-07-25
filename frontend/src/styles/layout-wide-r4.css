@@ -1,0 +1,522 @@
+/* NexoSkill 0.4.0 R4 — full-width layout, compact filters and navigation */
+
+:root {
+  --ns-page-gutter: clamp(16px, 1.65vw, 30px);
+  --ns-control-height: 42px;
+  --ns-radius-sm: 10px;
+  --ns-radius-md: 14px;
+  --ns-control-border: #cbd7e6;
+  --ns-control-focus: #4f83d5;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.app-content,
+.app-content > main,
+.app-content > div,
+.app-content > section {
+  min-width: 0;
+}
+
+/* Full-width pages: remove the old centered 1050/1360/1440px limits. */
+.content-page,
+.dashboard-page,
+.lc-page,
+.editor-page,
+main.page-container,
+main.resource-page,
+main.question-bank-page-v2,
+main.ns-form-builder {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 20px var(--ns-page-gutter) 40px;
+}
+
+.editor-page,
+.question-editor-v2,
+.collection-editor,
+.ns-form-builder,
+.resource-page,
+.lc-page {
+  min-width: 0;
+}
+
+/* Compact, consistent page headings. */
+.page-heading,
+.resource-heading,
+.ns-page-header,
+.lc-page-header {
+  width: 100%;
+  margin: 0 0 16px;
+  gap: 16px;
+}
+
+.page-heading h1,
+.resource-heading h1,
+.ns-page-header h1,
+.lc-page-header h1 {
+  margin: 2px 0 5px;
+  font-size: clamp(2rem, 3vw, 2.75rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.page-heading .muted,
+.resource-heading .muted,
+.ns-page-header .muted,
+.lc-page-header p:not(.eyebrow) {
+  max-width: 920px;
+  margin-bottom: 0;
+}
+
+/* Back is always anchored at the left edge of page content. */
+.ns-back-button {
+  display: inline-flex;
+  width: max-content;
+  min-height: 36px;
+  align-self: flex-start;
+  justify-self: start;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  border: 1px solid #d4deeb;
+  border-radius: 9px;
+  background: #fff;
+  padding: 7px 11px;
+  color: #36506f;
+  font-size: 0.84rem;
+  font-weight: 750;
+  box-shadow: 0 2px 8px rgba(24, 46, 79, 0.04);
+}
+
+.ns-back-button:hover {
+  border-color: #aac0df;
+  background: #f8fbff;
+  color: var(--primary);
+  transform: translateX(-2px);
+}
+
+/* General controls. */
+.ns-field input,
+.ns-field select,
+.ns-field textarea,
+.ns-filter-field select,
+.compact-filter select,
+.lc-select-field select,
+.filter-panel select,
+.question-filter-panel select {
+  font: inherit;
+}
+
+.ns-field input,
+.ns-field select,
+.ns-filter-field select,
+.compact-filter select,
+.lc-select-field select,
+.filter-panel select,
+.question-filter-panel select {
+  min-height: var(--ns-control-height);
+}
+
+.ns-field select,
+.ns-filter-field select,
+.compact-filter select,
+.lc-select-field select,
+.filter-panel select,
+.question-filter-panel select {
+  line-height: 1.2;
+  padding: 0 36px 0 12px;
+}
+
+/* Shared dynamic filter system. */
+.ns-filter-toolbar,
+.question-filter-panel,
+.filter-panel,
+.lc-list-toolbar {
+  width: 100%;
+  margin: 0 0 14px;
+  border: 1px solid #d9e3ef;
+  border-radius: var(--ns-radius-md);
+  background: #fff;
+  padding: 12px;
+  box-shadow: 0 5px 18px rgba(26, 52, 89, 0.04);
+}
+
+.ns-filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.ns-filter-fields {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) repeat(2, minmax(150px, 190px));
+  align-items: end;
+  gap: 10px;
+}
+
+.ns-filter-meta {
+  min-height: var(--ns-control-height);
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.ns-search-field,
+.resource-search,
+.lc-list-search,
+.lc-search-field {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ns-control-height);
+  border: 1px solid var(--ns-control-border);
+  border-radius: var(--ns-radius-sm);
+  background: #fff;
+  padding: 0 11px;
+}
+
+.ns-search-field:focus-within,
+.resource-search:focus-within,
+.lc-list-search:focus-within,
+.lc-search-field:focus-within {
+  border-color: var(--ns-control-focus);
+  box-shadow: 0 0 0 3px rgba(23, 78, 166, 0.1);
+}
+
+.ns-search-field input,
+.resource-search input,
+.lc-list-search input,
+.lc-search-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.ns-filter-field,
+.compact-filter,
+.lc-select-field {
+  min-width: 0;
+}
+
+.ns-filter-field > span,
+.compact-filter > span,
+.lc-select-field > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #5e6e84;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ns-filter-field select,
+.compact-filter select,
+.lc-select-field select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--ns-control-border);
+  border-radius: var(--ns-radius-sm);
+  background-color: #fff;
+  color: var(--text);
+}
+
+.question-filter-panel {
+  grid-template-columns: minmax(360px, 1fr) repeat(3, minmax(150px, 190px)) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.question-filter-summary {
+  min-width: 112px;
+  min-height: var(--ns-control-height);
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.resource-total,
+.ns-result-count {
+  white-space: nowrap;
+}
+
+.lc-list-toolbar {
+  grid-template-columns: minmax(360px, 1fr) minmax(160px, 210px) auto auto;
+  gap: 10px;
+  padding: 12px;
+}
+
+/* Form list and builder now use the complete available area. */
+.ns-form-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 12px;
+}
+
+.ns-form-card {
+  min-height: 160px;
+  padding: 16px;
+}
+
+.ns-builder-layout {
+  width: 100%;
+  grid-template-columns: minmax(0, 1.65fr) minmax(330px, 390px);
+  gap: 14px;
+}
+
+.ns-builder-main {
+  min-width: 0;
+}
+
+.ns-builder-sidebar {
+  top: 88px;
+  min-width: 0;
+}
+
+.ns-card {
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.ns-card-heading {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.ns-form-grid {
+  gap: 12px;
+}
+
+.ns-settings-group {
+  padding: 14px 16px;
+}
+
+.ns-builder-empty {
+  min-height: 170px;
+}
+
+/* Collection and editor pages also fill the viewport without oversized gutters. */
+.lc-collection-grid {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.editor-page .question-editor,
+.editor-page .collection-editor,
+.question-editor-v2 {
+  width: 100%;
+  max-width: none;
+}
+
+.question-editor-v2 .editor-card,
+.editor-card {
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* Compact bank cards and filters. */
+.question-compact-list {
+  margin-top: 12px;
+  gap: 9px;
+}
+
+.question-row-card {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 16px;
+  padding: 13px 15px;
+}
+
+.question-membership-summary {
+  gap: 10px;
+  padding-left: 15px;
+}
+
+/* IDE: keep the lightweight IDE look, without a fake Main.java tab. */
+.java-ide {
+  width: 100%;
+  margin: 0;
+  border-radius: 10px;
+}
+
+.java-ide-toolbar {
+  min-height: 32px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.java-ide-language {
+  margin-left: auto;
+  color: #52657d;
+  font-size: 0.68rem;
+}
+
+.java-ide-body {
+  width: 100%;
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.java-ide-gutter {
+  padding-inline: 6px 9px;
+}
+
+.java-ide-textarea,
+.java-ide-code {
+  width: 100%;
+  padding: 13px 15px;
+}
+
+.question-preview-v2 .java-ide {
+  margin: 0;
+}
+
+.code-details[open] .java-ide,
+.feedback-card[open] .java-ide {
+  margin-top: 10px;
+}
+
+@media (max-width: 1180px) {
+  .ns-filter-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-filter-meta {
+    justify-content: space-between;
+  }
+
+  .question-filter-panel {
+    grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(140px, 1fr));
+  }
+
+  .question-filter-summary {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
+  .ns-builder-layout {
+    grid-template-columns: minmax(0, 1fr) 330px;
+  }
+}
+
+@media (max-width: 960px) {
+  .content-page,
+  .dashboard-page,
+  .lc-page,
+  .editor-page,
+  main.page-container,
+  main.resource-page,
+  main.question-bank-page-v2,
+  main.ns-form-builder {
+    padding-inline: 16px;
+  }
+
+  .ns-filter-fields,
+  .question-filter-panel,
+  .lc-list-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ns-search-field,
+  .resource-search,
+  .lc-list-search,
+  .lc-search-field,
+  .question-bank-search {
+    grid-column: 1 / -1;
+  }
+
+  .ns-builder-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ns-builder-sidebar {
+    position: static;
+  }
+
+  .question-row-card {
+    grid-template-columns: 1fr;
+  }
+
+  .question-membership-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 20px;
+    border-top: 1px solid #e3eaf2;
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --ns-page-gutter: 12px;
+  }
+
+  .content-page,
+  .dashboard-page,
+  .lc-page,
+  .editor-page,
+  main.page-container,
+  main.resource-page,
+  main.question-bank-page-v2,
+  main.ns-form-builder {
+    padding: 14px 12px 28px;
+  }
+
+  .page-heading,
+  .resource-heading,
+  .ns-page-header,
+  .lc-page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ns-header-actions,
+  .heading-actions,
+  .resource-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ns-filter-fields,
+  .question-filter-panel,
+  .lc-list-toolbar,
+  .ns-form-grid,
+  .ns-inline-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .question-filter-summary,
+  .ns-filter-meta {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .ns-form-card-grid,
+  .lc-collection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .question-membership-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .question-membership-summary > svg {
+    display: none;
+  }
+}

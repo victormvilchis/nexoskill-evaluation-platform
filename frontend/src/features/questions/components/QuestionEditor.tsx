@@ -210,10 +210,17 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
       }
       await onSubmit(payload)
     } catch (error) {
-      toast.error(
-        'No fue posible guardar la pregunta',
-        error instanceof ApiRequestError ? error.message : undefined
-      )
+      if (error instanceof ApiRequestError && error.status === 409) {
+        toast.warning(
+          'La pregunta cambió mientras la editabas',
+          `${error.message} Tus datos permanecen en el formulario para que puedas revisarlos.`
+        )
+      } else {
+        toast.error(
+          'No fue posible guardar la pregunta',
+          error instanceof ApiRequestError ? error.message : undefined
+        )
+      }
     } finally {
       setBusy(false)
     }

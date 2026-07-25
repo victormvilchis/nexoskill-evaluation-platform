@@ -1,12 +1,33 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getQuestionCatalogs, searchQuestions } from '../features/questions/api/questionApi'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../features/authentication/context/AuthContext'
+import {
+  changeQuestionStatus,
+  deleteQuestion,
+  duplicateQuestion,
+  getQuestionCatalogs,
+  restoreQuestion,
+  searchQuestions
+} from '../features/questions/api/questionApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
+import {
+  ResourceSearchField,
+  ResourceSelectField
+} from '../shared/components/ResourceFilters'
+import {
+  TableActionButton,
+  TableActionLink,
+  TableActions
+} from '../shared/components/TableActions'
+import { useToast } from '../shared/components/ToastProvider'
 import type {
   QuestionCatalogs,
   QuestionPage,
   QuestionStatus,
+  QuestionSummary,
   QuestionTypeCode
 } from '../shared/types/questions'
 
@@ -16,13 +37,27 @@ const statusLabel: Record<QuestionStatus, string> = {
   DELETED: 'Eliminada'
 }
 
+type PendingAction =
+  | { type: 'ARCHIVE' | 'ACTIVATE' | 'DELETE' | 'RESTORE'; question: QuestionSummary }
+  | null
+
 function monthYear(value: string) {
   return new Intl.DateTimeFormat('es-MX', { month: 'short', year: 'numeric' })
     .format(new Date(value))
     .replace('.', '')
 }
 
+function usageText(items: QuestionSummary['forms'], empty: string) {
+  if (items.length === 0) return empty
+  if (items.length === 1) return items[0]?.name ?? empty
+  return `${items[0]?.name ?? empty} +${items.length - 1}`
+}
+
 export function AdminQuestionsPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const [data, setData] = useState<QuestionPage>()
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [query, setQuery] = useState('')
@@ -32,6 +67,8 @@ export function AdminQuestionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
+  const [busyId, setBusyId] = useState<string>()
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
   useEffect(() => {
@@ -75,90 +112,120 @@ export function AdminQuestionsPage() {
   const questions = data?.content ?? []
   const hasFilters = Boolean(query || status || typeCode || categoryPublicId)
 
+  async function duplicate(question: QuestionSummary) {
+    setBusyId(question.publicId)
+    try {
+      const copy = await duplicateQuestion(question.publicId)
+      toast.success('Pregunta duplicada', 'La copia quedó disponible para editarse.')
+      navigate(`/admin/questions/${copy.publicId}/edit`)
+    } catch (requestError) {
+      toast.error(
+        'No fue posible duplicar la pregunta',
+        requestError instanceof ApiRequestError ? requestError.message : undefined
+      )
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
+  async function executePendingAction() {
+    if (!pendingAction) return
+    const { question, type } = pendingAction
+    setBusyId(question.publicId)
+    try {
+      if (type === 'DELETE') {
+        await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación administrativa')
+        toast.success('Pregunta eliminada')
+      } else if (type === 'RESTORE') {
+        await restoreQuestion(question.publicId, question.entityVersion)
+        toast.success('Pregunta restaurada como archivada')
+      } else {
+        await changeQuestionStatus(
+          question.publicId,
+          type === 'ACTIVATE' ? 'ACTIVE' : 'ARCHIVED',
+          question.entityVersion
+        )
+        toast.success(type === 'ACTIVATE' ? 'Pregunta reactivada' : 'Pregunta archivada')
+      }
+      setPendingAction(null)
+      reload()
+    } catch (requestError) {
+      const message = requestError instanceof ApiRequestError
+        ? requestError.message
+        : 'No fue posible completar la operación.'
+      if (requestError instanceof ApiRequestError && requestError.status === 409) {
+        toast.warning('La pregunta cambió mientras trabajabas', message)
+        reload()
+      } else {
+        toast.error('Operación no completada', message)
+      }
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
+  const dialogTitle = pendingAction?.type === 'DELETE'
+    ? 'Eliminar pregunta'
+    : pendingAction?.type === 'RESTORE'
+      ? 'Restaurar pregunta'
+      : pendingAction?.type === 'ARCHIVE'
+        ? 'Archivar pregunta'
+        : 'Reactivar pregunta'
+  const dialogDescription = pendingAction?.type === 'DELETE'
+    ? 'La pregunta dejará de aparecer en el banco normal y en contenido nuevo. El registro permanecerá almacenado.'
+    : pendingAction?.type === 'RESTORE'
+      ? 'La pregunta volverá como archivada. Podrás reactivarla cuando esté lista.'
+      : pendingAction?.type === 'ARCHIVE'
+        ? 'La pregunta dejará de estar disponible para contenido nuevo.'
+        : 'La pregunta volverá a estar disponible.'
+
   return (
-    <main className="content-page resource-page question-bank-page-v2">
-      <div className="page-heading resource-heading">
+    <main className="content-page resource-page ns-list-page">
+      <header className="ns-page-header">
         <div>
           <p className="eyebrow">Contenido</p>
           <h1>Banco de preguntas</h1>
           <p className="muted">Preguntas Java organizadas por categorías y reutilizadas en formularios.</p>
         </div>
-        <div className="heading-actions resource-heading-actions">
+        {permissions.has('QUESTION_CREATE') && (
           <Link className="primary-button button-link" to="/admin/questions/new">
             <Icon name="plus" size={16} /> Nueva pregunta
           </Link>
-        </div>
-      </div>
+        )}
+      </header>
 
-      <section className="question-filter-panel" aria-label="Filtros de preguntas">
-        <label className="resource-search question-bank-search">
-          <Icon name="search" size={18} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar en enunciado, opciones, código Java o categoría"
-          />
-          {query && (
-            <button
-              aria-label="Limpiar búsqueda"
-              className="resource-search-clear"
-              type="button"
-              onClick={() => setQuery('')}
-            >
-              <Icon name="close" size={15} />
-            </button>
-          )}
-        </label>
-
-        <label className="compact-filter">
-          <span>Tipo</span>
-          <select value={typeCode} onChange={(event) => setTypeCode(event.target.value as QuestionTypeCode | '')}>
-            <option value="">Todos</option>
-            {catalogs?.types.map((type) => <option value={type.code} key={type.code}>{type.name}</option>)}
-          </select>
-        </label>
-
-        <label className="compact-filter">
-          <span>Categoría</span>
-          <select value={categoryPublicId} onChange={(event) => setCategoryPublicId(event.target.value)}>
-            <option value="">Todas</option>
-            {catalogs?.categories.map((category) => (
-              <option value={category.publicId} key={category.publicId}>{category.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="compact-filter">
-          <span>Estado</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value as QuestionStatus | '')}>
-            <option value="">Disponibles</option>
-            <option value="ACTIVE">Activas</option>
-            <option value="ARCHIVED">Archivadas</option>
-            <option value="DELETED">Eliminadas</option>
-          </select>
-        </label>
-
-        <div className="question-filter-summary">
-          <span className="resource-total">
-            <strong>{data?.totalElements ?? 0}</strong>
-            {data?.totalElements === 1 ? ' pregunta' : ' preguntas'}
-          </span>
-          {hasFilters && (
-            <button
-              className="filter-clear-button"
-              type="button"
-              onClick={() => {
-                setQuery('')
-                setStatus('')
-                setTypeCode('')
-                setCategoryPublicId('')
-              }}
-            >
-              Limpiar filtros
-            </button>
-          )}
-        </div>
-      </section>
+      <FilterToolbar
+        resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'pregunta' : 'preguntas'}`}
+        hasActiveFilters={hasFilters}
+        onClear={() => {
+          setQuery('')
+          setStatus('')
+          setTypeCode('')
+          setCategoryPublicId('')
+        }}
+      >
+        <ResourceSearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar en enunciado, opciones, código Java o categoría"
+        />
+        <ResourceSelectField label="Tipo" value={typeCode} onChange={(value) => setTypeCode(value as QuestionTypeCode | '')}>
+          <option value="">Todos</option>
+          {catalogs?.types.map((type) => <option value={type.code} key={type.code}>{type.name}</option>)}
+        </ResourceSelectField>
+        <ResourceSelectField label="Categoría" value={categoryPublicId} onChange={setCategoryPublicId}>
+          <option value="">Todas</option>
+          {catalogs?.categories.map((category) => (
+            <option value={category.publicId} key={category.publicId}>{category.name}</option>
+          ))}
+        </ResourceSelectField>
+        <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as QuestionStatus | '')}>
+          <option value="">Disponibles</option>
+          <option value="ACTIVE">Activas</option>
+          <option value="ARCHIVED">Archivadas</option>
+          <option value="DELETED">Eliminadas</option>
+        </ResourceSelectField>
+      </FilterToolbar>
 
       {error && (
         <section className="inline-error-panel" role="alert">
@@ -168,65 +235,125 @@ export function AdminQuestionsPage() {
         </section>
       )}
 
-      {loading && !data ? (
-        <div className="question-compact-list">
-          {Array.from({ length: 6 }, (_, index) => <div className="question-row-card skeleton" key={index} />)}
+      <section className="ns-data-panel" aria-busy={loading}>
+        <div className="ns-data-table-wrap">
+          <table className="ns-data-table ns-question-table">
+            <thead>
+              <tr>
+                <th>Pregunta</th>
+                <th>Tipo</th>
+                <th>Categorías</th>
+                <th>Creada</th>
+                <th>Uso actual</th>
+                <th>Estado</th>
+                <th className="ns-actions-column">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={7} className="ns-table-empty">Consultando preguntas…</td></tr>
+              )}
+              {!loading && !error && questions.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="ns-table-empty">
+                    <strong>{hasFilters ? 'No encontramos coincidencias' : 'Aún no hay preguntas'}</strong>
+                    <span>{hasFilters ? 'Ajusta o limpia los filtros.' : 'Crea la primera pregunta para comenzar.'}</span>
+                  </td>
+                </tr>
+              )}
+              {!loading && questions.map((question) => {
+                const deleted = question.status === 'DELETED'
+                const archived = question.status === 'ARCHIVED'
+                return (
+                  <tr className={deleted ? 'ns-row-muted' : ''} key={question.publicId}>
+                    <td className="ns-primary-cell">
+                      <strong title={question.statement}>{question.statement}</strong>
+                      <small>
+                        {question.hasCode && <span><Icon name="code" size={12} /> Java</span>}
+                        {question.hasMedia && <span><Icon name="image" size={12} /> Imagen</span>}
+                      </small>
+                    </td>
+                    <td>{question.typeName}</td>
+                    <td>
+                      <div className="ns-chip-list">
+                        {question.categories.slice(0, 2).map((category) => (
+                          <span className="ns-chip" key={category.publicId}>{category.name}</span>
+                        ))}
+                        {question.categories.length > 2 && <span className="ns-chip ns-chip-muted">+{question.categories.length - 2}</span>}
+                      </div>
+                    </td>
+                    <td><time dateTime={question.createdAt}>{monthYear(question.createdAt)}</time></td>
+                    <td className="ns-usage-cell">
+                      <span><b>Formulario:</b> {usageText(question.forms, 'Sin formulario')}</span>
+                      <span><b>Colección:</b> {usageText(question.collections, 'Sin colección')}</span>
+                    </td>
+                    <td>
+                      <span className={`status-badge status-${question.status.toLowerCase()}`}>
+                        {statusLabel[question.status]}
+                      </span>
+                    </td>
+                    <td>
+                      <TableActions>
+                        <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
+                        {!deleted && permissions.has('QUESTION_UPDATE') && (
+                          <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />
+                        )}
+                        {!deleted && permissions.has('QUESTION_DUPLICATE') && (
+                          <TableActionButton
+                            disabled={busyId === question.publicId}
+                            label="Duplicar"
+                            icon="copy"
+                            onClick={() => void duplicate(question)}
+                          />
+                        )}
+                        {!deleted && (archived ? permissions.has('QUESTION_UPDATE') : permissions.has('QUESTION_ARCHIVE')) && (
+                          <TableActionButton
+                            disabled={busyId === question.publicId}
+                            label={archived ? 'Reactivar' : 'Archivar'}
+                            icon={archived ? 'restore' : 'archive'}
+                            onClick={() => setPendingAction({ type: archived ? 'ACTIVATE' : 'ARCHIVE', question })}
+                          />
+                        )}
+                        {!deleted && permissions.has('QUESTION_ARCHIVE') && (
+                          <TableActionButton
+                            disabled={busyId === question.publicId}
+                            label="Eliminar"
+                            icon="trash"
+                            tone="danger"
+                            onClick={() => setPendingAction({ type: 'DELETE', question })}
+                          />
+                        )}
+                        {deleted && permissions.has('QUESTION_UPDATE') && (
+                          <TableActionButton
+                            disabled={busyId === question.publicId}
+                            label="Restaurar"
+                            icon="restore"
+                            tone="primary"
+                            onClick={() => setPendingAction({ type: 'RESTORE', question })}
+                          />
+                        )}
+                      </TableActions>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-      ) : (
-        <div className="question-compact-list">
-          {questions.map((question) => (
-            <Link
-              className={`question-row-card ${question.status === 'DELETED' ? 'deleted' : ''}`}
-              to={`/admin/questions/${question.publicId}`}
-              key={question.publicId}
-            >
-              <div className="question-row-main">
-                <div className="question-row-topline">
-                  <span className={`status-badge status-${question.status.toLowerCase()}`}>
-                    {statusLabel[question.status]}
-                  </span>
-                  <span className="question-type-pill">{question.typeName}</span>
-                  {question.hasCode && <span className="question-feature"><Icon name="code" size={13} /> Java</span>}
-                  {question.hasMedia && <span className="question-feature"><Icon name="image" size={13} /> Imagen</span>}
-                  <time dateTime={question.createdAt}>{monthYear(question.createdAt)}</time>
-                </div>
-                <h2>{question.statement}</h2>
-                <div className="question-category-line">
-                  {question.categories.map((category) => (
-                    <span className="category-chip compact" key={category.publicId}>{category.name}</span>
-                  ))}
-                </div>
-              </div>
+      </section>
 
-              <aside className="question-membership-summary">
-                <div>
-                  <span>Formularios</span>
-                  {question.forms.length
-                    ? question.forms.slice(0, 2).map((form) => <strong key={form.publicId}>{form.name}</strong>)
-                    : <em>Sin formulario</em>}
-                  {question.forms.length > 2 && <small>+{question.forms.length - 2} más</small>}
-                </div>
-                <div>
-                  <span>Colecciones</span>
-                  {question.collections.length
-                    ? question.collections.slice(0, 2).map((collection) => <strong key={collection.publicId}>{collection.name}</strong>)
-                    : <em>Sin colección</em>}
-                  {question.collections.length > 2 && <small>+{question.collections.length - 2} más</small>}
-                </div>
-                <Icon name="chevronRight" size={18} />
-              </aside>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {!loading && !error && questions.length === 0 && (
-        <section className="empty-state-card resource-empty-state">
-          <Icon name="questions" size={26} />
-          <h2>{status === 'DELETED' ? 'No hay preguntas eliminadas' : hasFilters ? 'No encontramos coincidencias' : 'Aún no hay preguntas'}</h2>
-          <p>{hasFilters ? 'Prueba con otros filtros o términos de búsqueda.' : 'Crea la primera pregunta para comenzar a construir tu banco.'}</p>
-        </section>
-      )}
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={dialogTitle}
+        description={dialogDescription}
+        confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Archivar' : 'Reactivar'}
+        tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'}
+        busy={pendingAction !== null && busyId === pendingAction.question.publicId}
+        onCancel={() => {
+          if (!busyId) setPendingAction(null)
+        }}
+        onConfirm={() => void executePendingAction()}
+      />
     </main>
   )
 }

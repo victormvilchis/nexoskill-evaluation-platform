@@ -73,6 +73,7 @@ export interface QuestionSummary {
   hasCode: boolean
   forms: QuestionUsageRef[]
   collections: QuestionUsageRef[]
+  entityVersion: number
   createdAt: string
   updatedAt?: string
 }

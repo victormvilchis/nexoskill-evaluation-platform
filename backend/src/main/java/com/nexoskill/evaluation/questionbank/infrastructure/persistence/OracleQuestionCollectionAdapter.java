@@ -148,7 +148,7 @@ public class OracleQuestionCollectionAdapter implements QuestionCollectionPort {
                 question.getPromptMedia() != null || question.getOptions().stream()
                         .anyMatch(option -> option.getMedia() != null || option.getMatchMedia() != null),
                 question.getCodeContent() != null && !question.getCodeContent().isBlank(),
-                java.util.List.of(), java.util.List.of(), question.getCreatedAt(), question.getUpdatedAt());
+                java.util.List.of(), java.util.List.of(), question.getVersion(), question.getCreatedAt(), question.getUpdatedAt());
     }
 
     private String name(String value) {

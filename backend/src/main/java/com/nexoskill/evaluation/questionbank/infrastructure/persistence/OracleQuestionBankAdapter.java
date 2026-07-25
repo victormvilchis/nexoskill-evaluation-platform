@@ -16,7 +16,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private static final String INTERNAL_DIFFICULTY = "BASIC";
 
     private final SpringDataQuestionRepository questions;
-    private final SpringDataQuestionOptionRepository options;
     private final SpringDataQuestionTypeRepository types;
     private final SpringDataQuestionDifficultyRepository difficulties;
     private final SpringDataQuestionCategoryRepository categories;
@@ -27,7 +26,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
 
     public OracleQuestionBankAdapter(
             SpringDataQuestionRepository questions,
-            SpringDataQuestionOptionRepository options,
             SpringDataQuestionTypeRepository types,
             SpringDataQuestionDifficultyRepository difficulties,
             SpringDataQuestionCategoryRepository categories,
@@ -36,7 +34,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             ObjectMapper json,
             Clock clock) {
         this.questions = questions;
-        this.options = options;
         this.types = types;
         this.difficulties = difficulties;
         this.categories = categories;
@@ -90,9 +87,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         var selection = selection(command.typeCode(), command.categoryPublicIds(), existing);
         var settings = command.answerSettings();
 
-        options.deleteByQuestionId(entity.getId());
-        options.flush();
+        // Elimina primero las opciones administradas por Hibernate y fuerza el DELETE
+        // antes de insertar las nuevas. Esto evita tanto el conflicto del índice
+        // (QUESTION_ID, OPTION_ORDER) como el falso OptimisticLock causado por
+        // borrar las mismas filas mediante bulk delete y orphanRemoval.
         entity.clearOptions();
+        questions.flush();
         entity.apply(
                 selection.type(),
                 internalDifficulty(),
@@ -286,7 +286,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
 
     private void checkVersion(QuestionJpaEntity entity, long expected) {
         if (entity.getVersion() != expected) {
-            throw error("QUESTION_CONCURRENTLY_MODIFIED",
+            throw error("QUESTION_CONCURRENT_MODIFICATION",
                     "La pregunta fue modificada por otra persona. Recarga la información antes de guardar.");
         }
     }
@@ -336,6 +336,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 entity.getCodeContent() != null && !entity.getCodeContent().isBlank(),
                 membershipIndex.forms(entity.getId()),
                 membershipIndex.collections(entity.getId()),
+                entity.getVersion(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt());
     }
