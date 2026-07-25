@@ -1,12 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   changeQuestionCategoryStatus,
   createQuestionCategory,
-  getQuestionCategories
+  getQuestionCategories,
+  updateQuestionCategory
 } from '../features/questions/api/questionApi'
 import { ApiRequestError } from '../shared/api/apiClient'
-import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
 import type { QuestionCategory } from '../shared/types/questions'
@@ -14,150 +13,240 @@ import type { QuestionCategory } from '../shared/types/questions'
 export function QuestionCategoriesPage() {
   const toast = useToast()
   const [categories, setCategories] = useState<QuestionCategory[]>([])
-  const [code, setCode] = useState('')
+  const [editing, setEditing] = useState<QuestionCategory>()
   const [name, setName] = useState('')
+  const [code, setCode] = useState('')
   const [description, setDescription] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [pendingCategory, setPendingCategory] = useState<QuestionCategory | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [statusBusyId, setStatusBusyId] = useState<string>()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
   useEffect(() => {
-    getQuestionCategories()
-      .then(setCategories)
-      .catch(() => toast.error('No fue posible consultar las categorías'))
-  }, [toast])
+    const controller = new AbortController()
+    setLoading(true)
+    setError(undefined)
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitting(true)
-    try {
-      const created = await createQuestionCategory({
-        code: code.trim() || undefined,
-        name: name.trim(),
-        description: description.trim() || undefined
+    getQuestionCategories(controller.signal)
+      .then(setCategories)
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return
+        setError(
+          requestError instanceof ApiRequestError
+            ? requestError.message
+            : 'No fue posible consultar las categorías.'
+        )
       })
-      setCategories((current) => [...current, created].sort((left, right) =>
-        left.name.localeCompare(right.name, 'es-MX')
-      ))
-      setCode('')
-      setName('')
-      setDescription('')
-      toast.success('Categoría creada', `${created.name} ya está disponible.`)
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [reloadKey])
+
+  function select(category?: QuestionCategory) {
+    setEditing(category)
+    setName(category?.name ?? '')
+    setCode(category?.code ?? '')
+    setDescription(category?.description ?? '')
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+
+    try {
+      const saved = editing
+        ? await updateQuestionCategory(editing.publicId, {
+            name,
+            code,
+            description,
+            expectedEntityVersion: editing.entityVersion
+          })
+        : await createQuestionCategory({
+            name,
+            code: code || undefined,
+            description
+          })
+
+      setCategories((current) =>
+        [...current.filter((category) => category.publicId !== saved.publicId), saved]
+          .sort((left, right) => left.name.localeCompare(right.name, 'es-MX'))
+      )
+      select()
+      toast.success(editing ? 'Categoría actualizada' : 'Categoría creada')
     } catch (requestError) {
       toast.error(
-        'No fue posible crear la categoría',
+        'No fue posible guardar la categoría',
         requestError instanceof ApiRequestError ? requestError.message : undefined
       )
     } finally {
-      setSubmitting(false)
+      setBusy(false)
     }
   }
 
-  async function confirmStatusChange() {
-    if (!pendingCategory) return
-    const targetStatus = pendingCategory.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    setSubmitting(true)
+  async function changeStatus(category: QuestionCategory) {
+    setStatusBusyId(category.publicId)
     try {
-      const updated = await changeQuestionCategoryStatus(pendingCategory.publicId, targetStatus)
-      setCategories((current) => current.map((item) =>
-        item.publicId === updated.publicId ? updated : item
-      ))
-      toast.success(
-        targetStatus === 'ACTIVE' ? 'Categoría activada' : 'Categoría desactivada',
-        targetStatus === 'ACTIVE'
-          ? 'Ya puede utilizarse en nuevas preguntas.'
-          : 'Las preguntas existentes conservarán esta categoría.'
+      const saved = await changeQuestionCategoryStatus(
+        category.publicId,
+        category.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+        category.entityVersion
       )
-      setPendingCategory(null)
+      setCategories((current) =>
+        current.map((item) => (item.publicId === saved.publicId ? saved : item))
+      )
+      toast.success(
+        saved.status === 'ACTIVE' ? 'Categoría activada' : 'Categoría desactivada'
+      )
     } catch (requestError) {
       toast.error(
-        'No fue posible actualizar la categoría',
+        'No fue posible cambiar el estado',
         requestError instanceof ApiRequestError ? requestError.message : undefined
       )
     } finally {
-      setSubmitting(false)
+      setStatusBusyId(undefined)
     }
   }
 
   return (
-    <main className="content-page narrow-content">
-      <div className="page-heading">
+    <main className="content-page resource-page">
+      <div className="page-heading resource-heading">
         <div>
-          <p className="eyebrow">Banco de preguntas</p>
+          <p className="eyebrow">Contenido</p>
           <h1>Categorías</h1>
-          <p className="muted">Organiza las preguntas por materia o dominio de conocimiento.</p>
+          <p className="muted">Clasifica preguntas en uno o varios temas.</p>
         </div>
-        <Link className="secondary-button button-link" to="/admin/questions">Volver</Link>
       </div>
 
-      <div className="catalog-management-grid">
-        <section className="detail-card">
+      {error && (
+        <section className="inline-error-panel" role="alert">
+          <div className="inline-error-icon"><Icon name="error" /></div>
+          <div>
+            <strong>No fue posible cargar las categorías</strong>
+            <p>{error}</p>
+          </div>
+          <button className="secondary-button compact-button" onClick={reload}>
+            Reintentar
+          </button>
+        </section>
+      )}
+
+      <div className="catalog-management-grid category-management-layout">
+        <section className="detail-card category-list-card">
           <div className="card-title-row">
-            <div><p className="eyebrow">Catálogo</p><h2>Categorías disponibles</h2></div>
-            <span className="count-badge">{categories.length}</span>
+            <div>
+              <h2>Categorías</h2>
+              <p className="muted">Administra los temas disponibles en el banco.</p>
+            </div>
+            <span className="resource-total compact">
+              <strong>{categories.length}</strong>
+            </span>
           </div>
-          <div className="category-list">
-            {categories.length === 0 && <p className="empty-state">Aún no hay categorías registradas.</p>}
-            {categories.map((category) => (
-              <article key={category.publicId}>
-                <div className="category-main">
-                  <span className="category-icon"><Icon name="categories" size={17} /></span>
-                  <div>
-                    <strong>{category.name}</strong>
-                    <small>{category.description || 'Sin descripción'}</small>
+
+          {loading ? (
+            <div className="inline-loading-state">Cargando categorías…</div>
+          ) : categories.length > 0 ? (
+            <div className="category-list">
+              {categories.map((category) => (
+                <article key={category.publicId}>
+                  <div className="category-main">
+                    <span className="category-icon"><Icon name="categories" /></span>
+                    <div>
+                      <strong>{category.name}</strong>
+                      <small>
+                        {category.questionCount} preguntas · {category.code}
+                      </small>
+                    </div>
                   </div>
-                </div>
-                <div className="category-actions">
-                  <span className={`status-badge status-${category.status.toLowerCase()}`}>
-                    {category.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}
-                  </span>
-                  <button
-                    className={category.status === 'ACTIVE' ? 'secondary-button compact-button' : 'primary-button compact-button'}
-                    type="button"
-                    onClick={() => setPendingCategory(category)}
-                  >
-                    {category.status === 'ACTIVE' ? 'Desactivar' : 'Activar'}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                  <div className="category-actions">
+                    <span
+                      className={`status-badge status-${category.status.toLowerCase()}`}
+                    >
+                      {category.status === 'ACTIVE' ? 'Activa' : 'Inactiva'}
+                    </span>
+                    <button
+                      aria-label={`Editar ${category.name}`}
+                      className="icon-button"
+                      type="button"
+                      onClick={() => select(category)}
+                    >
+                      <Icon name="edit" />
+                    </button>
+                    <button
+                      className="secondary-button compact-button"
+                      disabled={statusBusyId === category.publicId}
+                      type="button"
+                      onClick={() => void changeStatus(category)}
+                    >
+                      {statusBusyId === category.publicId
+                        ? 'Actualizando…'
+                        : category.status === 'ACTIVE'
+                          ? 'Desactivar'
+                          : 'Activar'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="compact-empty-state">
+              <p>Aún no hay categorías.</p>
+            </div>
+          )}
         </section>
 
         <section className="detail-card category-form-card">
-          <p className="eyebrow">Nueva categoría</p>
-          <h2>Agregar categoría</h2>
-          <form className="compact-form" onSubmit={(event) => void handleSubmit(event)}>
+          <p className="eyebrow">{editing ? 'Editar' : 'Nueva'} categoría</p>
+          <h2>{editing ? 'Actualizar categoría' : 'Agregar categoría'}</h2>
+          <form className="compact-form" onSubmit={(event) => void submit(event)}>
             <div className="form-field">
-              <label htmlFor="categoryName">Nombre</label>
-              <input id="categoryName" value={name} maxLength={150} required onChange={(event) => setName(event.target.value)} />
+              <label htmlFor="category-name">Nombre</label>
+              <input
+                id="category-name"
+                required
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
             </div>
             <div className="form-field">
-              <label htmlFor="categoryCode">Código <span className="optional-label">opcional</span></label>
-              <input id="categoryCode" value={code} maxLength={80} placeholder="Se genera automáticamente" onChange={(event) => setCode(event.target.value)} />
+              <label htmlFor="category-code">Código</label>
+              <input
+                id="category-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="Se genera automáticamente"
+              />
             </div>
             <div className="form-field">
-              <label htmlFor="categoryDescription">Descripción <span className="optional-label">opcional</span></label>
-              <textarea id="categoryDescription" value={description} rows={3} maxLength={500} onChange={(event) => setDescription(event.target.value)} />
+              <label htmlFor="category-description">Descripción</label>
+              <textarea
+                id="category-description"
+                rows={3}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
             </div>
-            <button className="primary-button" type="submit" disabled={submitting}>
-              <Icon name="plus" size={16} />{submitting ? 'Creando…' : 'Crear categoría'}
-            </button>
+            <div className="form-actions">
+              <button className="primary-button" disabled={busy}>
+                {busy ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear categoría'}
+              </button>
+              {editing && (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => select()}
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
           </form>
         </section>
       </div>
-
-      <ConfirmDialog
-        open={pendingCategory !== null}
-        title={pendingCategory?.status === 'ACTIVE' ? 'Desactivar categoría' : 'Activar categoría'}
-        description={pendingCategory?.status === 'ACTIVE'
-          ? 'Dejará de estar disponible para nuevas preguntas. El contenido existente no se modificará.'
-          : 'La categoría volverá a estar disponible para nuevas preguntas.'}
-        confirmLabel={pendingCategory?.status === 'ACTIVE' ? 'Desactivar' : 'Activar'}
-        tone={pendingCategory?.status === 'ACTIVE' ? 'danger' : 'primary'}
-        busy={submitting}
-        onCancel={() => setPendingCategory(null)}
-        onConfirm={() => void confirmStatusChange()}
-      />
     </main>
   )
 }

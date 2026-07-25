@@ -1,36 +1,38 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "QUESTION_TYPE_CATALOG")
 public class QuestionTypeJpaEntity {
+	@Id
+	@Column(name = "TYPE_CODE", length = 40)
+	private String code;
+	@Column(name = "TYPE_NAME", nullable = false)
+	private String name;
+	@Column(name = "DESCRIPTION")
+	private String description;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "STATUS", nullable = false)
+	private CatalogStatus status;
 
-    @Id
-    @Column(name = "TYPE_CODE", length = 40)
-    private String code;
+	protected QuestionTypeJpaEntity() {
+	}
 
-    @Column(name = "TYPE_NAME", nullable = false, length = 100)
-    private String name;
+	public String getCode() {
+		return code;
+	}
 
-    @Column(name = "DESCRIPTION", length = 500)
-    private String description;
+	public String getName() {
+		return name;
+	}
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "STATUS", nullable = false, length = 20)
-    private CatalogStatus status;
+	public String getDescription() {
+		return description;
+	}
 
-    protected QuestionTypeJpaEntity() {
-    }
-
-    public String getCode() { return code; }
-    public String getName() { return name; }
-    public String getDescription() { return description; }
-    public CatalogStatus getStatus() { return status; }
+	public CatalogStatus getStatus() {
+		return status;
+	}
 }

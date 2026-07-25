@@ -4,13 +4,6 @@ import java.time.Instant;
 
 public interface LoginAttemptPort {
 
-    void record(
-            Long userId,
-            String attemptedEmail,
-            boolean successful,
-            String failureReason,
-            String ipAddress,
-            String userAgent,
-            Instant attemptedAt
-    );
+	void record(Long userId, String attemptedEmail, boolean successful, String failureReason, String ipAddress,
+			String userAgent, Instant attemptedAt);
 }

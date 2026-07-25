@@ -8,16 +8,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GetOwnProfileService {
 
-    private final UserManagementPort userManagementPort;
+	private final UserManagementPort userManagementPort;
 
-    public GetOwnProfileService(UserManagementPort userManagementPort) {
-        this.userManagementPort = userManagementPort;
-    }
+	public GetOwnProfileService(UserManagementPort userManagementPort) {
+		this.userManagementPort = userManagementPort;
+	}
 
-    @Transactional(readOnly = true)
-    public OwnProfile get(String publicId) {
-        return OwnProfile.from(
-                userManagementPort.getByPublicId(publicId).summary()
-        );
-    }
+	@Transactional(readOnly = true)
+	public OwnProfile get(String publicId) {
+		return OwnProfile.from(userManagementPort.getByPublicId(publicId).summary());
+	}
 }

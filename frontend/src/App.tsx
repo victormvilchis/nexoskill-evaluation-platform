@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ApplicationLayout } from './layouts/ApplicationLayout'
 import { AdminQuestionDetailPage } from './pages/AdminQuestionDetailPage'
+import { AdminCollectionsPage } from './pages/AdminCollectionsPage'
+import { CreateCollectionPage } from './pages/CreateCollectionPage'
+import { CollectionDetailPage } from './pages/CollectionDetailPage'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
@@ -61,6 +64,14 @@ export default function App() {
             />
           </Route>
 
+
+          <Route element={<PermissionRoute permission="COLLECTION_VIEW" />}>
+            <Route path="/admin/question-collections" element={<AdminCollectionsPage />} />
+            <Route path="/admin/question-collections/:publicId" element={<CollectionDetailPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="COLLECTION_MANAGE" />}>
+            <Route path="/admin/question-collections/new" element={<CreateCollectionPage />} />
+          </Route>
           <Route
             element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}
           >

@@ -5,9 +5,9 @@ import java.util.Optional;
 
 public interface UserRepository {
 
-    Optional<UserAccount> findByNormalizedEmail(String normalizedEmail);
+	Optional<UserAccount> findByNormalizedEmail(String normalizedEmail);
 
-    Optional<UserAccount> findById(Long id);
+	Optional<UserAccount> findById(Long id);
 
-    UserAccount save(UserAccount user);
+	UserAccount save(UserAccount user);
 }

@@ -8,14 +8,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GetAdminUserService {
 
-    private final UserManagementPort userManagementPort;
+	private final UserManagementPort userManagementPort;
 
-    public GetAdminUserService(UserManagementPort userManagementPort) {
-        this.userManagementPort = userManagementPort;
-    }
+	public GetAdminUserService(UserManagementPort userManagementPort) {
+		this.userManagementPort = userManagementPort;
+	}
 
-    @Transactional(readOnly = true)
-    public AdminUserSummary get(String publicId) {
-        return userManagementPort.getByPublicId(publicId).summary();
-    }
+	@Transactional(readOnly = true)
+	public AdminUserSummary get(String publicId) {
+		return userManagementPort.getByPublicId(publicId).summary();
+	}
 }

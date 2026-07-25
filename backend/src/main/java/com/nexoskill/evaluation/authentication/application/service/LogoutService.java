@@ -12,47 +12,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LogoutService {
 
-    private final AuthSessionRepository sessionRepository;
-    private final TokenHasher tokenHasher;
-    private final AuditLogPort auditLogPort;
-    private final Clock clock;
+	private final AuthSessionRepository sessionRepository;
+	private final TokenHasher tokenHasher;
+	private final AuditLogPort auditLogPort;
+	private final Clock clock;
 
-    public LogoutService(
-            AuthSessionRepository sessionRepository,
-            TokenHasher tokenHasher,
-            AuditLogPort auditLogPort,
-            Clock clock) {
-        this.sessionRepository = sessionRepository;
-        this.tokenHasher = tokenHasher;
-        this.auditLogPort = auditLogPort;
-        this.clock = clock;
-    }
+	public LogoutService(AuthSessionRepository sessionRepository, TokenHasher tokenHasher, AuditLogPort auditLogPort,
+			Clock clock) {
+		this.sessionRepository = sessionRepository;
+		this.tokenHasher = tokenHasher;
+		this.auditLogPort = auditLogPort;
+		this.clock = clock;
+	}
 
-    @Transactional
-    public void logout(
-            String rawToken,
-            Long userId,
-            String ipAddress,
-            String userAgent) {
+	@Transactional
+	public void logout(String rawToken, Long userId, String ipAddress, String userAgent) {
 
-        Instant now = clock.instant();
-        if (rawToken != null && !rawToken.isBlank()) {
-            sessionRepository.findByTokenHash(tokenHasher.hash(rawToken))
-                    .ifPresent(session -> {
-                        session.revoke(now);
-                        sessionRepository.save(session);
-                    });
-        }
+		Instant now = clock.instant();
+		if (rawToken != null && !rawToken.isBlank()) {
+			sessionRepository.findByTokenHash(tokenHasher.hash(rawToken)).ifPresent(session -> {
+				session.revoke(now);
+				sessionRepository.save(session);
+			});
+		}
 
-        auditLogPort.record(
-                userId,
-                "LOGOUT_SUCCEEDED",
-                "AUTHENTICATION",
-                "El usuario cerró sesión.",
-                ipAddress,
-                userAgent,
-                Map.of(),
-                now
-        );
-    }
+		auditLogPort.record(userId, "LOGOUT_SUCCEEDED", "AUTHENTICATION", "El usuario cerró sesión.", ipAddress,
+				userAgent, Map.of(), now);
+	}
 }

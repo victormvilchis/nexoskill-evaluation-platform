@@ -11,38 +11,27 @@ import org.springframework.stereotype.Component;
 @Component
 public class SessionCookieSupport {
 
-    private final AppProperties properties;
+	private final AppProperties properties;
 
-    public SessionCookieSupport(AppProperties properties) {
-        this.properties = properties;
-    }
+	public SessionCookieSupport(AppProperties properties) {
+		this.properties = properties;
+	}
 
-    public String readToken(HttpServletRequest request) {
-        if (request.getCookies() == null) {
-            return null;
-        }
-        return Arrays.stream(request.getCookies())
-                .filter(cookie -> properties.getSecurity().getCookieName()
-                        .equals(cookie.getName()))
-                .map(Cookie::getValue)
-                .findFirst()
-                .orElse(null);
-    }
+	public String readToken(HttpServletRequest request) {
+		if (request.getCookies() == null) {
+			return null;
+		}
+		return Arrays.stream(request.getCookies())
+				.filter(cookie -> properties.getSecurity().getCookieName().equals(cookie.getName()))
+				.map(Cookie::getValue).findFirst().orElse(null);
+	}
 
-    public ResponseCookie create(String rawToken, Duration maxAge) {
-        return ResponseCookie.from(
-                        properties.getSecurity().getCookieName(),
-                        rawToken
-                )
-                .httpOnly(true)
-                .secure(properties.getSecurity().isCookieSecure())
-                .sameSite("Strict")
-                .path("/")
-                .maxAge(maxAge)
-                .build();
-    }
+	public ResponseCookie create(String rawToken, Duration maxAge) {
+		return ResponseCookie.from(properties.getSecurity().getCookieName(), rawToken).httpOnly(true)
+				.secure(properties.getSecurity().isCookieSecure()).sameSite("Strict").path("/").maxAge(maxAge).build();
+	}
 
-    public ResponseCookie clear() {
-        return create("", Duration.ZERO);
-    }
+	public ResponseCookie clear() {
+		return create("", Duration.ZERO);
+	}
 }

@@ -5,7 +5,7 @@ import java.util.List;
 
 public interface PasswordHistoryPort {
 
-    List<String> recentHashes(Long userId, int limit);
+	List<String> recentHashes(Long userId, int limit);
 
-    void record(Long userId, String passwordHash, Instant createdAt);
+	void record(Long userId, String passwordHash, Instant createdAt);
 }

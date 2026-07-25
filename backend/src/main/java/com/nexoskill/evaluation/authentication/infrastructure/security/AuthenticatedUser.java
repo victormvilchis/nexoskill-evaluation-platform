@@ -5,39 +5,13 @@ import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import java.time.Instant;
 import java.util.Set;
 
-public record AuthenticatedUser(
-        Long internalId,
-        String publicId,
-        String email,
-        String firstName,
-        String lastName,
-        String displayName,
-        Set<String> roles,
-        Set<String> permissions,
-        Instant lastLoginAt,
-        UserAccessStatus accessStatus,
-        Instant accessStartsAt,
-        Instant accessExpiresAt,
-        boolean passwordChangeRequired,
-        Instant passwordChangedAt,
-        Instant temporaryPasswordExpiresAt
-) {
-    public CurrentUser toCurrentUser() {
-        return new CurrentUser(
-                publicId,
-                email,
-                firstName,
-                lastName,
-                displayName,
-                roles,
-                permissions,
-                lastLoginAt,
-                accessStatus,
-                accessStartsAt,
-                accessExpiresAt,
-                passwordChangeRequired,
-                passwordChangedAt,
-                temporaryPasswordExpiresAt
-        );
-    }
+public record AuthenticatedUser(Long internalId, String publicId, String email, String firstName, String lastName,
+		String displayName, Set<String> roles, Set<String> permissions, Instant lastLoginAt,
+		UserAccessStatus accessStatus, Instant accessStartsAt, Instant accessExpiresAt, boolean passwordChangeRequired,
+		Instant passwordChangedAt, Instant temporaryPasswordExpiresAt) {
+	public CurrentUser toCurrentUser() {
+		return new CurrentUser(publicId, email, firstName, lastName, displayName, roles, permissions, lastLoginAt,
+				accessStatus, accessStartsAt, accessExpiresAt, passwordChangeRequired, passwordChangedAt,
+				temporaryPasswordExpiresAt);
+	}
 }

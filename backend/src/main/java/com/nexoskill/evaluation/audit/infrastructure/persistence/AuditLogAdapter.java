@@ -11,45 +11,27 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuditLogAdapter implements AuditLogPort {
 
-    private final SpringDataAuditEventRepository repository;
-    private final ObjectMapper objectMapper;
+	private final SpringDataAuditEventRepository repository;
+	private final ObjectMapper objectMapper;
 
-    public AuditLogAdapter(
-            SpringDataAuditEventRepository repository,
-            ObjectMapper objectMapper) {
-        this.repository = repository;
-        this.objectMapper = objectMapper;
-    }
+	public AuditLogAdapter(SpringDataAuditEventRepository repository, ObjectMapper objectMapper) {
+		this.repository = repository;
+		this.objectMapper = objectMapper;
+	}
 
-    @Override
-    public void record(
-            Long userId,
-            String eventType,
-            String moduleCode,
-            String description,
-            String ipAddress,
-            String userAgent,
-            Map<String, Object> eventData,
-            Instant occurredAt) {
+	@Override
+	public void record(Long userId, String eventType, String moduleCode, String description, String ipAddress,
+			String userAgent, Map<String, Object> eventData, Instant occurredAt) {
 
-        repository.save(AuditEventJpaEntity.create(
-                UUID.randomUUID().toString(),
-                userId,
-                eventType,
-                moduleCode,
-                description,
-                ipAddress,
-                userAgent,
-                toJson(eventData),
-                occurredAt
-        ));
-    }
+		repository.save(AuditEventJpaEntity.create(UUID.randomUUID().toString(), userId, eventType, moduleCode,
+				description, ipAddress, userAgent, toJson(eventData), occurredAt));
+	}
 
-    private String toJson(Map<String, Object> eventData) {
-        try {
-            return objectMapper.writeValueAsString(eventData);
-        } catch (JsonProcessingException exception) {
-            return "{}";
-        }
-    }
+	private String toJson(Map<String, Object> eventData) {
+		try {
+			return objectMapper.writeValueAsString(eventData);
+		} catch (JsonProcessingException exception) {
+			return "{}";
+		}
+	}
 }

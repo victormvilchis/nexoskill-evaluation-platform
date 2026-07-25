@@ -1,28 +1,21 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
-import java.util.List;
-import java.util.Optional;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import java.util.*;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
-public interface SpringDataQuestionCategoryRepository
-        extends JpaRepository<QuestionCategoryJpaEntity, Long> {
+public interface SpringDataQuestionCategoryRepository extends JpaRepository<QuestionCategoryJpaEntity, Long> {
+	List<QuestionCategoryJpaEntity> findAllByStatusOrderByNameAsc(CatalogStatus s);
 
-    List<QuestionCategoryJpaEntity> findAllByStatusOrderByNameAsc(CatalogStatus status);
+	List<QuestionCategoryJpaEntity> findAllByOrderByNameAsc();
 
-    List<QuestionCategoryJpaEntity> findAllByOrderByNameAsc();
+	Optional<QuestionCategoryJpaEntity> findByPublicId(String id);
 
-    Optional<QuestionCategoryJpaEntity> findByPublicId(String publicId);
+	List<QuestionCategoryJpaEntity> findAllByPublicIdIn(Collection<String> ids);
 
-    Optional<QuestionCategoryJpaEntity> findByPublicIdAndStatus(
-            String publicId,
-            CatalogStatus status
-    );
+	boolean existsByCodeIgnoreCase(String code);
 
-    boolean existsByCodeIgnoreCase(String code);
-
-    @Query("SELECT COUNT(c) > 0 FROM QuestionCategoryJpaEntity c WHERE LOWER(c.name) = :name")
-    boolean existsByNormalizedName(@Param("name") String normalizedName);
+	@Query("select count(c)>0 from QuestionCategoryJpaEntity c where lower(c.name)=:name")
+	boolean existsByNormalizedName(@Param("name") String name);
 }

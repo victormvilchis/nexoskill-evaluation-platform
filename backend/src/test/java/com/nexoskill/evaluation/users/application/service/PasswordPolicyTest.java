@@ -8,33 +8,22 @@ import org.junit.jupiter.api.Test;
 
 class PasswordPolicyTest {
 
-    private final PasswordPolicy policy = new PasswordPolicy();
+	private final PasswordPolicy policy = new PasswordPolicy();
 
-    @Test
-    void shouldAcceptStrongPassword() {
-        assertThatCode(() -> policy.validate(
-                "NexoSkill#2026",
-                "usuario@nexoskill.local"
-        )).doesNotThrowAnyException();
-    }
+	@Test
+	void shouldAcceptStrongPassword() {
+		assertThatCode(() -> policy.validate("NexoSkill#2026", "usuario@nexoskill.local")).doesNotThrowAnyException();
+	}
 
-    @Test
-    void shouldRejectWeakPassword() {
-        assertThatThrownBy(() -> policy.validate(
-                "debil123",
-                "usuario@nexoskill.local"
-        ))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("mayúscula");
-    }
+	@Test
+	void shouldRejectWeakPassword() {
+		assertThatThrownBy(() -> policy.validate("debil123", "usuario@nexoskill.local"))
+				.isInstanceOf(BusinessException.class).hasMessageContaining("mayúscula");
+	}
 
-    @Test
-    void shouldRejectPasswordContainingEmailLocalPart() {
-        assertThatThrownBy(() -> policy.validate(
-                "Usuario#2026A",
-                "usuario@nexoskill.local"
-        ))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("correo");
-    }
+	@Test
+	void shouldRejectPasswordContainingEmailLocalPart() {
+		assertThatThrownBy(() -> policy.validate("Usuario#2026A", "usuario@nexoskill.local"))
+				.isInstanceOf(BusinessException.class).hasMessageContaining("correo");
+	}
 }

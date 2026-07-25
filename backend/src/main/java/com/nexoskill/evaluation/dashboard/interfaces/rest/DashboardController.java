@@ -16,21 +16,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/dashboard")
 public class DashboardController {
 
-    private final GetWelcomeDashboardService service;
+	private final GetWelcomeDashboardService service;
 
-    public DashboardController(GetWelcomeDashboardService service) {
-        this.service = service;
-    }
+	public DashboardController(GetWelcomeDashboardService service) {
+		this.service = service;
+	}
 
-    @GetMapping("/welcome")
-    @PreAuthorize("hasAuthority('DASHBOARD_VIEW')")
-    public ResponseEntity<WelcomeDashboard> welcome(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            HttpServletRequest request) {
-        return ResponseEntity.ok(service.get(
-                principal,
-                ClientRequestInfo.ipAddress(request),
-                ClientRequestInfo.userAgent(request)
-        ));
-    }
+	@GetMapping("/welcome")
+	@PreAuthorize("hasAuthority('DASHBOARD_VIEW')")
+	public ResponseEntity<WelcomeDashboard> welcome(@AuthenticationPrincipal AuthenticatedUser principal,
+			HttpServletRequest request) {
+		return ResponseEntity
+				.ok(service.get(principal, ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
+	}
 }

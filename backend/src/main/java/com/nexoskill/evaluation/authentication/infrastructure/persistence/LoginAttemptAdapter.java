@@ -7,30 +7,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class LoginAttemptAdapter implements LoginAttemptPort {
 
-    private final SpringDataLoginAttemptRepository repository;
+	private final SpringDataLoginAttemptRepository repository;
 
-    public LoginAttemptAdapter(SpringDataLoginAttemptRepository repository) {
-        this.repository = repository;
-    }
+	public LoginAttemptAdapter(SpringDataLoginAttemptRepository repository) {
+		this.repository = repository;
+	}
 
-    @Override
-    public void record(
-            Long userId,
-            String attemptedEmail,
-            boolean successful,
-            String failureReason,
-            String ipAddress,
-            String userAgent,
-            Instant attemptedAt) {
+	@Override
+	public void record(Long userId, String attemptedEmail, boolean successful, String failureReason, String ipAddress,
+			String userAgent, Instant attemptedAt) {
 
-        repository.save(LoginAttemptJpaEntity.create(
-                userId,
-                attemptedEmail,
-                successful,
-                failureReason,
-                ipAddress,
-                userAgent,
-                attemptedAt
-        ));
-    }
+		repository.save(LoginAttemptJpaEntity.create(userId, attemptedEmail, successful, failureReason, ipAddress,
+				userAgent, attemptedAt));
+	}
 }

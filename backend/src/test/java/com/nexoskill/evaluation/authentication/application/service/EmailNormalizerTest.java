@@ -6,14 +6,13 @@ import org.junit.jupiter.api.Test;
 
 class EmailNormalizerTest {
 
-    @Test
-    void shouldTrimAndUppercaseEmail() {
-        assertThat(EmailNormalizer.normalize("  Admin@NexoSkill.local "))
-                .isEqualTo("ADMIN@NEXOSKILL.LOCAL");
-    }
+	@Test
+	void shouldTrimAndUppercaseEmail() {
+		assertThat(EmailNormalizer.normalize("  Admin@NexoSkill.local ")).isEqualTo("ADMIN@NEXOSKILL.LOCAL");
+	}
 
-    @Test
-    void shouldReturnEmptyForNull() {
-        assertThat(EmailNormalizer.normalize(null)).isEmpty();
-    }
+	@Test
+	void shouldReturnEmptyForNull() {
+		assertThat(EmailNormalizer.normalize(null)).isEmpty();
+	}
 }

@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties(AppProperties.class)
 public class EvaluationPlatformApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(EvaluationPlatformApplication.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(EvaluationPlatformApplication.class, args);
+	}
 }

@@ -28,100 +28,66 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthenticationController {
 
-    private final LoginService loginService;
-    private final LogoutService logoutService;
-    private final ChangeOwnPasswordService changeOwnPasswordService;
-    private final SessionCookieSupport cookieSupport;
-    private final TokenHasher tokenHasher;
-    private final Clock clock;
+	private final LoginService loginService;
+	private final LogoutService logoutService;
+	private final ChangeOwnPasswordService changeOwnPasswordService;
+	private final SessionCookieSupport cookieSupport;
+	private final TokenHasher tokenHasher;
+	private final Clock clock;
 
-    public AuthenticationController(
-            LoginService loginService,
-            LogoutService logoutService,
-            ChangeOwnPasswordService changeOwnPasswordService,
-            SessionCookieSupport cookieSupport,
-            TokenHasher tokenHasher,
-            Clock clock) {
-        this.loginService = loginService;
-        this.logoutService = logoutService;
-        this.changeOwnPasswordService = changeOwnPasswordService;
-        this.cookieSupport = cookieSupport;
-        this.tokenHasher = tokenHasher;
-        this.clock = clock;
-    }
+	public AuthenticationController(LoginService loginService, LogoutService logoutService,
+			ChangeOwnPasswordService changeOwnPasswordService, SessionCookieSupport cookieSupport,
+			TokenHasher tokenHasher, Clock clock) {
+		this.loginService = loginService;
+		this.logoutService = logoutService;
+		this.changeOwnPasswordService = changeOwnPasswordService;
+		this.cookieSupport = cookieSupport;
+		this.tokenHasher = tokenHasher;
+		this.clock = clock;
+	}
 
-    @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(
-            @Valid @RequestBody LoginRequest body,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+	@PostMapping("/login")
+	public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest body, HttpServletRequest request,
+			HttpServletResponse response) {
 
-        LoginResult result = loginService.login(new LoginCommand(
-                body.email(),
-                body.password(),
-                ClientRequestInfo.ipAddress(request),
-                ClientRequestInfo.userAgent(request)
-        ));
+		LoginResult result = loginService.login(new LoginCommand(body.email(), body.password(),
+				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
 
-        response.addHeader(
-                HttpHeaders.SET_COOKIE,
-                cookieSupport.create(
-                        result.rawSessionToken(),
-                        positiveDurationBetween(clock.instant(), result.expiresAt())
-                ).toString()
-        );
+		response.addHeader(HttpHeaders.SET_COOKIE,
+				cookieSupport
+						.create(result.rawSessionToken(), positiveDurationBetween(clock.instant(), result.expiresAt()))
+						.toString());
 
-        return ResponseEntity.ok(new LoginResponse(result.user()));
-    }
+		return ResponseEntity.ok(new LoginResponse(result.user()));
+	}
 
-    @PostMapping("/change-password")
-    @PreAuthorize("hasAuthority('PASSWORD_CHANGE')")
-    public ResponseEntity<Void> changePassword(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody ChangePasswordRequest body,
-            HttpServletRequest request) {
+	@PostMapping("/change-password")
+	@PreAuthorize("hasAuthority('PASSWORD_CHANGE')")
+	public ResponseEntity<Void> changePassword(@AuthenticationPrincipal AuthenticatedUser principal,
+			@Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request) {
 
-        String rawSessionToken = cookieSupport.readToken(request);
-        changeOwnPasswordService.change(new ChangePasswordCommand(
-                principal.internalId(),
-                body.currentPassword(),
-                body.newPassword(),
-                body.confirmPassword(),
-                tokenHasher.hash(rawSessionToken),
-                ClientRequestInfo.ipAddress(request),
-                ClientRequestInfo.userAgent(request)
-        ));
+		String rawSessionToken = cookieSupport.readToken(request);
+		changeOwnPasswordService.change(new ChangePasswordCommand(principal.internalId(), body.currentPassword(),
+				body.newPassword(), body.confirmPassword(), tokenHasher.hash(rawSessionToken),
+				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
 
-        return ResponseEntity.noContent().build();
-    }
+		return ResponseEntity.noContent().build();
+	}
 
-    @PostMapping("/logout")
-    public ResponseEntity<Void> logout(
-            @AuthenticationPrincipal AuthenticatedUser principal,
-            HttpServletRequest request,
-            HttpServletResponse response) {
+	@PostMapping("/logout")
+	public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedUser principal, HttpServletRequest request,
+			HttpServletResponse response) {
 
-        logoutService.logout(
-                cookieSupport.readToken(request),
-                principal.internalId(),
-                ClientRequestInfo.ipAddress(request),
-                ClientRequestInfo.userAgent(request)
-        );
+		logoutService.logout(cookieSupport.readToken(request), principal.internalId(),
+				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request));
 
-        response.addHeader(
-                HttpHeaders.SET_COOKIE,
-                cookieSupport.clear().toString()
-        );
+		response.addHeader(HttpHeaders.SET_COOKIE, cookieSupport.clear().toString());
 
-        return ResponseEntity.noContent().build();
-    }
+		return ResponseEntity.noContent().build();
+	}
 
-    private Duration positiveDurationBetween(
-            java.time.Instant startsAt,
-            java.time.Instant expiresAt) {
-        Duration duration = Duration.between(startsAt, expiresAt);
-        return duration.isNegative() || duration.isZero()
-                ? Duration.ofSeconds(1)
-                : duration;
-    }
+	private Duration positiveDurationBetween(java.time.Instant startsAt, java.time.Instant expiresAt) {
+		Duration duration = Duration.between(startsAt, expiresAt);
+		return duration.isNegative() || duration.isZero() ? Duration.ofSeconds(1) : duration;
+	}
 }

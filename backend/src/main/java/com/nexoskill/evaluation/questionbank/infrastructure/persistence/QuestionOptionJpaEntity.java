@@ -1,68 +1,68 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
 @Table(name = "QUESTION_OPTION")
 public class QuestionOptionJpaEntity {
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "QUESTION_OPTION_ID")
+	private Long id;
+	@Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+	private String publicId;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "QUESTION_ID", nullable = false)
+	private QuestionJpaEntity question;
+	@Column(name = "QUESTION_VERSION_ID", insertable = false, updatable = false)
+	private Long legacyVersionId;
+	@Column(name = "OPTION_ORDER", nullable = false)
+	private int optionOrder;
+	@Lob
+	@Column(name = "OPTION_TEXT")
+	private String text;
+	@ManyToOne(fetch = FetchType.EAGER)
+	@JoinColumn(name = "MEDIA_ID")
+	private QuestionMediaJpaEntity media;
+	@Column(name = "IS_CORRECT", nullable = false)
+	private Integer correct;
+	@Column(name = "CREATED_AT", nullable = false)
+	private Instant createdAt;
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "QUESTION_OPTION_ID")
-    private Long id;
+	protected QuestionOptionJpaEntity() {
+	}
 
-    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
-    private String publicId;
+	public static QuestionOptionJpaEntity create(QuestionJpaEntity q, String id, int order, String text,
+			QuestionMediaJpaEntity media, boolean correct, Instant now) {
+		var e = new QuestionOptionJpaEntity();
+		e.question = q;
+		e.publicId = id;
+		e.optionOrder = order;
+		e.text = text;
+		e.media = media;
+		e.correct = correct ? 1 : 0;
+		e.createdAt = now;
+		return e;
+	}
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "QUESTION_VERSION_ID", nullable = false)
-    private QuestionVersionJpaEntity version;
+	public String getPublicId() {
+		return publicId;
+	}
 
-    @Column(name = "OPTION_ORDER", nullable = false)
-    private int optionOrder;
+	public int getOptionOrder() {
+		return optionOrder;
+	}
 
-    @Lob
-    @Column(name = "OPTION_TEXT", nullable = false)
-    private String text;
+	public String getText() {
+		return text;
+	}
 
-    @Column(name = "IS_CORRECT", nullable = false)
-    private Integer correct;
+	public QuestionMediaJpaEntity getMedia() {
+		return media;
+	}
 
-    @Column(name = "CREATED_AT", nullable = false)
-    private Instant createdAt;
-
-    protected QuestionOptionJpaEntity() {
-    }
-
-    public static QuestionOptionJpaEntity create(
-            QuestionVersionJpaEntity version,
-            String publicId,
-            int optionOrder,
-            String text,
-            boolean correct,
-            Instant createdAt) {
-        QuestionOptionJpaEntity entity = new QuestionOptionJpaEntity();
-        entity.version = version;
-        entity.publicId = publicId;
-        entity.optionOrder = optionOrder;
-        entity.text = text;
-        entity.correct = correct ? 1 : 0;
-        entity.createdAt = createdAt;
-        return entity;
-    }
-
-    public String getPublicId() { return publicId; }
-    public int getOptionOrder() { return optionOrder; }
-    public String getText() { return text; }
-    public boolean isCorrect() { return Integer.valueOf(1).equals(correct); }
+	public boolean isCorrect() {
+		return Integer.valueOf(1).equals(correct);
+	}
 }

@@ -8,12 +8,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class SecureSessionTokenGenerator implements SessionTokenGenerator {
 
-    private final SecureRandom secureRandom = new SecureRandom();
+	private final SecureRandom secureRandom = new SecureRandom();
 
-    @Override
-    public String generate() {
-        byte[] bytes = new byte[48];
-        secureRandom.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
+	@Override
+	public String generate() {
+		byte[] bytes = new byte[48];
+		secureRandom.nextBytes(bytes);
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
 }

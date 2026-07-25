@@ -16,6 +16,7 @@ interface ToastItem {
   tone: ToastTone
   title: string
   message?: string
+  fingerprint: string
 }
 
 interface ToastContextValue {
@@ -38,6 +39,7 @@ const toneIcon: Record<ToastTone, IconName> = {
 export function ToastProvider({ children }: PropsWithChildren) {
   const [items, setItems] = useState<ToastItem[]>([])
   const sequence = useRef(0)
+  const recent = useRef(new Map<string, number>())
 
   const dismiss = useCallback((id: number) => {
     setItems((current) => current.filter((item) => item.id !== id))
@@ -45,9 +47,27 @@ export function ToastProvider({ children }: PropsWithChildren) {
 
   const show = useCallback(
     (tone: ToastTone, title: string, message?: string) => {
+      const fingerprint = `${tone}|${title}|${message ?? ''}`
+      const now = Date.now()
+      const previous = recent.current.get(fingerprint)
+
+      // React StrictMode runs effects twice in development. Avoid showing the
+      // same notification more than once during that short interval.
+      if (previous && now - previous < 1_500) return
+      recent.current.set(fingerprint, now)
+
       const id = ++sequence.current
-      setItems((current) => [...current.slice(-3), { id, tone, title, message }])
-      window.setTimeout(() => dismiss(id), tone === 'error' ? 7000 : 4500)
+      setItems((current) => [
+        ...current.filter((item) => item.fingerprint !== fingerprint).slice(-3),
+        { id, tone, title, message, fingerprint }
+      ])
+
+      window.setTimeout(() => {
+        dismiss(id)
+        if (recent.current.get(fingerprint) === now) {
+          recent.current.delete(fingerprint)
+        }
+      }, tone === 'error' ? 7_000 : 4_500)
     },
     [dismiss]
   )
@@ -69,7 +89,9 @@ export function ToastProvider({ children }: PropsWithChildren) {
       <div className="toast-viewport" aria-live="polite" aria-atomic="false">
         {items.map((item) => (
           <article className={`toast toast-${item.tone}`} key={item.id}>
-            <div className="toast-icon"><Icon name={toneIcon[item.tone]} size={17} /></div>
+            <div className="toast-icon">
+              <Icon name={toneIcon[item.tone]} size={17} />
+            </div>
             <div className="toast-content">
               <strong>{item.title}</strong>
               {item.message && <p>{item.message}</p>}
@@ -91,6 +113,8 @@ export function ToastProvider({ children }: PropsWithChildren) {
 
 export function useToast() {
   const context = useContext(ToastContext)
-  if (!context) throw new Error('useToast debe utilizarse dentro de ToastProvider')
+  if (!context) {
+    throw new Error('useToast debe utilizarse dentro de ToastProvider')
+  }
   return context
 }

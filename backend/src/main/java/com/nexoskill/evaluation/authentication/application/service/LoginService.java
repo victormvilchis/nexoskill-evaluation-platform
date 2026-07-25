@@ -25,143 +25,89 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LoginService {
 
-    private final UserRepository userRepository;
-    private final AuthSessionRepository sessionRepository;
-    private final PasswordHasher passwordHasher;
-    private final SessionTokenGenerator tokenGenerator;
-    private final TokenHasher tokenHasher;
-    private final LoginAttemptPort loginAttemptPort;
-    private final AuditLogPort auditLogPort;
-    private final AppProperties properties;
-    private final Clock clock;
+	private final UserRepository userRepository;
+	private final AuthSessionRepository sessionRepository;
+	private final PasswordHasher passwordHasher;
+	private final SessionTokenGenerator tokenGenerator;
+	private final TokenHasher tokenHasher;
+	private final LoginAttemptPort loginAttemptPort;
+	private final AuditLogPort auditLogPort;
+	private final AppProperties properties;
+	private final Clock clock;
 
-    public LoginService(
-            UserRepository userRepository,
-            AuthSessionRepository sessionRepository,
-            PasswordHasher passwordHasher,
-            SessionTokenGenerator tokenGenerator,
-            TokenHasher tokenHasher,
-            LoginAttemptPort loginAttemptPort,
-            AuditLogPort auditLogPort,
-            AppProperties properties,
-            Clock clock) {
-        this.userRepository = userRepository;
-        this.sessionRepository = sessionRepository;
-        this.passwordHasher = passwordHasher;
-        this.tokenGenerator = tokenGenerator;
-        this.tokenHasher = tokenHasher;
-        this.loginAttemptPort = loginAttemptPort;
-        this.auditLogPort = auditLogPort;
-        this.properties = properties;
-        this.clock = clock;
-    }
+	public LoginService(UserRepository userRepository, AuthSessionRepository sessionRepository,
+			PasswordHasher passwordHasher, SessionTokenGenerator tokenGenerator, TokenHasher tokenHasher,
+			LoginAttemptPort loginAttemptPort, AuditLogPort auditLogPort, AppProperties properties, Clock clock) {
+		this.userRepository = userRepository;
+		this.sessionRepository = sessionRepository;
+		this.passwordHasher = passwordHasher;
+		this.tokenGenerator = tokenGenerator;
+		this.tokenHasher = tokenHasher;
+		this.loginAttemptPort = loginAttemptPort;
+		this.auditLogPort = auditLogPort;
+		this.properties = properties;
+		this.clock = clock;
+	}
 
-    @Transactional(noRollbackFor = AuthenticationException.class)
-    public LoginResult login(LoginCommand command) {
-        Instant now = clock.instant();
-        String normalizedEmail = EmailNormalizer.normalize(command.email());
+	@Transactional(noRollbackFor = AuthenticationException.class)
+	public LoginResult login(LoginCommand command) {
+		Instant now = clock.instant();
+		String normalizedEmail = EmailNormalizer.normalize(command.email());
 
-        UserAccount user = userRepository.findByNormalizedEmail(normalizedEmail)
-                .orElseThrow(() -> {
-                    recordFailure(null, command, "INVALID_CREDENTIALS", now);
-                    return AuthenticationException.invalidCredentials();
-                });
+		UserAccount user = userRepository.findByNormalizedEmail(normalizedEmail).orElseThrow(() -> {
+			recordFailure(null, command, "INVALID_CREDENTIALS", now);
+			return AuthenticationException.invalidCredentials();
+		});
 
-        if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
-            user.registerFailedLogin(
-                    properties.getSecurity().getMaxFailedAttempts(),
-                    now,
-                    properties.getSecurity().getLockDuration()
-            );
-            userRepository.save(user);
-            recordFailure(user.getId(), command, "INVALID_CREDENTIALS", now);
-            throw AuthenticationException.invalidCredentials();
-        }
+		if (!passwordHasher.matches(command.password(), user.getPasswordHash())) {
+			user.registerFailedLogin(properties.getSecurity().getMaxFailedAttempts(), now,
+					properties.getSecurity().getLockDuration());
+			userRepository.save(user);
+			recordFailure(user.getId(), command, "INVALID_CREDENTIALS", now);
+			throw AuthenticationException.invalidCredentials();
+		}
 
-        if (user.isTemporaryPasswordExpiredAt(now)) {
-            recordFailure(user.getId(), command, "TEMP_PASSWORD_EXPIRED", now);
-            throw AuthenticationException.temporaryPasswordExpired();
-        }
+		if (user.isTemporaryPasswordExpiredAt(now)) {
+			recordFailure(user.getId(), command, "TEMP_PASSWORD_EXPIRED", now);
+			throw AuthenticationException.temporaryPasswordExpired();
+		}
 
-        UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
-        if (accessStatus == UserAccessStatus.EXPIRED) {
-            recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
-            throw AuthenticationException.accessExpired();
-        }
+		UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
+		if (accessStatus == UserAccessStatus.EXPIRED) {
+			recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
+			throw AuthenticationException.accessExpired();
+		}
 
-        if (!user.canAuthenticateAt(now)) {
-            recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
-            throw AuthenticationException.invalidCredentials();
-        }
+		if (!user.canAuthenticateAt(now)) {
+			recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
+			throw AuthenticationException.invalidCredentials();
+		}
 
-        user.registerSuccessfulLogin(now);
-        userRepository.save(user);
+		user.registerSuccessfulLogin(now);
+		userRepository.save(user);
 
-        String rawToken = tokenGenerator.generate();
-        Instant expiresAt = user.getAccess().capSessionExpiration(
-                now.plus(properties.getSecurity().getSessionDuration())
-        );
-        expiresAt = user.capSessionExpirationForPassword(expiresAt);
+		String rawToken = tokenGenerator.generate();
+		Instant expiresAt = user.getAccess()
+				.capSessionExpiration(now.plus(properties.getSecurity().getSessionDuration()));
+		expiresAt = user.capSessionExpirationForPassword(expiresAt);
 
-        sessionRepository.save(AuthSession.create(
-                UUID.randomUUID().toString(),
-                user.getId(),
-                tokenHasher.hash(rawToken),
-                command.ipAddress(),
-                command.userAgent(),
-                now,
-                expiresAt
-        ));
+		sessionRepository.save(AuthSession.create(UUID.randomUUID().toString(), user.getId(),
+				tokenHasher.hash(rawToken), command.ipAddress(), command.userAgent(), now, expiresAt));
 
-        loginAttemptPort.record(
-                user.getId(),
-                command.email(),
-                true,
-                null,
-                command.ipAddress(),
-                command.userAgent(),
-                now
-        );
+		loginAttemptPort.record(user.getId(), command.email(), true, null, command.ipAddress(), command.userAgent(),
+				now);
 
-        auditLogPort.record(
-                user.getId(),
-                "LOGIN_SUCCEEDED",
-                "AUTHENTICATION",
-                "El usuario inició sesión.",
-                command.ipAddress(),
-                command.userAgent(),
-                Map.of(),
-                now
-        );
+		auditLogPort.record(user.getId(), "LOGIN_SUCCEEDED", "AUTHENTICATION", "El usuario inició sesión.",
+				command.ipAddress(), command.userAgent(), Map.of(), now);
 
-        return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now));
-    }
+		return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now));
+	}
 
-    private void recordFailure(
-            Long userId,
-            LoginCommand command,
-            String reason,
-            Instant now) {
+	private void recordFailure(Long userId, LoginCommand command, String reason, Instant now) {
 
-        loginAttemptPort.record(
-                userId,
-                command.email(),
-                false,
-                reason,
-                command.ipAddress(),
-                command.userAgent(),
-                now
-        );
+		loginAttemptPort.record(userId, command.email(), false, reason, command.ipAddress(), command.userAgent(), now);
 
-        auditLogPort.record(
-                userId,
-                "LOGIN_FAILED",
-                "AUTHENTICATION",
-                "Se rechazó un intento de inicio de sesión.",
-                command.ipAddress(),
-                command.userAgent(),
-                Map.of("attemptedEmail", command.email()),
-                now
-        );
-    }
+		auditLogPort.record(userId, "LOGIN_FAILED", "AUTHENTICATION", "Se rechazó un intento de inicio de sesión.",
+				command.ipAddress(), command.userAgent(), Map.of("attemptedEmail", command.email()), now);
+	}
 }

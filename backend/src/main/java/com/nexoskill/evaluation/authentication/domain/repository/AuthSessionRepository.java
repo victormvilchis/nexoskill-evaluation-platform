@@ -5,7 +5,7 @@ import java.util.Optional;
 
 public interface AuthSessionRepository {
 
-    AuthSession save(AuthSession session);
+	AuthSession save(AuthSession session);
 
-    Optional<AuthSession> findByTokenHash(String tokenHash);
+	Optional<AuthSession> findByTokenHash(String tokenHash);
 }

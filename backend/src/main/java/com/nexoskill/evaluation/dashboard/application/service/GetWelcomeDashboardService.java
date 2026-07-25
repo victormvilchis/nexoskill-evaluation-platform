@@ -13,97 +13,40 @@ import org.springframework.stereotype.Service;
 @Service
 public class GetWelcomeDashboardService {
 
-    private final AuditLogPort auditLogPort;
-    private final Clock clock;
+	private final AuditLogPort auditLogPort;
+	private final Clock clock;
 
-    public GetWelcomeDashboardService(
-            AuditLogPort auditLogPort,
-            Clock clock) {
-        this.auditLogPort = auditLogPort;
-        this.clock = clock;
-    }
+	public GetWelcomeDashboardService(AuditLogPort auditLogPort, Clock clock) {
+		this.auditLogPort = auditLogPort;
+		this.clock = clock;
+	}
 
-    public WelcomeDashboard get(
-            AuthenticatedUser user,
-            String ipAddress,
-            String userAgent) {
+	public WelcomeDashboard get(AuthenticatedUser user, String ipAddress, String userAgent) {
 
-        Instant now = clock.instant();
-        boolean administrator = user.roles().contains("ADMINISTRATOR");
+		Instant now = clock.instant();
+		boolean administrator = user.roles().contains("ADMINISTRATOR");
 
-        auditLogPort.record(
-                user.internalId(),
-                "DASHBOARD_ACCESSED",
-                "DASHBOARD",
-                "El usuario consultó su panel de bienvenida.",
-                ipAddress,
-                userAgent,
-                Map.of("panelType", administrator ? "ADMIN" : "USER"),
-                now
-        );
+		auditLogPort.record(user.internalId(), "DASHBOARD_ACCESSED", "DASHBOARD",
+				"El usuario consultó su panel de bienvenida.", ipAddress, userAgent,
+				Map.of("panelType", administrator ? "ADMIN" : "USER"), now);
 
-        return new WelcomeDashboard(
-                administrator ? "ADMIN" : "USER",
-                "Bienvenido, " + user.displayName(),
-                administrator
-                        ? "Administra accesos y contenidos desde un solo lugar."
-                        : "Consulta tu actividad y administra la seguridad de tu cuenta.",
-                now,
-                administrator
-                        ? adminModules()
-                        : userModules()
-        );
-    }
+		return new WelcomeDashboard(administrator ? "ADMIN" : "USER", "Bienvenido, " + user.displayName(),
+				administrator ? "Administra accesos y contenidos desde un solo lugar."
+						: "Consulta tu actividad y administra la seguridad de tu cuenta.",
+				now, administrator ? adminModules() : userModules());
+	}
 
-    private List<DashboardModule> adminModules() {
-        return List.of(
-                new DashboardModule(
-                        "USERS",
-                        "Usuarios",
-                        "Administración de usuarios y vigencias.",
-                        true
-                ),
-                new DashboardModule(
-                        "QUESTIONS",
-                        "Banco de preguntas",
-                        "Creación y clasificación de preguntas.",
-                        true
-                ),
-                new DashboardModule(
-                        "EXAMS",
-                        "Evaluaciones",
-                        "Configuración, asignación y habilitación.",
-                        false
-                ),
-                new DashboardModule(
-                        "RESULTS",
-                        "Resultados",
-                        "Consulta de intentos y calificaciones.",
-                        false
-                )
-        );
-    }
+	private List<DashboardModule> adminModules() {
+		return List.of(new DashboardModule("USERS", "Usuarios", "Administración de usuarios y vigencias.", true),
+				new DashboardModule("QUESTIONS", "Banco de preguntas", "Creación y clasificación de preguntas.", true),
+				new DashboardModule("EXAMS", "Evaluaciones", "Configuración, asignación y habilitación.", false),
+				new DashboardModule("RESULTS", "Resultados", "Consulta de intentos y calificaciones.", false));
+	}
 
-    private List<DashboardModule> userModules() {
-        return List.of(
-                new DashboardModule(
-                        "MY_EXAMS",
-                        "Mis evaluaciones",
-                        "Evaluaciones disponibles y próximas.",
-                        false
-                ),
-                new DashboardModule(
-                        "MY_RESULTS",
-                        "Mis resultados",
-                        "Historial de calificaciones.",
-                        false
-                ),
-                new DashboardModule(
-                        "PROFILE",
-                        "Mi perfil",
-                        "Información y seguridad de la cuenta.",
-                        false
-                )
-        );
-    }
+	private List<DashboardModule> userModules() {
+		return List.of(
+				new DashboardModule("MY_EXAMS", "Mis evaluaciones", "Evaluaciones disponibles y próximas.", false),
+				new DashboardModule("MY_RESULTS", "Mis resultados", "Historial de calificaciones.", false),
+				new DashboardModule("PROFILE", "Mi perfil", "Información y seguridad de la cuenta.", false));
+	}
 }

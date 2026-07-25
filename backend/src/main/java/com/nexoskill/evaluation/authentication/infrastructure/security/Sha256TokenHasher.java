@@ -10,15 +10,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class Sha256TokenHasher implements TokenHasher {
 
-    @Override
-    public String hash(String rawToken) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(
-                    digest.digest(rawToken.getBytes(StandardCharsets.UTF_8))
-            );
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 no está disponible", exception);
-        }
-    }
+	@Override
+	public String hash(String rawToken) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			return HexFormat.of().formatHex(digest.digest(rawToken.getBytes(StandardCharsets.UTF_8)));
+		} catch (NoSuchAlgorithmException exception) {
+			throw new IllegalStateException("SHA-256 no está disponible", exception);
+		}
+	}
 }

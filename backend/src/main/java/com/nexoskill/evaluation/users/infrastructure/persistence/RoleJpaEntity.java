@@ -17,48 +17,44 @@ import java.util.Set;
 @Table(name = "APP_ROLE")
 public class RoleJpaEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ROLE_ID")
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "ROLE_ID")
+	private Long id;
 
-    @Column(name = "ROLE_CODE", nullable = false, unique = true, length = 50)
-    private String code;
+	@Column(name = "ROLE_CODE", nullable = false, unique = true, length = 50)
+	private String code;
 
-    @Column(name = "ROLE_NAME", nullable = false, length = 100)
-    private String name;
+	@Column(name = "ROLE_NAME", nullable = false, length = 100)
+	private String name;
 
-    @Column(name = "STATUS", nullable = false, length = 20)
-    private String status;
+	@Column(name = "STATUS", nullable = false, length = 20)
+	private String status;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(
-            name = "APP_ROLE_PERMISSION",
-            joinColumns = @JoinColumn(name = "ROLE_ID"),
-            inverseJoinColumns = @JoinColumn(name = "PERMISSION_ID")
-    )
-    private Set<PermissionJpaEntity> permissions = new LinkedHashSet<>();
+	@ManyToMany(fetch = FetchType.EAGER)
+	@JoinTable(name = "APP_ROLE_PERMISSION", joinColumns = @JoinColumn(name = "ROLE_ID"), inverseJoinColumns = @JoinColumn(name = "PERMISSION_ID"))
+	private Set<PermissionJpaEntity> permissions = new LinkedHashSet<>();
 
-    protected RoleJpaEntity() {
-    }
+	protected RoleJpaEntity() {
+	}
 
-    public Long getId() {
-        return id;
-    }
+	public Long getId() {
+		return id;
+	}
 
-    public String getCode() {
-        return code;
-    }
+	public String getCode() {
+		return code;
+	}
 
-    public String getName() {
-        return name;
-    }
+	public String getName() {
+		return name;
+	}
 
-    public String getStatus() {
-        return status;
-    }
+	public String getStatus() {
+		return status;
+	}
 
-    public Set<PermissionJpaEntity> getPermissions() {
-        return permissions;
-    }
+	public Set<PermissionJpaEntity> getPermissions() {
+		return permissions;
+	}
 }

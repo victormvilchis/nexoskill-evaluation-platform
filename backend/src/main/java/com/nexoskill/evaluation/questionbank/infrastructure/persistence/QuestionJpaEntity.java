@@ -1,145 +1,218 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
-import jakarta.persistence.CascadeType;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
-import jakarta.persistence.Version;
+import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Entity
 @Table(name = "QUESTION")
 public class QuestionJpaEntity {
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "QUESTION_ID")
+	private Long id;
+	@Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+	private String publicId;
+	@ManyToOne(fetch = FetchType.EAGER, optional = false)
+	@JoinColumn(name = "TYPE_CODE", nullable = false)
+	private QuestionTypeJpaEntity type;
+	@ManyToOne(fetch = FetchType.EAGER, optional = false)
+	@JoinColumn(name = "DIFFICULTY_CODE", nullable = false)
+	private QuestionDifficultyJpaEntity difficulty;
+	@ManyToMany(fetch = FetchType.EAGER)
+	@JoinTable(name = "QUESTION_CATEGORY_RELATION", joinColumns = @JoinColumn(name = "QUESTION_ID"), inverseJoinColumns = @JoinColumn(name = "CATEGORY_ID"))
+	@OrderBy("name ASC")
+	private Set<QuestionCategoryJpaEntity> categories = new LinkedHashSet<>();
+	@Enumerated(EnumType.STRING)
+	@Column(name = "STATUS", nullable = false, length = 30)
+	private QuestionStatus status;
+	@Lob
+	@Column(name = "STATEMENT_TEXT", nullable = false)
+	private String statement;
+	@Lob
+	@Column(name = "EXPLANATION_TEXT")
+	private String explanation;
+	@ManyToOne(fetch = FetchType.EAGER)
+	@JoinColumn(name = "PROMPT_MEDIA_ID")
+	private QuestionMediaJpaEntity promptMedia;
+	@Column(name = "CODE_LANGUAGE", length = 40)
+	private String codeLanguage;
+	@Lob
+	@Column(name = "CODE_CONTENT")
+	private String codeContent;
+	@Lob
+	@Column(name = "ACCEPTED_ANSWERS_JSON")
+	private String acceptedAnswersJson;
+	@Column(name = "ANSWER_CASE_SENSITIVE", nullable = false)
+	private Integer caseSensitive;
+	@Column(name = "MANUAL_REVIEW", nullable = false)
+	private Integer manualReview;
+	@Column(name = "NUMERIC_MIN")
+	private BigDecimal numericMin;
+	@Column(name = "NUMERIC_MAX")
+	private BigDecimal numericMax;
+	@Column(name = "NUMERIC_TOLERANCE")
+	private BigDecimal numericTolerance;
+	@Column(name = "RESPONSE_MAX_LENGTH")
+	private Integer responseMaxLength;
+	@Column(name = "CREATED_BY", nullable = false)
+	private Long createdBy;
+	@Column(name = "CREATED_AT", nullable = false)
+	private Instant createdAt;
+	@Column(name = "UPDATED_BY")
+	private Long updatedBy;
+	@Column(name = "UPDATED_AT")
+	private Instant updatedAt;
+	@Version
+	@Column(name = "VERSION_NO", nullable = false)
+	private long version;
+	@OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+	@OrderBy("optionOrder ASC")
+	private List<QuestionOptionJpaEntity> options = new ArrayList<>();
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "QUESTION_ID")
-    private Long id;
+	protected QuestionJpaEntity() {
+	}
 
-    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
-    private String publicId;
+	public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
+			QuestionDifficultyJpaEntity difficulty, Set<QuestionCategoryJpaEntity> cats, String statement,
+			String explanation, QuestionMediaJpaEntity prompt, String lang, String code, String answers, boolean cs,
+			boolean manual, BigDecimal min, BigDecimal max, BigDecimal tolerance, Integer maxLength, Long actor,
+			Instant now) {
+		var e = new QuestionJpaEntity();
+		e.publicId = id;
+		e.status = QuestionStatus.ACTIVE;
+		e.createdBy = actor;
+		e.createdAt = now;
+		e.apply(type, difficulty, cats, statement, explanation, prompt, lang, code, answers, cs, manual, min, max,
+				tolerance, maxLength, actor, now);
+		return e;
+	}
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "TYPE_CODE", nullable = false)
-    private QuestionTypeJpaEntity type;
+	public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
+			Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
+			String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
+			BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
+		this.type = type;
+		this.difficulty = difficulty;
+		this.categories.clear();
+		this.categories.addAll(cats);
+		this.statement = statement;
+		this.explanation = explanation;
+		this.promptMedia = prompt;
+		this.codeLanguage = lang;
+		this.codeContent = code;
+		this.acceptedAnswersJson = answers;
+		this.caseSensitive = cs ? 1 : 0;
+		this.manualReview = manual ? 1 : 0;
+		this.numericMin = min;
+		this.numericMax = max;
+		this.numericTolerance = tolerance;
+		this.responseMaxLength = maxLength;
+		this.updatedBy = actor;
+		this.updatedAt = now;
+	}
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "DIFFICULTY_CODE", nullable = false)
-    private QuestionDifficultyJpaEntity difficulty;
+	public void addOption(QuestionOptionJpaEntity o) {
+		options.add(o);
+	}
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "CATEGORY_ID", nullable = false)
-    private QuestionCategoryJpaEntity category;
+	public void clearOptions() {
+		options.clear();
+	}
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "STATUS", nullable = false, length = 30)
-    private QuestionStatus status;
+	public void changeStatus(QuestionStatus s, Long actor, Instant now) {
+		status = s;
+		updatedBy = actor;
+		updatedAt = now;
+	}
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "CURRENT_VERSION_ID")
-    private QuestionVersionJpaEntity currentVersion;
+	public Long getId() {
+		return id;
+	}
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "PUBLISHED_VERSION_ID")
-    private QuestionVersionJpaEntity publishedVersion;
+	public String getPublicId() {
+		return publicId;
+	}
 
-    @Column(name = "CREATED_BY", nullable = false)
-    private Long createdBy;
+	public QuestionTypeJpaEntity getType() {
+		return type;
+	}
 
-    @Column(name = "CREATED_AT", nullable = false)
-    private Instant createdAt;
+	public QuestionDifficultyJpaEntity getDifficulty() {
+		return difficulty;
+	}
 
-    @Column(name = "UPDATED_BY")
-    private Long updatedBy;
+	public Set<QuestionCategoryJpaEntity> getCategories() {
+		return Set.copyOf(categories);
+	}
 
-    @Column(name = "UPDATED_AT")
-    private Instant updatedAt;
+	public QuestionStatus getStatus() {
+		return status;
+	}
 
-    @Version
-    @Column(name = "VERSION_NO", nullable = false)
-    private long version;
+	public String getStatement() {
+		return statement;
+	}
 
-    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<QuestionVersionJpaEntity> versions = new ArrayList<>();
+	public String getExplanation() {
+		return explanation;
+	}
 
-    protected QuestionJpaEntity() {
-    }
+	public QuestionMediaJpaEntity getPromptMedia() {
+		return promptMedia;
+	}
 
-    public static QuestionJpaEntity create(
-            String publicId,
-            QuestionTypeJpaEntity type,
-            QuestionDifficultyJpaEntity difficulty,
-            QuestionCategoryJpaEntity category,
-            Long createdBy,
-            Instant createdAt) {
-        QuestionJpaEntity entity = new QuestionJpaEntity();
-        entity.publicId = publicId;
-        entity.type = type;
-        entity.difficulty = difficulty;
-        entity.category = category;
-        entity.status = QuestionStatus.DRAFT;
-        entity.createdBy = createdBy;
-        entity.createdAt = createdAt;
-        return entity;
-    }
+	public String getCodeLanguage() {
+		return codeLanguage;
+	}
 
-    public void registerPublishedVersion(
-            QuestionVersionJpaEntity published,
-            Long actorUserId,
-            Instant now) {
-        if (!versions.contains(published)) {
-            versions.add(published);
-        }
-        currentVersion = published;
-        publishedVersion = published;
-        status = QuestionStatus.PUBLISHED;
-        touch(actorUserId, now);
-    }
+	public String getCodeContent() {
+		return codeContent;
+	}
 
-    public void updateClassification(
-            QuestionTypeJpaEntity type,
-            QuestionDifficultyJpaEntity difficulty,
-            QuestionCategoryJpaEntity category,
-            Long actorUserId,
-            Instant now) {
-        this.type = type;
-        this.difficulty = difficulty;
-        this.category = category;
-        touch(actorUserId, now);
-    }
+	public String getAcceptedAnswersJson() {
+		return acceptedAnswersJson;
+	}
 
-    public void archive(Long actorUserId, Instant now) {
-        status = QuestionStatus.ARCHIVED;
-        publishedVersion = null;
-        touch(actorUserId, now);
-    }
+	public boolean isCaseSensitive() {
+		return Integer.valueOf(1).equals(caseSensitive);
+	}
 
-    private void touch(Long actorUserId, Instant now) {
-        updatedBy = actorUserId;
-        updatedAt = now;
-    }
+	public boolean isManualReview() {
+		return Integer.valueOf(1).equals(manualReview);
+	}
 
-    public Long getId() { return id; }
-    public String getPublicId() { return publicId; }
-    public QuestionTypeJpaEntity getType() { return type; }
-    public QuestionDifficultyJpaEntity getDifficulty() { return difficulty; }
-    public QuestionCategoryJpaEntity getCategory() { return category; }
-    public QuestionStatus getStatus() { return status; }
-    public QuestionVersionJpaEntity getCurrentVersion() { return currentVersion; }
-    public QuestionVersionJpaEntity getPublishedVersion() { return publishedVersion; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
-    public long getVersion() { return version; }
+	public BigDecimal getNumericMin() {
+		return numericMin;
+	}
+
+	public BigDecimal getNumericMax() {
+		return numericMax;
+	}
+
+	public BigDecimal getNumericTolerance() {
+		return numericTolerance;
+	}
+
+	public Integer getResponseMaxLength() {
+		return responseMaxLength;
+	}
+
+	public List<QuestionOptionJpaEntity> getOptions() {
+		return List.copyOf(options);
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getUpdatedAt() {
+		return updatedAt;
+	}
+
+	public long getVersion() {
+		return version;
+	}
 }

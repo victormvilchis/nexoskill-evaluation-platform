@@ -7,31 +7,15 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-@AnalyzeClasses(
-        packages = "com.nexoskill.evaluation",
-        importOptions = ImportOption.DoNotIncludeTests.class
-)
+@AnalyzeClasses(packages = "com.nexoskill.evaluation", importOptions = ImportOption.DoNotIncludeTests.class)
 class HexagonalArchitectureTest {
 
-    @ArchTest
-    static final ArchRule domainMustNotDependOnFrameworks =
-            noClasses()
-                    .that()
-                    .resideInAPackage("..domain..")
-                    .should()
-                    .dependOnClassesThat()
-                    .resideInAnyPackage(
-                            "org.springframework..",
-                            "jakarta.persistence..",
-                            "jakarta.servlet.."
-                    );
+	@ArchTest
+	static final ArchRule domainMustNotDependOnFrameworks = noClasses().that().resideInAPackage("..domain..").should()
+			.dependOnClassesThat()
+			.resideInAnyPackage("org.springframework..", "jakarta.persistence..", "jakarta.servlet..");
 
-    @ArchTest
-    static final ArchRule applicationMustNotDependOnRestInterfaces =
-            noClasses()
-                    .that()
-                    .resideInAPackage("..application..")
-                    .should()
-                    .dependOnClassesThat()
-                    .resideInAPackage("..interfaces.rest..");
+	@ArchTest
+	static final ArchRule applicationMustNotDependOnRestInterfaces = noClasses().that()
+			.resideInAPackage("..application..").should().dependOnClassesThat().resideInAPackage("..interfaces.rest..");
 }

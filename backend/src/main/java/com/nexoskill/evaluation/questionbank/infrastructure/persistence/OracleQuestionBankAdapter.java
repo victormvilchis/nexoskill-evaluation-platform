@@ -1,350 +1,253 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
-import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionOptionCommand;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionOptionView;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionPage;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionSummary;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionVersionSummary;
-import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
-import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
-import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
-import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexoskill.evaluation.questionbank.application.model.*;
+import com.nexoskill.evaluation.questionbank.application.port.out.*;
+import com.nexoskill.evaluation.questionbank.domain.model.*;
+import com.nexoskill.evaluation.shared.domain.*;
 import java.time.Clock;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-import org.springframework.data.domain.PageRequest;
+import java.util.*;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Component;
 
 @Component
 public class OracleQuestionBankAdapter implements QuestionBankPort {
+	private final SpringDataQuestionRepository questions;
+	private final SpringDataQuestionOptionRepository options;
+	private final SpringDataQuestionTypeRepository types;
+	private final SpringDataQuestionDifficultyRepository difficulties;
+	private final SpringDataQuestionCategoryRepository categories;
+	private final SpringDataQuestionMediaRepository media;
+	private final QuestionUsageChecker usage;
+	private final ObjectMapper json;
+	private final Clock clock;
 
-    private final SpringDataQuestionRepository questionRepository;
-    private final SpringDataQuestionVersionRepository versionRepository;
-    private final SpringDataQuestionTypeRepository typeRepository;
-    private final SpringDataQuestionDifficultyRepository difficultyRepository;
-    private final SpringDataQuestionCategoryRepository categoryRepository;
-    private final Clock clock;
+	public OracleQuestionBankAdapter(SpringDataQuestionRepository q, SpringDataQuestionOptionRepository o,
+			SpringDataQuestionTypeRepository t, SpringDataQuestionDifficultyRepository d,
+			SpringDataQuestionCategoryRepository c, SpringDataQuestionMediaRepository m, QuestionUsageChecker u,
+			ObjectMapper j, Clock clock) {
+		questions = q;
+		options = o;
+		types = t;
+		difficulties = d;
+		categories = c;
+		media = m;
+		usage = u;
+		json = j;
+		this.clock = clock;
+	}
 
-    public OracleQuestionBankAdapter(
-            SpringDataQuestionRepository questionRepository,
-            SpringDataQuestionVersionRepository versionRepository,
-            SpringDataQuestionTypeRepository typeRepository,
-            SpringDataQuestionDifficultyRepository difficultyRepository,
-            SpringDataQuestionCategoryRepository categoryRepository,
-            Clock clock) {
-        this.questionRepository = questionRepository;
-        this.versionRepository = versionRepository;
-        this.typeRepository = typeRepository;
-        this.difficultyRepository = difficultyRepository;
-        this.categoryRepository = categoryRepository;
-        this.clock = clock;
-    }
+	public QuestionDetail create(CreateQuestionCommand c) {
+		var sel = selection(c.typeCode(), c.difficultyCode(), c.categoryPublicIds(), Set.of());
+		var prompt = optionalMedia(c.promptMediaPublicId());
+		var s = c.answerSettings();
+		var e = QuestionJpaEntity.create(UUID.randomUUID().toString(), sel.type, sel.difficulty, sel.categories,
+				trim(c.statement()), nullable(c.explanation()), prompt, code(c.codeLanguage()),
+				nullable(c.codeContent()), writeAnswers(s.acceptedAnswers()), s.caseSensitive(),
+				effectiveManual(sel.type.getCode(), s.manualReview()), s.numericMin(), s.numericMax(),
+				s.numericTolerance(), s.maxLength(), c.actorUserId(), clock.instant());
+		addOptions(e, c.options());
+		return toDetail(questions.saveAndFlush(e));
+	}
 
-    @Override
-    public QuestionDetail create(NewQuestionData data) {
-        CatalogSelection catalogs = resolveCatalogs(
-                data.typeCode(), data.difficultyCode(), data.categoryPublicId());
-        Instant now = clock.instant();
-        QuestionJpaEntity question = QuestionJpaEntity.create(
-                data.publicId(), catalogs.type(), catalogs.difficulty(),
-                catalogs.category(), data.createdBy(), now);
-        QuestionJpaEntity persistedQuestion = questionRepository.save(question);
-        QuestionVersionJpaEntity version = createVersion(
-                persistedQuestion, 1, data.statement(), data.explanation(),
-                "Publicación inicial", data.options(), data.createdBy(), now);
-        version.publish(data.createdBy(), now);
-        QuestionVersionJpaEntity persistedVersion = versionRepository.save(version);
-        persistedQuestion.registerPublishedVersion(
-                persistedVersion, data.createdBy(), now);
-        return toDetail(questionRepository.saveAndFlush(persistedQuestion));
-    }
+	public QuestionDetail update(UpdateQuestionCommand c) {
+		var e = locked(c.publicId());
+		checkVersion(e, c.expectedEntityVersion());
+		if (e.getStatus() == QuestionStatus.ARCHIVED)
+			throw error("QUESTION_ARCHIVED", "Reactiva la pregunta antes de editarla.");
+		Set<String> existing = e.getCategories().stream().map(QuestionCategoryJpaEntity::getPublicId)
+				.collect(java.util.stream.Collectors.toSet());
+		var sel = selection(c.typeCode(), c.difficultyCode(), c.categoryPublicIds(), existing);
+		var s = c.answerSettings();
+		options.deleteByQuestionId(e.getId());
+		options.flush();
+		e.clearOptions();
+		e.apply(sel.type, sel.difficulty, sel.categories, trim(c.statement()), nullable(c.explanation()),
+				optionalMedia(c.promptMediaPublicId()), code(c.codeLanguage()), nullable(c.codeContent()),
+				writeAnswers(s.acceptedAnswers()), s.caseSensitive(),
+				effectiveManual(sel.type.getCode(), s.manualReview()), s.numericMin(), s.numericMax(),
+				s.numericTolerance(), s.maxLength(), c.actorUserId(), clock.instant());
+		addOptions(e, c.options());
+		return toDetail(questions.saveAndFlush(e));
+	}
 
-    @Override
-    public UpdateResult update(UpdateQuestionData data) {
-        QuestionJpaEntity question = requiredQuestionForUpdate(data.publicId());
-        assertExpectedVersion(question, data.expectedEntityVersion());
+	public QuestionDetail get(String id) {
+		return toDetail(find(id));
+	}
 
-        CatalogSelection catalogs = resolveCatalogsForUpdate(
-                question, data.typeCode(), data.difficultyCode(), data.categoryPublicId());
-        Instant now = clock.instant();
-        QuestionVersionJpaEntity previousCurrent = requiredCurrentVersion(question);
-        int previousVersion = previousCurrent.getVersionNumber();
-        int nextVersion = versionRepository
-                .findByQuestion_IdOrderByVersionNumberDesc(question.getId())
-                .stream()
-                .mapToInt(QuestionVersionJpaEntity::getVersionNumber)
-                .max()
-                .orElse(0) + 1;
+	public QuestionPage search(String query, QuestionStatus status, String type, String difficulty, String category,
+			int page, int size) {
+		String q = query == null || query.isBlank() ? null : query.trim().toLowerCase(Locale.ROOT);
+		String t = norm(type), d = norm(difficulty),
+				c = category == null || category.isBlank() ? null
+						: PublicIdNormalizer.requiredUuid(category, "QUESTION_CATEGORY_INVALID",
+								"La categoría indicada no es válida.");
+		PageRequest pageable = PageRequest.of(page, size);
+		Page<QuestionJpaEntity> p = q == null
+				? questions.searchWithoutText(status == null ? null : status.name(), t, d, c, pageable)
+				: questions.searchWithText(q, status == null ? null : status.name(), t, d, c, pageable);
+		return new QuestionPage(p.getContent().stream().map(this::toSummary).toList(), p.getNumber(), p.getSize(),
+				p.getTotalElements(), p.getTotalPages());
+	}
 
-        String changeSummary = data.changeSummary() == null
-                || data.changeSummary().isBlank()
-                ? "Actualización automática desde la versión " + previousVersion
-                : data.changeSummary().trim();
+	public QuestionDetail duplicate(String id, Long actor) {
+		var src = find(id);
+		var cats = src.getCategories();
+		var e = QuestionJpaEntity.create(UUID.randomUUID().toString(), src.getType(), src.getDifficulty(),
+				new LinkedHashSet<>(cats), src.getStatement() + " (copia)", src.getExplanation(), src.getPromptMedia(),
+				src.getCodeLanguage(), src.getCodeContent(), src.getAcceptedAnswersJson(), src.isCaseSensitive(),
+				src.isManualReview(), src.getNumericMin(), src.getNumericMax(), src.getNumericTolerance(),
+				src.getResponseMaxLength(), actor, clock.instant());
+		for (var o : src.getOptions())
+			e.addOption(QuestionOptionJpaEntity.create(e, UUID.randomUUID().toString(), o.getOptionOrder(), o.getText(),
+					o.getMedia(), o.isCorrect(), clock.instant()));
+		return toDetail(questions.saveAndFlush(e));
+	}
 
-        QuestionVersionJpaEntity newVersion = createVersion(
-                question, nextVersion, data.statement(), data.explanation(),
-                changeSummary, data.options(), data.updatedBy(), now);
-        newVersion.publish(data.updatedBy(), now);
-        QuestionVersionJpaEntity persistedVersion = versionRepository.save(newVersion);
+	public QuestionDetail changeStatus(String id, QuestionStatus status, long expected, Long actor) {
+		var e = locked(id);
+		checkVersion(e, expected);
+		if (status == QuestionStatus.ARCHIVED && usage.isUsedByActiveExam(e.getId()))
+			throw error("QUESTION_USED_BY_ACTIVE_EXAM",
+					"No se puede archivar porque está incluida en una evaluación activa.");
+		e.changeStatus(status, actor, clock.instant());
+		return toDetail(questions.saveAndFlush(e));
+	}
 
-        QuestionVersionJpaEntity previouslyPublished = question.getPublishedVersion();
-        if (previouslyPublished != null
-                && !previouslyPublished.getId().equals(persistedVersion.getId())) {
-            previouslyPublished.archive(data.updatedBy(), now);
-            versionRepository.save(previouslyPublished);
-        }
+	private void addOptions(QuestionJpaEntity e, List<QuestionOptionCommand> commands) {
+		int i = 1;
+		for (var c : commands)
+			e.addOption(QuestionOptionJpaEntity.create(e, UUID.randomUUID().toString(), i++, nullable(c.text()),
+					optionalMedia(c.mediaPublicId()), c.correct(), clock.instant()));
+	}
 
-        question.updateClassification(
-                catalogs.type(), catalogs.difficulty(), catalogs.category(),
-                data.updatedBy(), now);
-        question.registerPublishedVersion(persistedVersion, data.updatedBy(), now);
+	private Selection selection(String type, String difficulty, List<String> ids, Set<String> existing) {
+		var t = types.findByCodeAndStatus(norm(type), CatalogStatus.ACTIVE)
+				.orElseThrow(() -> error("QUESTION_TYPE_INVALID", "El tipo de pregunta no está disponible."));
+		var d = difficulties.findByCodeAndStatus(norm(difficulty), CatalogStatus.ACTIVE)
+				.orElseThrow(() -> error("QUESTION_DIFFICULTY_INVALID", "La dificultad no está disponible."));
+		Set<String> canonical = ids.stream().map(
+				v -> PublicIdNormalizer.requiredUuid(v, "QUESTION_CATEGORY_INVALID", "Una categoría no es válida."))
+				.collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+		if (canonical.isEmpty())
+			throw error("QUESTION_CATEGORY_REQUIRED", "Selecciona al menos una categoría.");
+		List<QuestionCategoryJpaEntity> found = categories.findAllByPublicIdIn(canonical);
+		if (found.size() != canonical.size())
+			throw error("CATEGORY_NOT_FOUND", "Una de las categorías seleccionadas no existe.");
+		for (var c : found)
+			if (c.getStatus() != CatalogStatus.ACTIVE && !existing.contains(c.getPublicId()))
+				throw error("CATEGORY_INACTIVE", "La categoría " + c.getName() + " está inactiva.");
+		return new Selection(t, d, new LinkedHashSet<>(found));
+	}
 
-        return new UpdateResult(
-                toDetail(questionRepository.saveAndFlush(question)),
-                previousVersion,
-                true
-        );
-    }
+	private QuestionJpaEntity find(String id) {
+		String p = PublicIdNormalizer.requiredUuid(id, "QUESTION_ID_INVALID", "La pregunta indicada no es válida.");
+		return questions.findByPublicId(p)
+				.orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
+	}
 
-    @Override
-    public TransitionResult transition(
-            String publicId,
-            QuestionStatus targetStatus,
-            long expectedEntityVersion,
-            Long actorUserId) {
-        if (targetStatus != QuestionStatus.ARCHIVED) {
-            throw new BusinessException(
-                    "QUESTION_WORKFLOW_SIMPLIFIED",
-                    "Las preguntas se publican automáticamente. Solo está disponible la acción de archivar."
-            );
-        }
+	private QuestionJpaEntity locked(String id) {
+		String p = PublicIdNormalizer.requiredUuid(id, "QUESTION_ID_INVALID", "La pregunta indicada no es válida.");
+		return questions.findByPublicIdForUpdate(p)
+				.orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
+	}
 
-        QuestionJpaEntity question = requiredQuestionForUpdate(publicId);
-        assertExpectedVersion(question, expectedEntityVersion);
-        QuestionStatus previous = question.getStatus();
-        Instant now = clock.instant();
-        QuestionVersionJpaEntity current = requiredCurrentVersion(question);
-        current.archive(actorUserId, now);
-        versionRepository.save(current);
-        question.archive(actorUserId, now);
-        QuestionDetail detail = toDetail(questionRepository.saveAndFlush(question));
-        return new TransitionResult(detail, previous, QuestionStatus.ARCHIVED);
-    }
+	private void checkVersion(QuestionJpaEntity e, long v) {
+		if (e.getVersion() != v)
+			throw error("QUESTION_CONCURRENT_MODIFICATION",
+					"La pregunta fue modificada por otra persona. Recarga la información.");
+	}
 
-    @Override
-    public QuestionDetail duplicate(
-            String sourcePublicId,
-            String newPublicId,
-            Long actorUserId) {
-        QuestionJpaEntity source = requiredQuestion(sourcePublicId);
-        QuestionVersionJpaEntity sourceVersion = requiredCurrentVersion(source);
-        Instant now = clock.instant();
-        QuestionJpaEntity copy = QuestionJpaEntity.create(
-                newPublicId, source.getType(), source.getDifficulty(),
-                source.getCategory(), actorUserId, now);
-        QuestionJpaEntity persisted = questionRepository.save(copy);
-        List<QuestionOptionCommand> options = sourceVersion.getOptions().stream()
-                .map(option -> new QuestionOptionCommand(option.getText(), option.isCorrect()))
-                .toList();
-        QuestionVersionJpaEntity version = createVersion(
-                persisted, 1,
-                sourceVersion.getStatement() + " (copia)",
-                sourceVersion.getExplanation(),
-                "Duplicada desde " + sourcePublicId,
-                options, actorUserId, now);
-        version.publish(actorUserId, now);
-        QuestionVersionJpaEntity persistedVersion = versionRepository.save(version);
-        persisted.registerPublishedVersion(persistedVersion, actorUserId, now);
-        return toDetail(questionRepository.saveAndFlush(persisted));
-    }
+	private QuestionMediaJpaEntity optionalMedia(String id) {
+		if (id == null || id.isBlank())
+			return null;
+		String p = PublicIdNormalizer.requiredUuid(id, "QUESTION_MEDIA_INVALID",
+				"La imagen seleccionada no es válida.");
+		return media.findByPublicId(p)
+				.orElseThrow(() -> error("QUESTION_MEDIA_NOT_FOUND", "La imagen seleccionada no existe."));
+	}
 
-    @Override
-    public QuestionPage search(
-            String query,
-            QuestionStatus status,
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId,
-            int page,
-            int size) {
-        var result = questionRepository.search(
-                query,
-                status == null ? null : status.name(),
-                typeCode,
-                difficultyCode,
-                categoryPublicId,
-                PageRequest.of(page, size)
-        );
-        return new QuestionPage(
-                result.getContent().stream().map(this::toSummary).toList(),
-                result.getNumber(), result.getSize(),
-                result.getTotalElements(), result.getTotalPages()
-        );
-    }
+	private String writeAnswers(List<String> a) {
+		try {
+			return a == null || a.isEmpty() ? null : json.writeValueAsString(a);
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
 
-    @Override
-    public QuestionDetail getByPublicId(String publicId) {
-        return toDetail(requiredQuestion(publicId));
-    }
+	private List<String> readAnswers(String a) {
+		try {
+			return a == null ? List.of() : json.readValue(a, new TypeReference<List<String>>() {
+			});
+		} catch (Exception e) {
+			return List.of();
+		}
+	}
 
-    @Override
-    public List<QuestionVersionSummary> getVersions(String publicId) {
-        QuestionJpaEntity question = requiredQuestion(publicId);
-        return versionRepository.findByQuestion_IdOrderByVersionNumberDesc(question.getId())
-                .stream()
-                .map(version -> new QuestionVersionSummary(
-                        version.getVersionNumber(), version.getStatus(),
-                        version.getStatement(), version.getChangeSummary(),
-                        version.getCreatedAt(), version.getStatusChangedAt(),
-                        version.getPublishedAt()
-                ))
-                .toList();
-    }
+	private boolean effectiveManual(String type, boolean requested) {
+		try {
+			return QuestionTypeCode.valueOf(type).requiresManualReview() || requested;
+		} catch (Exception e) {
+			return requested;
+		}
+	}
 
-    private QuestionVersionJpaEntity createVersion(
-            QuestionJpaEntity question,
-            int versionNumber,
-            String statement,
-            String explanation,
-            String changeSummary,
-            List<QuestionOptionCommand> options,
-            Long actorUserId,
-            Instant now) {
-        QuestionVersionJpaEntity version = QuestionVersionJpaEntity.create(
-                question, versionNumber, statement, explanation,
-                changeSummary, actorUserId, now);
-        int order = 1;
-        for (QuestionOptionCommand option : options) {
-            version.addOption(QuestionOptionJpaEntity.create(
-                    version, UUID.randomUUID().toString(), order++,
-                    option.text(), option.correct(), now));
-        }
-        return version;
-    }
+	private QuestionDetail toDetail(QuestionJpaEntity e) {
+		return new QuestionDetail(e.getPublicId(), e.getStatement(), e.getExplanation(), e.getType().getCode(),
+				e.getType().getName(), e.getDifficulty().getCode(), e.getDifficulty().getName(),
+				e.getCategories().stream().map(this::catRef)
+						.sorted(java.util.Comparator.comparing(QuestionCategoryRef::name)).toList(),
+				e.getStatus(), e.getVersion(), mediaView(e.getPromptMedia()), e.getCodeLanguage(), e.getCodeContent(),
+				new QuestionAnswerSettings(readAnswers(e.getAcceptedAnswersJson()), e.isCaseSensitive(),
+						e.isManualReview(), e.getNumericMin(), e.getNumericMax(), e.getNumericTolerance(), e
+								.getResponseMaxLength()),
+				e.getOptions().stream().map(o -> new QuestionOptionView(o.getPublicId(), o.getOptionOrder(),
+						o.getText(), mediaView(o.getMedia()), o.isCorrect())).toList(),
+				e.getCreatedAt(), e.getUpdatedAt());
+	}
 
-    private CatalogSelection resolveCatalogsForUpdate(
-            QuestionJpaEntity question,
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId) {
-        QuestionTypeJpaEntity type = typeRepository.findById(typeCode)
-                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_TYPE_NOT_FOUND",
-                        "El tipo de pregunta no está disponible."));
-        QuestionDifficultyJpaEntity difficulty = difficultyRepository
-                .findById(difficultyCode)
-                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_DIFFICULTY_NOT_FOUND",
-                        "La dificultad no está disponible."));
-        QuestionCategoryJpaEntity category = categoryRepository.findByPublicId(categoryPublicId)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_CATEGORY_NOT_FOUND",
-                        "La categoría seleccionada no existe."));
-        boolean sameCategory = question.getCategory().getPublicId()
-                .equals(category.getPublicId());
-        if (category.getStatus() != CatalogStatus.ACTIVE && !sameCategory) {
-            throw new BusinessException(
-                    "QUESTION_CATEGORY_NOT_FOUND",
-                    "La categoría seleccionada no está disponible."
-            );
-        }
-        return new CatalogSelection(type, difficulty, category);
-    }
+	private QuestionSummary toSummary(QuestionJpaEntity e) {
+		return new QuestionSummary(e.getPublicId(), e.getStatement(), e.getType().getCode(), e.getType().getName(),
+				e.getDifficulty().getCode(), e.getDifficulty().getName(),
+				e.getCategories().stream().map(this::catRef)
+						.sorted(java.util.Comparator.comparing(QuestionCategoryRef::name)).toList(),
+				e.getStatus(),
+				e.getPromptMedia() != null || e.getOptions().stream().anyMatch(o -> o.getMedia() != null),
+				e.getCreatedAt(), e.getUpdatedAt());
+	}
 
-    private CatalogSelection resolveCatalogs(
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId) {
-        QuestionTypeJpaEntity type = typeRepository.findById(typeCode)
-                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_TYPE_NOT_FOUND",
-                        "El tipo de pregunta no está disponible."));
-        QuestionDifficultyJpaEntity difficulty = difficultyRepository
-                .findById(difficultyCode)
-                .filter(value -> value.getStatus() == CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_DIFFICULTY_NOT_FOUND",
-                        "La dificultad no está disponible."));
-        QuestionCategoryJpaEntity category = categoryRepository
-                .findByPublicIdAndStatus(categoryPublicId, CatalogStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_CATEGORY_NOT_FOUND",
-                        "La categoría seleccionada no está disponible."));
-        return new CatalogSelection(type, difficulty, category);
-    }
+	private QuestionCategoryRef catRef(QuestionCategoryJpaEntity c) {
+		return new QuestionCategoryRef(c.getPublicId(), c.getCode(), c.getName(), c.getStatus());
+	}
 
-    private QuestionJpaEntity requiredQuestion(String publicId) {
-        return questionRepository.findByPublicId(publicId)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_NOT_FOUND",
-                        "La pregunta solicitada no existe."));
-    }
+	private QuestionMediaView mediaView(QuestionMediaJpaEntity m) {
+		return m == null ? null
+				: new QuestionMediaView(m.getPublicId(), m.getOriginalName(), m.getContentType(), m.getSize(),
+						"/api/v1/question-media/" + m.getPublicId());
+	}
 
-    private QuestionJpaEntity requiredQuestionForUpdate(String publicId) {
-        return questionRepository.findByPublicIdForUpdate(publicId)
-                .orElseThrow(() -> new BusinessException(
-                        "QUESTION_NOT_FOUND",
-                        "La pregunta solicitada no existe."));
-    }
+	private String norm(String v) {
+		return v == null || v.isBlank() ? null : v.trim().toUpperCase(Locale.ROOT);
+	}
 
-    private void assertExpectedVersion(QuestionJpaEntity question, long expected) {
-        if (question.getVersion() != expected) {
-            throw new BusinessException(
-                    "QUESTION_CONCURRENT_MODIFICATION",
-                    "La pregunta fue modificada por otra sesión. Actualiza la página e intenta nuevamente."
-            );
-        }
-    }
+	private String trim(String v) {
+		return v == null ? null : v.trim();
+	}
 
-    private QuestionSummary toSummary(QuestionJpaEntity entity) {
-        QuestionVersionJpaEntity version = requiredCurrentVersion(entity);
-        return new QuestionSummary(
-                entity.getPublicId(), version.getStatement(),
-                entity.getType().getCode(), entity.getType().getName(),
-                entity.getDifficulty().getCode(), entity.getDifficulty().getName(),
-                entity.getCategory().getPublicId(), entity.getCategory().getName(),
-                entity.getStatus(), version.getVersionNumber(),
-                entity.getCreatedAt(), entity.getUpdatedAt()
-        );
-    }
+	private String nullable(String v) {
+		return v == null || v.isBlank() ? null : v.trim();
+	}
 
-    private QuestionDetail toDetail(QuestionJpaEntity entity) {
-        QuestionVersionJpaEntity version = requiredCurrentVersion(entity);
-        List<QuestionOptionView> options = version.getOptions().stream()
-                .map(option -> new QuestionOptionView(
-                        option.getPublicId(), option.getOptionOrder(),
-                        option.getText(), option.isCorrect()))
-                .toList();
-        Integer publishedVersion = entity.getPublishedVersion() == null
-                ? null : entity.getPublishedVersion().getVersionNumber();
-        return new QuestionDetail(
-                entity.getPublicId(), version.getStatement(), version.getExplanation(),
-                entity.getType().getCode(), entity.getType().getName(),
-                entity.getDifficulty().getCode(), entity.getDifficulty().getName(),
-                entity.getCategory().getPublicId(), entity.getCategory().getName(),
-                entity.getStatus(), version.getVersionNumber(), entity.getVersion(),
-                publishedVersion, options, entity.getCreatedAt(), entity.getUpdatedAt()
-        );
-    }
+	private String code(String v) {
+		return v == null || v.isBlank() ? null : v.trim().toUpperCase(Locale.ROOT);
+	}
 
-    private QuestionVersionJpaEntity requiredCurrentVersion(QuestionJpaEntity entity) {
-        if (entity.getCurrentVersion() == null) {
-            throw new BusinessException(
-                    "QUESTION_VERSION_MISSING",
-                    "La pregunta no tiene una versión vigente."
-            );
-        }
-        return entity.getCurrentVersion();
-    }
+	private BusinessException error(String c, String m) {
+		return new BusinessException(c, m);
+	}
 
-    private record CatalogSelection(
-            QuestionTypeJpaEntity type,
-            QuestionDifficultyJpaEntity difficulty,
-            QuestionCategoryJpaEntity category) {
-    }
+	private record Selection(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
+			Set<QuestionCategoryJpaEntity> categories) {
+	}
 }

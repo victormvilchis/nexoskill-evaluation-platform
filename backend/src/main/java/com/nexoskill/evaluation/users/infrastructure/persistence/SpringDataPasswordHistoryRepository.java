@@ -4,11 +4,7 @@ import java.util.List;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface SpringDataPasswordHistoryRepository
-        extends JpaRepository<PasswordHistoryJpaEntity, Long> {
+public interface SpringDataPasswordHistoryRepository extends JpaRepository<PasswordHistoryJpaEntity, Long> {
 
-    List<PasswordHistoryJpaEntity> findByUserIdOrderByCreatedAtDesc(
-            Long userId,
-            Pageable pageable
-    );
+	List<PasswordHistoryJpaEntity> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 }

@@ -4,10 +4,10 @@ import java.util.Locale;
 
 public final class EmailNormalizer {
 
-    private EmailNormalizer() {
-    }
+	private EmailNormalizer() {
+	}
 
-    public static String normalize(String email) {
-        return email == null ? "" : email.trim().toUpperCase(Locale.ROOT);
-    }
+	public static String normalize(String email) {
+		return email == null ? "" : email.trim().toUpperCase(Locale.ROOT);
+	}
 }

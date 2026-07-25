@@ -1,88 +1,19 @@
 package com.nexoskill.evaluation.questionbank.application.port.out;
 
-import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionOptionCommand;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionPage;
-import com.nexoskill.evaluation.questionbank.application.model.QuestionVersionSummary;
+import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
-import java.util.List;
 
 public interface QuestionBankPort {
+	QuestionDetail create(CreateQuestionCommand command);
 
-    QuestionDetail create(NewQuestionData question);
+	QuestionDetail update(UpdateQuestionCommand command);
 
-    UpdateResult update(UpdateQuestionData question);
+	QuestionDetail get(String publicId);
 
-    TransitionResult transition(
-            String publicId,
-            QuestionStatus targetStatus,
-            long expectedEntityVersion,
-            Long actorUserId
-    );
+	QuestionPage search(String query, QuestionStatus status, String typeCode, String difficultyCode,
+			String categoryPublicId, int page, int size);
 
-    QuestionDetail duplicate(
-            String sourcePublicId,
-            String newPublicId,
-            Long actorUserId
-    );
+	QuestionDetail duplicate(String publicId, Long actorUserId);
 
-    QuestionPage search(
-            String query,
-            QuestionStatus status,
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId,
-            int page,
-            int size
-    );
-
-    QuestionDetail getByPublicId(String publicId);
-
-    List<QuestionVersionSummary> getVersions(String publicId);
-
-    record NewQuestionData(
-            String publicId,
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId,
-            String statement,
-            String explanation,
-            List<QuestionOptionCommand> options,
-            Long createdBy
-    ) {
-        public NewQuestionData {
-            options = List.copyOf(options);
-        }
-    }
-
-    record UpdateQuestionData(
-            String publicId,
-            String typeCode,
-            String difficultyCode,
-            String categoryPublicId,
-            String statement,
-            String explanation,
-            String changeSummary,
-            List<QuestionOptionCommand> options,
-            long expectedEntityVersion,
-            Long updatedBy
-    ) {
-        public UpdateQuestionData {
-            options = List.copyOf(options);
-        }
-    }
-
-    record UpdateResult(
-            QuestionDetail question,
-            int previousVersionNumber,
-            boolean createdNewVersion
-    ) {
-    }
-
-    record TransitionResult(
-            QuestionDetail question,
-            QuestionStatus previousStatus,
-            QuestionStatus currentStatus
-    ) {
-    }
+	QuestionDetail changeStatus(String publicId, QuestionStatus status, long expectedEntityVersion, Long actorUserId);
 }

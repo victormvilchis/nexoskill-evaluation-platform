@@ -1,36 +1,33 @@
-# Backend
+# Java
 backend/target/
 *.class
-*.jar
-*.war
 *.log
 
-# Frontend
+# Node
 frontend/node_modules/
 frontend/dist/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Variables y secretos
-.env
-.env.*
-!.env.example
-application-local.yml
-application-prod.yml
+frontend/.vite/
 
 # IDE
 .idea/
 .vscode/
 *.iml
-.classpath
 .project
+.classpath
 .settings/
 
-# Sistema operativo
+# OS
 .DS_Store
 Thumbs.db
 
-# XAMPP y temporales
-*.tmp
-*.bak
+# Local configuration
+.env
+backend/src/main/resources/application-local-private.yml
+
+# XAMPP deployment output
+xampp-deploy/
+
+# Local uploaded media and TypeScript build metadata
+/storage/
+backend/storage/
+frontend/*.tsbuildinfo

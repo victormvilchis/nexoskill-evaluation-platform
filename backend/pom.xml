@@ -14,7 +14,7 @@
 
     <groupId>com.nexoskill</groupId>
     <artifactId>evaluation-platform-backend</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.2</version>
     <name>evaluation-platform-backend</name>
     <description>Backend inicial de la plataforma de evaluaciones NexoSkill</description>
 

@@ -11,36 +11,36 @@ import jakarta.persistence.Table;
 @Table(name = "APP_PERMISSION")
 public class PermissionJpaEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "PERMISSION_ID")
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "PERMISSION_ID")
+	private Long id;
 
-    @Column(name = "PERMISSION_CODE", nullable = false, unique = true, length = 100)
-    private String code;
+	@Column(name = "PERMISSION_CODE", nullable = false, unique = true, length = 100)
+	private String code;
 
-    @Column(name = "PERMISSION_NAME", nullable = false, length = 150)
-    private String name;
+	@Column(name = "PERMISSION_NAME", nullable = false, length = 150)
+	private String name;
 
-    @Column(name = "MODULE_CODE", nullable = false, length = 50)
-    private String moduleCode;
+	@Column(name = "MODULE_CODE", nullable = false, length = 50)
+	private String moduleCode;
 
-    protected PermissionJpaEntity() {
-    }
+	protected PermissionJpaEntity() {
+	}
 
-    public Long getId() {
-        return id;
-    }
+	public Long getId() {
+		return id;
+	}
 
-    public String getCode() {
-        return code;
-    }
+	public String getCode() {
+		return code;
+	}
 
-    public String getName() {
-        return name;
-    }
+	public String getName() {
+		return name;
+	}
 
-    public String getModuleCode() {
-        return moduleCode;
-    }
+	public String getModuleCode() {
+		return moduleCode;
+	}
 }

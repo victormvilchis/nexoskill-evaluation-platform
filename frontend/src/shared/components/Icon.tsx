@@ -23,6 +23,9 @@ export type IconName =
   | 'info'
   | 'warning'
   | 'error'
+  | 'image'
+  | 'collections'
+  | 'code'
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName
@@ -51,7 +54,10 @@ const paths: Record<IconName, ReactNode> = {
   check: <><path d="m5 12 4 4L19 6" /></>,
   info: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></>,
   warning: <><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></>,
-  error: <><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></>
+  error: <><circle cx="12" cy="12" r="10" /><path d="m15 9-6 6M9 9l6 6" /></>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m21 15-5-5L5 20"/></>,
+  collections: <><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/></>,
+  code: <><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></>
 }
 
 export function Icon({ name, size = 18, ...props }: IconProps) {

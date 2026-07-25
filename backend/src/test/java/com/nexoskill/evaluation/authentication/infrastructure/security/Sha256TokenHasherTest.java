@@ -6,22 +6,18 @@ import org.junit.jupiter.api.Test;
 
 class Sha256TokenHasherTest {
 
-    private final Sha256TokenHasher hasher = new Sha256TokenHasher();
+	private final Sha256TokenHasher hasher = new Sha256TokenHasher();
 
-    @Test
-    void shouldCreateStableHexadecimalHash() {
-        String first = hasher.hash("session-token");
-        String second = hasher.hash("session-token");
+	@Test
+	void shouldCreateStableHexadecimalHash() {
+		String first = hasher.hash("session-token");
+		String second = hasher.hash("session-token");
 
-        assertThat(first)
-                .hasSize(64)
-                .matches("[0-9a-f]{64}")
-                .isEqualTo(second);
-    }
+		assertThat(first).hasSize(64).matches("[0-9a-f]{64}").isEqualTo(second);
+	}
 
-    @Test
-    void shouldNotExposeRawToken() {
-        assertThat(hasher.hash("secret-token"))
-                .doesNotContain("secret-token");
-    }
+	@Test
+	void shouldNotExposeRawToken() {
+		assertThat(hasher.hash("secret-token")).doesNotContain("secret-token");
+	}
 }

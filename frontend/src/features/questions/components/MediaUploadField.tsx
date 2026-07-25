@@ -1,0 +1,7 @@
+import { useState } from 'react'
+import { uploadQuestionMedia } from '../api/questionApi'
+import { ApiRequestError } from '../../../shared/api/apiClient'
+import { Icon } from '../../../shared/components/Icon'
+import { useToast } from '../../../shared/components/ToastProvider'
+import type { QuestionMedia } from '../../../shared/types/questions'
+export function MediaUploadField({label,value,onChange,compact=false}:{label:string;value?:QuestionMedia;onChange:(media?:QuestionMedia)=>void;compact?:boolean}){const toast=useToast();const[busy,setBusy]=useState(false);async function upload(file?:File){if(!file)return;setBusy(true);try{onChange(await uploadQuestionMedia(file));toast.success('Imagen cargada')}catch(e){toast.error('No fue posible cargar la imagen',e instanceof ApiRequestError?e.message:undefined)}finally{setBusy(false)}}return <div className={`media-upload-field ${compact?'compact':''}`}><label>{label}</label>{value?<div className="media-preview"><img src={value.url} alt={value.originalName}/><div><strong>{value.originalName}</strong><small>{Math.ceil(value.size/1024)} KB</small></div><button className="icon-button danger-icon-button" type="button" onClick={()=>onChange(undefined)}><Icon name="close" size={15}/></button></div>:<label className="media-drop-button"><Icon name="image" size={17}/><span>{busy?'Cargando…':'Seleccionar imagen'}</span><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={e=>void upload(e.target.files?.[0])}/></label>}</div>}

@@ -21,46 +21,27 @@ import org.junit.jupiter.api.Test;
 
 class UpdateUserRoleServiceTest {
 
-    private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
+	private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
 
-    @Test
-    void shouldPreventDemotingTheLastEffectiveAdministrator() {
-        UserManagementPort userManagementPort = mock(UserManagementPort.class);
-        UserSessionPort userSessionPort = mock(UserSessionPort.class);
-        AuditLogPort auditLogPort = mock(AuditLogPort.class);
-        UpdateUserRoleService service = new UpdateUserRoleService(
-                userManagementPort,
-                userSessionPort,
-                auditLogPort,
-                Clock.fixed(NOW, ZoneOffset.UTC)
-        );
-        AdminUserSummary summary = new AdminUserSummary(
-                "admin-public-id",
-                "admin@nexoskill.local",
-                "Administrador",
-                "NexoSkill",
-                "Administrador NexoSkill",
-                UserStatus.ACTIVE,
-                Set.of("ADMINISTRATOR"),
-                UserAccessStatus.ACTIVE,
-                NOW.minusSeconds(60),
-                null,
-                null
-        );
-        when(userManagementPort.getByPublicId("admin-public-id"))
-                .thenReturn(new UserManagementPort.ManagedUser(10L, summary));
-        when(userManagementPort.countEffectiveAdministrators(NOW)).thenReturn(1L);
+	@Test
+	void shouldPreventDemotingTheLastEffectiveAdministrator() {
+		UserManagementPort userManagementPort = mock(UserManagementPort.class);
+		UserSessionPort userSessionPort = mock(UserSessionPort.class);
+		AuditLogPort auditLogPort = mock(AuditLogPort.class);
+		UpdateUserRoleService service = new UpdateUserRoleService(userManagementPort, userSessionPort, auditLogPort,
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AdminUserSummary summary = new AdminUserSummary("admin-public-id", "admin@nexoskill.local", "Administrador",
+				"NexoSkill", "Administrador NexoSkill", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"),
+				UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null);
+		when(userManagementPort.getByPublicId("admin-public-id"))
+				.thenReturn(new UserManagementPort.ManagedUser(10L, summary));
+		when(userManagementPort.countEffectiveAdministrators(NOW)).thenReturn(1L);
 
-        assertThatThrownBy(() -> service.update(new UpdateUserRoleCommand(
-                "admin-public-id",
-                "USER",
-                20L,
-                "127.0.0.1",
-                "JUnit"
-        )))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("No puedes quitar el rol al último administrador activo de la plataforma.");
+		assertThatThrownBy(
+				() -> service.update(new UpdateUserRoleCommand("admin-public-id", "USER", 20L, "127.0.0.1", "JUnit")))
+				.isInstanceOf(BusinessException.class)
+				.hasMessage("No puedes quitar el rol al último administrador activo de la plataforma.");
 
-        verifyNoInteractions(userSessionPort, auditLogPort);
-    }
+		verifyNoInteractions(userSessionPort, auditLogPort);
+	}
 }

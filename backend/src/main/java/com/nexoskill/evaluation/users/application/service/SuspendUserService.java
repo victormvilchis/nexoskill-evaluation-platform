@@ -16,69 +16,43 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SuspendUserService {
 
-    private final UserManagementPort userManagementPort;
-    private final UserSessionPort userSessionPort;
-    private final AuditLogPort auditLogPort;
-    private final Clock clock;
+	private final UserManagementPort userManagementPort;
+	private final UserSessionPort userSessionPort;
+	private final AuditLogPort auditLogPort;
+	private final Clock clock;
 
-    public SuspendUserService(
-            UserManagementPort userManagementPort,
-            UserSessionPort userSessionPort,
-            AuditLogPort auditLogPort,
-            Clock clock) {
-        this.userManagementPort = userManagementPort;
-        this.userSessionPort = userSessionPort;
-        this.auditLogPort = auditLogPort;
-        this.clock = clock;
-    }
+	public SuspendUserService(UserManagementPort userManagementPort, UserSessionPort userSessionPort,
+			AuditLogPort auditLogPort, Clock clock) {
+		this.userManagementPort = userManagementPort;
+		this.userSessionPort = userSessionPort;
+		this.auditLogPort = auditLogPort;
+		this.clock = clock;
+	}
 
-    @Transactional
-    public AdminUserSummary suspend(UserStatusCommand command) {
-        UserManagementPort.ManagedUser managedUser =
-                userManagementPort.getByPublicId(command.publicId());
+	@Transactional
+	public AdminUserSummary suspend(UserStatusCommand command) {
+		UserManagementPort.ManagedUser managedUser = userManagementPort.getByPublicId(command.publicId());
 
-        if (managedUser.internalId().equals(command.actorUserId())) {
-            throw new BusinessException(
-                    "SELF_SUSPEND_NOT_ALLOWED",
-                    "No puedes suspender tu propia cuenta."
-            );
-        }
+		if (managedUser.internalId().equals(command.actorUserId())) {
+			throw new BusinessException("SELF_SUSPEND_NOT_ALLOWED", "No puedes suspender tu propia cuenta.");
+		}
 
-        Instant now = clock.instant();
-        if (managedUser.summary().roles().contains("ADMINISTRATOR")
-                && userManagementPort.countEffectiveAdministrators(now) <= 1) {
-            throw new BusinessException(
-                    "LAST_ADMINISTRATOR_REQUIRED",
-                    "No puedes suspender al último administrador activo de la plataforma."
-            );
-        }
-        AdminUserSummary updated = userManagementPort.updateStatus(
-                command.publicId(),
-                UserStatus.SUSPENDED,
-                UserAccessStatus.SUSPENDED,
-                now
-        );
-        int revokedSessions = userSessionPort.revokeActiveSessions(
-                managedUser.internalId(),
-                now
-        );
+		Instant now = clock.instant();
+		if (managedUser.summary().roles().contains("ADMINISTRATOR")
+				&& userManagementPort.countEffectiveAdministrators(now) <= 1) {
+			throw new BusinessException("LAST_ADMINISTRATOR_REQUIRED",
+					"No puedes suspender al último administrador activo de la plataforma.");
+		}
+		AdminUserSummary updated = userManagementPort.updateStatus(command.publicId(), UserStatus.SUSPENDED,
+				UserAccessStatus.SUSPENDED, now);
+		int revokedSessions = userSessionPort.revokeActiveSessions(managedUser.internalId(), now);
 
-        var data = UserManagementSupport.auditData(
-                managedUser.summary(),
-                updated
-        );
-        data.put("revokedSessions", revokedSessions);
+		var data = UserManagementSupport.auditData(managedUser.summary(), updated);
+		data.put("revokedSessions", revokedSessions);
 
-        auditLogPort.record(
-                command.actorUserId(),
-                "USER_SUSPENDED",
-                "USER_MANAGEMENT",
-                "Se suspendió un usuario y se invalidaron sus sesiones.",
-                command.ipAddress(),
-                command.userAgent(),
-                data,
-                now
-        );
-        return updated;
-    }
+		auditLogPort.record(command.actorUserId(), "USER_SUSPENDED", "USER_MANAGEMENT",
+				"Se suspendió un usuario y se invalidaron sus sesiones.", command.ipAddress(), command.userAgent(),
+				data, now);
+		return updated;
+	}
 }

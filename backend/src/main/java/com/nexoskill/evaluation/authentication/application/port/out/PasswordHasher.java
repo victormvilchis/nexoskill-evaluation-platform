@@ -2,7 +2,7 @@ package com.nexoskill.evaluation.authentication.application.port.out;
 
 public interface PasswordHasher {
 
-    boolean matches(String rawPassword, String encodedPassword);
+	boolean matches(String rawPassword, String encodedPassword);
 
-    String encode(String rawPassword);
+	String encode(String rawPassword);
 }

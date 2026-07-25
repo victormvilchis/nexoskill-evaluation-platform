@@ -15,50 +15,32 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ActivateUserService {
 
-    private final UserManagementPort userManagementPort;
-    private final AuditLogPort auditLogPort;
-    private final Clock clock;
+	private final UserManagementPort userManagementPort;
+	private final AuditLogPort auditLogPort;
+	private final Clock clock;
 
-    public ActivateUserService(
-            UserManagementPort userManagementPort,
-            AuditLogPort auditLogPort,
-            Clock clock) {
-        this.userManagementPort = userManagementPort;
-        this.auditLogPort = auditLogPort;
-        this.clock = clock;
-    }
+	public ActivateUserService(UserManagementPort userManagementPort, AuditLogPort auditLogPort, Clock clock) {
+		this.userManagementPort = userManagementPort;
+		this.auditLogPort = auditLogPort;
+		this.clock = clock;
+	}
 
-    @Transactional
-    public AdminUserSummary activate(UserStatusCommand command) {
-        UserManagementPort.ManagedUser managedUser =
-                userManagementPort.getByPublicId(command.publicId());
-        Instant now = clock.instant();
-        AdminUserSummary before = managedUser.summary();
+	@Transactional
+	public AdminUserSummary activate(UserStatusCommand command) {
+		UserManagementPort.ManagedUser managedUser = userManagementPort.getByPublicId(command.publicId());
+		Instant now = clock.instant();
+		AdminUserSummary before = managedUser.summary();
 
-        if (before.expiresAt() != null && !before.expiresAt().isAfter(now)) {
-            throw new BusinessException(
-                    "USER_ACCESS_EXPIRED",
-                    "Actualiza la fecha de vencimiento antes de activar al usuario."
-            );
-        }
+		if (before.expiresAt() != null && !before.expiresAt().isAfter(now)) {
+			throw new BusinessException("USER_ACCESS_EXPIRED",
+					"Actualiza la fecha de vencimiento antes de activar al usuario.");
+		}
 
-        AdminUserSummary updated = userManagementPort.updateStatus(
-                command.publicId(),
-                UserStatus.ACTIVE,
-                UserAccessStatus.ACTIVE,
-                now
-        );
+		AdminUserSummary updated = userManagementPort.updateStatus(command.publicId(), UserStatus.ACTIVE,
+				UserAccessStatus.ACTIVE, now);
 
-        auditLogPort.record(
-                command.actorUserId(),
-                "USER_ACTIVATED",
-                "USER_MANAGEMENT",
-                "Se activó un usuario.",
-                command.ipAddress(),
-                command.userAgent(),
-                UserManagementSupport.auditData(before, updated),
-                now
-        );
-        return updated;
-    }
+		auditLogPort.record(command.actorUserId(), "USER_ACTIVATED", "USER_MANAGEMENT", "Se activó un usuario.",
+				command.ipAddress(), command.userAgent(), UserManagementSupport.auditData(before, updated), now);
+		return updated;
+	}
 }

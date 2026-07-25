@@ -9,14 +9,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ListRolesService {
 
-    private final UserManagementPort userManagementPort;
+	private final UserManagementPort userManagementPort;
 
-    public ListRolesService(UserManagementPort userManagementPort) {
-        this.userManagementPort = userManagementPort;
-    }
+	public ListRolesService(UserManagementPort userManagementPort) {
+		this.userManagementPort = userManagementPort;
+	}
 
-    @Transactional(readOnly = true)
-    public List<RoleOption> list() {
-        return userManagementPort.listActiveRoles();
-    }
+	@Transactional(readOnly = true)
+	public List<RoleOption> list() {
+		return userManagementPort.listActiveRoles();
+	}
 }
