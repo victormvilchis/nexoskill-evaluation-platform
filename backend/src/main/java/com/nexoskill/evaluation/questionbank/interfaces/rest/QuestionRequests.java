@@ -8,23 +8,45 @@ public final class QuestionRequests {
     private QuestionRequests() {
     }
 
-    public record Option(String text, String mediaPublicId, boolean correct) {
+    public record Option(
+            String text,
+            String mediaPublicId,
+            String matchText,
+            String matchMediaPublicId,
+            boolean correct,
+            @Size(max = 4000) String feedback) {
     }
 
-    public record AnswerSettings(List<String> acceptedAnswers, boolean caseSensitive, boolean manualReview,
-            BigDecimal numericMin, BigDecimal numericMax, BigDecimal numericTolerance, Integer maxLength) {
+    public record AnswerSettings(
+            List<String> acceptedAnswers,
+            boolean caseSensitive,
+            boolean manualReview,
+            BigDecimal numericMin,
+            BigDecimal numericMax,
+            BigDecimal numericTolerance,
+            Integer maxLength) {
     }
 
-    public record Create(@NotBlank String typeCode, @NotBlank String difficultyCode,
-            @NotEmpty List<String> categoryPublicIds, @NotBlank @Size(max = 10000) String statement,
-            @Size(max = 10000) String explanation, String promptMediaPublicId, @Size(max = 40) String codeLanguage,
-            @Size(max = 30000) String codeContent, AnswerSettings answerSettings, List<Option> options) {
+    public record Create(
+            @NotBlank String typeCode,
+            @NotEmpty List<String> categoryPublicIds,
+            @NotBlank @Size(max = 10000) String statement,
+            @Size(max = 10000) String explanation,
+            String promptMediaPublicId,
+            @Size(max = 30000) String codeContent,
+            AnswerSettings answerSettings,
+            List<Option> options) {
     }
 
-    public record Update(@NotBlank String typeCode, @NotBlank String difficultyCode,
-            @NotEmpty List<String> categoryPublicIds, @NotBlank @Size(max = 10000) String statement,
-            @Size(max = 10000) String explanation, String promptMediaPublicId, @Size(max = 40) String codeLanguage,
-            @Size(max = 30000) String codeContent, AnswerSettings answerSettings, List<Option> options,
+    public record Update(
+            @NotBlank String typeCode,
+            @NotEmpty List<String> categoryPublicIds,
+            @NotBlank @Size(max = 10000) String statement,
+            @Size(max = 10000) String explanation,
+            String promptMediaPublicId,
+            @Size(max = 30000) String codeContent,
+            AnswerSettings answerSettings,
+            List<Option> options,
             @PositiveOrZero long expectedEntityVersion) {
     }
 

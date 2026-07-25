@@ -12,9 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaEntity, Long> {
     Optional<QuestionJpaEntity> findByPublicId(String id);
-
     List<QuestionJpaEntity> findAllByPublicIdIn(Collection<String> ids);
-
     List<QuestionJpaEntity> findAllByStatus(QuestionStatus status);
 
     @Query(value = """
@@ -45,7 +43,6 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
               FROM QUESTION q
              WHERE ((:status IS NULL AND q.STATUS <> 'DELETED') OR q.STATUS = :status)
                AND (:typeCode IS NULL OR q.TYPE_CODE = :typeCode)
-               AND (:difficultyCode IS NULL OR q.DIFFICULTY_CODE = :difficultyCode)
                AND (
                     :categoryPublicId IS NULL
                     OR EXISTS (
@@ -63,7 +60,6 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
               FROM QUESTION q
              WHERE ((:status IS NULL AND q.STATUS <> 'DELETED') OR q.STATUS = :status)
                AND (:typeCode IS NULL OR q.TYPE_CODE = :typeCode)
-               AND (:difficultyCode IS NULL OR q.DIFFICULTY_CODE = :difficultyCode)
                AND (
                     :categoryPublicId IS NULL
                     OR EXISTS (
@@ -75,9 +71,9 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                     )
                )
             """, nativeQuery = true)
-    Page<QuestionJpaEntity> searchWithoutText(@Param("status") String status,
+    Page<QuestionJpaEntity> searchWithoutText(
+            @Param("status") String status,
             @Param("typeCode") String typeCode,
-            @Param("difficultyCode") String difficultyCode,
             @Param("categoryPublicId") String categoryPublicId,
             Pageable pageable);
 
@@ -86,6 +82,17 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
               FROM QUESTION q
              WHERE (
                     LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                    OR LOWER(DBMS_LOB.SUBSTR(q.CODE_CONTENT, 4000, 1)) LIKE '%' || :query || '%'
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_OPTION qo_text
+                         WHERE qo_text.QUESTION_ID = q.QUESTION_ID
+                           AND (
+                                LOWER(DBMS_LOB.SUBSTR(qo_text.OPTION_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                                OR LOWER(DBMS_LOB.SUBSTR(qo_text.MATCH_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                                OR LOWER(DBMS_LOB.SUBSTR(qo_text.FEEDBACK_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                           )
+                    )
                     OR EXISTS (
                         SELECT 1
                           FROM QUESTION_CATEGORY_RELATION qr_text
@@ -96,7 +103,6 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                )
                AND ((:status IS NULL AND q.STATUS <> 'DELETED') OR q.STATUS = :status)
                AND (:typeCode IS NULL OR q.TYPE_CODE = :typeCode)
-               AND (:difficultyCode IS NULL OR q.DIFFICULTY_CODE = :difficultyCode)
                AND (
                     :categoryPublicId IS NULL
                     OR EXISTS (
@@ -114,6 +120,17 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
               FROM QUESTION q
              WHERE (
                     LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                    OR LOWER(DBMS_LOB.SUBSTR(q.CODE_CONTENT, 4000, 1)) LIKE '%' || :query || '%'
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_OPTION qo_text
+                         WHERE qo_text.QUESTION_ID = q.QUESTION_ID
+                           AND (
+                                LOWER(DBMS_LOB.SUBSTR(qo_text.OPTION_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                                OR LOWER(DBMS_LOB.SUBSTR(qo_text.MATCH_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                                OR LOWER(DBMS_LOB.SUBSTR(qo_text.FEEDBACK_TEXT, 4000, 1)) LIKE '%' || :query || '%'
+                           )
+                    )
                     OR EXISTS (
                         SELECT 1
                           FROM QUESTION_CATEGORY_RELATION qr_text
@@ -124,7 +141,6 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                )
                AND ((:status IS NULL AND q.STATUS <> 'DELETED') OR q.STATUS = :status)
                AND (:typeCode IS NULL OR q.TYPE_CODE = :typeCode)
-               AND (:difficultyCode IS NULL OR q.DIFFICULTY_CODE = :difficultyCode)
                AND (
                     :categoryPublicId IS NULL
                     OR EXISTS (
@@ -136,12 +152,50 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                     )
                )
             """, nativeQuery = true)
-    Page<QuestionJpaEntity> searchWithText(@Param("query") String query,
+    Page<QuestionJpaEntity> searchWithText(
+            @Param("query") String query,
             @Param("status") String status,
             @Param("typeCode") String typeCode,
-            @Param("difficultyCode") String difficultyCode,
             @Param("categoryPublicId") String categoryPublicId,
             Pageable pageable);
+
+    @Query(value = """
+            SELECT membership.QUESTION_ID,
+                   membership.FORM_PUBLIC_ID,
+                   membership.FORM_TITLE,
+                   membership.COLLECTION_PUBLIC_ID,
+                   membership.COLLECTION_NAME
+              FROM (
+                    SELECT fq.QUESTION_ID,
+                           f.PUBLIC_ID AS FORM_PUBLIC_ID,
+                           f.TITLE AS FORM_TITLE,
+                           lc.PUBLIC_ID AS COLLECTION_PUBLIC_ID,
+                           lc.COLLECTION_NAME
+                      FROM FORM_QUESTION fq
+                      JOIN FORM_SECTION fs ON fs.SECTION_ID = fq.SECTION_ID
+                      JOIN EVALUATION_FORM f ON f.FORM_ID = fs.FORM_ID
+                      LEFT JOIN LEARNING_COLLECTION_LEVEL lcl ON lcl.FORM_ID = f.FORM_ID
+                      LEFT JOIN LEARNING_COLLECTION lc ON lc.COLLECTION_ID = lcl.COLLECTION_ID
+                     WHERE fq.QUESTION_ID IN (:ids)
+                    UNION
+                    SELECT qcr.QUESTION_ID,
+                           f.PUBLIC_ID AS FORM_PUBLIC_ID,
+                           f.TITLE AS FORM_TITLE,
+                           lc.PUBLIC_ID AS COLLECTION_PUBLIC_ID,
+                           lc.COLLECTION_NAME
+                      FROM FORM_QUESTION_POOL fp
+                      JOIN FORM_SECTION fs ON fs.SECTION_ID = fp.SECTION_ID
+                      JOIN EVALUATION_FORM f ON f.FORM_ID = fs.FORM_ID
+                      JOIN QUESTION_CATEGORY_RELATION qcr
+                        ON fp.SOURCE_TYPE = 'CATEGORY'
+                       AND qcr.CATEGORY_ID = fp.CATEGORY_ID
+                      LEFT JOIN LEARNING_COLLECTION_LEVEL lcl ON lcl.FORM_ID = f.FORM_ID
+                      LEFT JOIN LEARNING_COLLECTION lc ON lc.COLLECTION_ID = lcl.COLLECTION_ID
+                     WHERE qcr.QUESTION_ID IN (:ids)
+              ) membership
+             ORDER BY membership.QUESTION_ID, membership.FORM_TITLE, membership.COLLECTION_NAME
+            """, nativeQuery = true)
+    List<Object[]> findMemberships(@Param("ids") Collection<Long> ids);
 
     @Query(value = """
             SELECT COUNT(*)

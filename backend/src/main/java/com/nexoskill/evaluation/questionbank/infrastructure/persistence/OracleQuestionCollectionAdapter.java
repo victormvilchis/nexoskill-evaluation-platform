@@ -142,11 +142,13 @@ public class OracleQuestionCollectionAdapter implements QuestionCollectionPort {
 
     private QuestionSummary questionSummary(QuestionJpaEntity question) {
         return new QuestionSummary(question.getPublicId(), question.getStatement(), question.getType().getCode(),
-                question.getType().getName(), question.getDifficulty().getCode(), question.getDifficulty().getName(),
+                question.getType().getName(),
                 question.getCategories().stream().map(category -> new QuestionCategoryRef(category.getPublicId(),
                         category.getCode(), category.getName(), category.getStatus())).toList(), question.getStatus(),
-                question.getPromptMedia() != null || question.getOptions().stream().anyMatch(option -> option.getMedia() != null),
-                question.getCreatedAt(), question.getUpdatedAt());
+                question.getPromptMedia() != null || question.getOptions().stream()
+                        .anyMatch(option -> option.getMedia() != null || option.getMatchMedia() != null),
+                question.getCodeContent() != null && !question.getCodeContent().isBlank(),
+                java.util.List.of(), java.util.List.of(), question.getCreatedAt(), question.getUpdatedAt());
     }
 
     private String name(String value) {

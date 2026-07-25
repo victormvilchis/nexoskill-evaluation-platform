@@ -285,7 +285,7 @@ export function CollectionEditor({ initial, onSubmit, label }: CollectionEditorP
                 <span>
                   <strong>{question.statement}</strong>
                   <small>
-                    {question.typeName} · {question.difficultyName}
+                    {question.typeName}
                     {question.categories.length > 0
                       ? ` · ${question.categories.map((category) => category.name).join(' · ')}`
                       : ''}

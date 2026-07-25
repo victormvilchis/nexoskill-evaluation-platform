@@ -1,20 +1,496 @@
-import { useEffect,useMemo,useState,type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent
+} from 'react'
 import { Link } from 'react-router-dom'
 import { getQuestionCatalogs } from '../api/questionApi'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
 import { useToast } from '../../../shared/components/ToastProvider'
-import type { QuestionAnswerSettings,QuestionCatalogs,QuestionDetail,QuestionMedia,QuestionOptionPayload,QuestionPayload,QuestionTypeCode } from '../../../shared/types/questions'
+import type {
+  QuestionAnswerSettings,
+  QuestionCatalogs,
+  QuestionDetail,
+  QuestionMedia,
+  QuestionOptionPayload,
+  QuestionPayload,
+  QuestionTypeCode
+} from '../../../shared/types/questions'
+import { JavaCodeEditor } from './JavaCodePanel'
 import { MediaUploadField } from './MediaUploadField'
-type DraftOption={id:string;text:string;media?:QuestionMedia;correct:boolean}
-const selectionTypes=new Set<QuestionTypeCode>(['SINGLE_CHOICE','MULTIPLE_CHOICE','TRUE_FALSE','DROPDOWN'])
-function defaultOptions(type:QuestionTypeCode):DraftOption[]{if(type==='TRUE_FALSE')return[{id:crypto.randomUUID(),text:'Verdadero',correct:true},{id:crypto.randomUUID(),text:'Falso',correct:false}];return[{id:crypto.randomUUID(),text:'',correct:true},{id:crypto.randomUUID(),text:'',correct:false}]}
-const emptySettings:QuestionAnswerSettings={acceptedAnswers:[],caseSensitive:false,manualReview:false}
-export function QuestionEditor({initial,onSubmit,submitLabel}:{initial?:QuestionDetail;onSubmit:(payload:QuestionPayload)=>Promise<void>;submitLabel:string}){const toast=useToast();const[catalogs,setCatalogs]=useState<QuestionCatalogs>();const[type,setType]=useState<QuestionTypeCode>(initial?.typeCode??'SINGLE_CHOICE');const[difficulty,setDifficulty]=useState(initial?.difficultyCode??'BASIC');const[categories,setCategories]=useState<string[]>(initial?.categories.map(c=>c.publicId)??[]);const[statement,setStatement]=useState(initial?.statement??'');const[explanation,setExplanation]=useState(initial?.explanation??'');const[promptMedia,setPromptMedia]=useState<QuestionMedia|undefined>(initial?.promptMedia);const[codeLanguage,setCodeLanguage]=useState(initial?.codeLanguage??'JAVA');const[codeContent,setCodeContent]=useState(initial?.codeContent??'');const[settings,setSettings]=useState<QuestionAnswerSettings>(initial?.answerSettings??emptySettings);const[options,setOptions]=useState<DraftOption[]>(initial?.options.map(o=>({id:o.publicId,text:o.text??'',media:o.media,correct:o.correct}))??defaultOptions(type));const[busy,setBusy]=useState(false);const[categoryQuery,setCategoryQuery]=useState('')
-useEffect(()=>{getQuestionCatalogs().then(c=>{setCatalogs(c);if(categories.length===0&&c.categories[0])setCategories([c.categories[0].publicId])}).catch(()=>toast.error('No fue posible cargar los catálogos'))},[])
-const usesOptions=selectionTypes.has(type);const categoryOptions=useMemo(()=>{const active=catalogs?.categories.filter(c=>c.status==='ACTIVE')??[];const retained=initial?.categories.filter(c=>!active.some(a=>a.publicId===c.publicId))??[];return [...active,...retained]},[catalogs,initial]);const filteredCategoryOptions=useMemo(()=>{const query=categoryQuery.trim().toLocaleLowerCase('es-MX');return query?categoryOptions.filter(c=>`${c.name} ${c.code}`.toLocaleLowerCase('es-MX').includes(query)):categoryOptions},[categoryOptions,categoryQuery]);const acceptedText=settings.acceptedAnswers.join('\n')
-function changeType(next:QuestionTypeCode){setType(next);if(selectionTypes.has(next)){setOptions(defaultOptions(next));setSettings(emptySettings)}else{setOptions([]);setSettings({...emptySettings,manualReview:next==='LONG_TEXT'||next==='CODE_RESPONSE'})}}
-function updateOption(id:string,patch:Partial<DraftOption>){setOptions(v=>v.map(o=>o.id===id?{...o,...patch}:o))}
-function toggleCorrect(id:string,checked:boolean){setOptions(v=>v.map(o=>o.id===id?{...o,correct:checked}:type==='MULTIPLE_CHOICE'?o:{...o,correct:false}))}
-async function submit(e:FormEvent){e.preventDefault();setBusy(true);try{const payload:QuestionPayload={typeCode:type,difficultyCode:difficulty,categoryPublicIds:categories,statement:statement.trim(),explanation:explanation.trim()||undefined,promptMediaPublicId:promptMedia?.publicId,codeLanguage:codeContent.trim()?codeLanguage:undefined,codeContent:codeContent.trim()||undefined,answerSettings:settings,options:options.map<QuestionOptionPayload>(o=>({text:o.text.trim()||undefined,mediaPublicId:o.media?.publicId,correct:o.correct}))};await onSubmit(payload)}catch(e){toast.error('No fue posible guardar la pregunta',e instanceof ApiRequestError?e.message:undefined)}finally{setBusy(false)}}
-return <form className="question-editor" onSubmit={e=>void submit(e)}><section className="editor-card editor-primary"><div className="form-field"><label htmlFor="statement">Pregunta</label><textarea id="statement" rows={4} maxLength={10000} required value={statement} onChange={e=>setStatement(e.target.value)} placeholder="Escribe el enunciado…"/></div><MediaUploadField label="Imagen del enunciado" value={promptMedia} onChange={setPromptMedia}/><details className="inline-details"><summary>Agregar bloque de código</summary><div className="code-config-grid"><div className="form-field"><label>Lenguaje</label><select value={codeLanguage} onChange={e=>setCodeLanguage(e.target.value)}><option>JAVA</option><option>PYTHON</option><option>JAVASCRIPT</option><option>SQL</option><option>SCALA</option><option>TEXT</option></select></div><div className="form-field form-wide"><label>Código</label><textarea className="code-editor" rows={8} value={codeContent} onChange={e=>setCodeContent(e.target.value)}/></div></div></details></section><section className="editor-card"><div className="editor-grid"><div className="form-field"><label>Tipo</label><select value={type} onChange={e=>changeType(e.target.value as QuestionTypeCode)}>{catalogs?.types.map(t=><option key={t.code} value={t.code}>{t.name}</option>)}</select></div><div className="form-field"><label>Dificultad</label><select value={difficulty} onChange={e=>setDifficulty(e.target.value)}>{catalogs?.difficulties.map(d=><option key={d.code} value={d.code}>{d.name}</option>)}</select></div></div><div className="form-field category-picker-field"><div className="category-picker-header"><div><label>Categorías</label><span className="selection-count">{categories.length} seleccionada{categories.length===1?'':'s'}</span></div>{categoryOptions.length>6&&<input className="category-filter-input" type="search" value={categoryQuery} onChange={e=>setCategoryQuery(e.target.value)} placeholder="Buscar categoría" aria-label="Buscar categoría"/>}</div><div className="category-selector-compact" role="group" aria-label="Categorías de la pregunta">{filteredCategoryOptions.map(c=>{const selected=categories.includes(c.publicId);return <button className={`category-choice-compact ${selected?'selected':''} ${c.status==='INACTIVE'?'inactive':''}`} type="button" role="checkbox" aria-checked={selected} key={c.publicId} onClick={()=>setCategories(current=>selected?current.filter(id=>id!==c.publicId):[...current,c.publicId])}><span className="category-choice-indicator" aria-hidden="true">{selected?'✓':''}</span><span className="category-choice-label">{c.name}</span>{c.status==='INACTIVE'&&<span className="category-choice-meta">Inactiva</span>}</button>})}</div>{filteredCategoryOptions.length===0&&<p className="empty-inline-message">No hay categorías que coincidan con la búsqueda.</p>}</div></section>{usesOptions?<section className="editor-card"><div className="card-title-row"><div><h2>Opciones</h2><p className="muted">Puedes utilizar texto, imagen o ambos.</p></div>{type!=='TRUE_FALSE'&&<button className="secondary-button compact-button" type="button" onClick={()=>setOptions(v=>[...v,{id:crypto.randomUUID(),text:'',correct:false}])}><Icon name="plus" size={15}/>Agregar</button>}</div><div className="question-option-list">{options.map((o,i)=><div className="advanced-option-row" key={o.id}><label className="option-correct-control"><input type={type==='MULTIPLE_CHOICE'?'checkbox':'radio'} name="correct" checked={o.correct} onChange={e=>toggleCorrect(o.id,e.target.checked)}/><span>{o.correct?'Correcta':'Marcar'}</span></label><div className="option-content"><textarea rows={2} placeholder={`Opción ${i+1}`} readOnly={type==='TRUE_FALSE'} value={o.text} onChange={e=>updateOption(o.id,{text:e.target.value})}/><MediaUploadField compact label="Imagen opcional" value={o.media} onChange={m=>updateOption(o.id,{media:m})}/></div>{type!=='TRUE_FALSE'&&<button className="icon-button danger-icon-button" type="button" onClick={()=>setOptions(v=>v.filter(x=>x.id!==o.id))}><Icon name="close" size={15}/></button>}</div>)}</div></section>:<section className="editor-card"><h2>Configuración de respuesta</h2>{type==='SHORT_TEXT'&&<div className="form-field"><label>Respuestas aceptadas <small>una por línea</small></label><textarea rows={5} value={acceptedText} onChange={e=>setSettings(v=>({...v,acceptedAnswers:e.target.value.split('\n').filter(Boolean)}))}/></div>}{type==='NUMBER'&&<div className="editor-grid three"><div className="form-field"><label>Mínimo</label><input type="number" value={settings.numericMin??''} onChange={e=>setSettings(v=>({...v,numericMin:e.target.value?Number(e.target.value):undefined}))}/></div><div className="form-field"><label>Máximo</label><input type="number" value={settings.numericMax??''} onChange={e=>setSettings(v=>({...v,numericMax:e.target.value?Number(e.target.value):undefined}))}/></div><div className="form-field"><label>Tolerancia</label><input type="number" min="0" value={settings.numericTolerance??''} onChange={e=>setSettings(v=>({...v,numericTolerance:e.target.value?Number(e.target.value):undefined}))}/></div></div>}<div className="editor-grid"><label className="toggle-row"><input type="checkbox" checked={settings.manualReview} disabled={type==='LONG_TEXT'||type==='CODE_RESPONSE'} onChange={e=>setSettings(v=>({...v,manualReview:e.target.checked}))}/><span>Revisión manual</span></label><div className="form-field"><label>Máximo de caracteres</label><input type="number" min="1" value={settings.maxLength??''} onChange={e=>setSettings(v=>({...v,maxLength:e.target.value?Number(e.target.value):undefined}))}/></div></div></section>}<details className="editor-card inline-details"><summary>Explicación y retroalimentación</summary><div className="form-field optional-form-content"><label>Explicación</label><textarea rows={4} maxLength={10000} value={explanation} onChange={e=>setExplanation(e.target.value)}/></div></details><div className="sticky-form-actions"><Link className="secondary-button button-link" to="/admin/questions">Cancelar</Link><button className="primary-button" disabled={busy||categories.length===0} type="submit">{busy?'Guardando…':submitLabel}</button></div></form>}
+
+type DraftOption = {
+  id: string
+  text: string
+  media?: QuestionMedia
+  matchText: string
+  matchMedia?: QuestionMedia
+  correct: boolean
+  feedback: string
+}
+
+const optionTypes = new Set<QuestionTypeCode>([
+  'SINGLE_CHOICE',
+  'MULTIPLE_CHOICE',
+  'TRUE_FALSE',
+  'MATCHING'
+])
+
+const emptySettings: QuestionAnswerSettings = {
+  acceptedAnswers: [],
+  caseSensitive: false,
+  manualReview: false
+}
+
+function newOption(overrides: Partial<DraftOption> = {}): DraftOption {
+  return {
+    id: crypto.randomUUID(),
+    text: '',
+    matchText: '',
+    correct: false,
+    feedback: '',
+    ...overrides
+  }
+}
+
+function defaultOptions(type: QuestionTypeCode): DraftOption[] {
+  if (type === 'TRUE_FALSE') {
+    return [
+      newOption({ text: 'Verdadero', correct: true }),
+      newOption({ text: 'Falso', correct: false })
+    ]
+  }
+  if (type === 'MATCHING') {
+    return [newOption({ correct: true }), newOption({ correct: true })]
+  }
+  return [newOption({ correct: true }), newOption()]
+}
+
+function optionsFromInitial(initial?: QuestionDetail): DraftOption[] {
+  if (!initial?.options.length) return defaultOptions(initial?.typeCode ?? 'SINGLE_CHOICE')
+  return initial.options.map((option) => ({
+    id: option.publicId,
+    text: option.text ?? '',
+    media: option.media,
+    matchText: option.matchText ?? '',
+    matchMedia: option.matchMedia,
+    correct: option.correct,
+    feedback: option.feedback ?? ''
+  }))
+}
+
+interface QuestionEditorProps {
+  initial?: QuestionDetail
+  onSubmit: (payload: QuestionPayload) => Promise<void>
+  submitLabel: string
+}
+
+export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEditorProps) {
+  const toast = useToast()
+  const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
+  const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
+  const [categories, setCategories] = useState<string[]>(initial?.categories.map((category) => category.publicId) ?? [])
+  const [statement, setStatement] = useState(initial?.statement ?? '')
+  const [explanation, setExplanation] = useState(initial?.explanation ?? '')
+  const [promptMedia, setPromptMedia] = useState<QuestionMedia | undefined>(initial?.promptMedia)
+  const [codeContent, setCodeContent] = useState(initial?.codeContent ?? '')
+  const [codeOpen, setCodeOpen] = useState(Boolean(initial?.codeContent))
+  const [feedbackOpen, setFeedbackOpen] = useState(Boolean(initial?.explanation))
+  const [settings, setSettings] = useState<QuestionAnswerSettings>(initial?.answerSettings ?? emptySettings)
+  const [options, setOptions] = useState<DraftOption[]>(() => optionsFromInitial(initial))
+  const [busy, setBusy] = useState(false)
+  const [categoryQuery, setCategoryQuery] = useState('')
+  const nonTrueFalseOptions = useRef<DraftOption[]>(type === 'TRUE_FALSE' ? [] : optionsFromInitial(initial))
+
+  useEffect(() => {
+    getQuestionCatalogs()
+      .then((response) => {
+        setCatalogs(response)
+        if (categories.length === 0 && response.categories[0]) {
+          setCategories([response.categories[0].publicId])
+        }
+      })
+      .catch(() => toast.error('No fue posible cargar los catálogos'))
+  }, [])
+
+  const usesOptions = optionTypes.has(type)
+  const categoryOptions = useMemo(() => {
+    const active = catalogs?.categories.filter((category) => category.status === 'ACTIVE') ?? []
+    const retained = initial?.categories.filter(
+      (category) => !active.some((activeCategory) => activeCategory.publicId === category.publicId)
+    ) ?? []
+    return [...active, ...retained]
+  }, [catalogs, initial])
+
+  const filteredCategoryOptions = useMemo(() => {
+    const query = categoryQuery.trim().toLocaleLowerCase('es-MX')
+    if (!query) return categoryOptions
+    return categoryOptions.filter((category) =>
+      `${category.name} ${category.code}`.toLocaleLowerCase('es-MX').includes(query)
+    )
+  }, [categoryOptions, categoryQuery])
+
+  function changeType(next: QuestionTypeCode) {
+    if (next === type) return
+
+    if (next === 'TRUE_FALSE') {
+      if (type !== 'TRUE_FALSE') nonTrueFalseOptions.current = options
+      const previousCorrect = options.findIndex((option) => option.correct)
+      setOptions([
+        newOption({ text: 'Verdadero', correct: previousCorrect !== 1, feedback: options[0]?.feedback ?? '' }),
+        newOption({ text: 'Falso', correct: previousCorrect === 1, feedback: options[1]?.feedback ?? '' })
+      ])
+    } else if (type === 'TRUE_FALSE') {
+      const restored = nonTrueFalseOptions.current
+      setOptions(restored.length ? restored : defaultOptions(next))
+    } else if (next === 'MATCHING') {
+      setOptions((current) => current.length >= 2
+        ? current.map((option) => ({ ...option, correct: true }))
+        : defaultOptions(next))
+    }
+
+    setType(next)
+    setSettings((current) => ({
+      ...current,
+      manualReview: next === 'OPEN_TEXT'
+    }))
+  }
+
+  function updateOption(id: string, patch: Partial<DraftOption>) {
+    setOptions((current) => current.map((option) => option.id === id ? { ...option, ...patch } : option))
+  }
+
+  function toggleCorrect(id: string, checked: boolean) {
+    setOptions((current) => current.map((option) => {
+      if (option.id === id) return { ...option, correct: checked }
+      return type === 'MULTIPLE_CHOICE' ? option : { ...option, correct: false }
+    }))
+  }
+
+  function moveOption(index: number, direction: -1 | 1) {
+    setOptions((current) => {
+      const target = index + direction
+      if (target < 0 || target >= current.length) return current
+      const next = [...current]
+      const [item] = next.splice(index, 1)
+      if (!item) return current
+      next.splice(target, 0, item)
+      return next
+    })
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    try {
+      const payload: QuestionPayload = {
+        typeCode: type,
+        categoryPublicIds: categories,
+        statement: statement.trim(),
+        explanation: explanation.trim() || undefined,
+        promptMediaPublicId: promptMedia?.publicId,
+        codeContent: codeContent.trim() || undefined,
+        answerSettings: {
+          ...settings,
+          manualReview: type === 'OPEN_TEXT'
+        },
+        options: usesOptions
+          ? options.map<QuestionOptionPayload>((option) => ({
+              text: option.text.trim() || undefined,
+              mediaPublicId: option.media?.publicId,
+              matchText: type === 'MATCHING' ? option.matchText.trim() || undefined : undefined,
+              matchMediaPublicId: type === 'MATCHING' ? option.matchMedia?.publicId : undefined,
+              correct: type === 'MATCHING' ? true : option.correct,
+              feedback: option.feedback.trim() || undefined
+            }))
+          : []
+      }
+      await onSubmit(payload)
+    } catch (error) {
+      toast.error(
+        'No fue posible guardar la pregunta',
+        error instanceof ApiRequestError ? error.message : undefined
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="question-editor question-editor-v2" onSubmit={(event) => void submit(event)}>
+      <section className="editor-card editor-primary">
+        <div className="form-field">
+          <label htmlFor="statement">Enunciado</label>
+          <textarea
+            id="statement"
+            rows={4}
+            maxLength={10000}
+            required
+            value={statement}
+            onChange={(event) => setStatement(event.target.value)}
+            placeholder="Escribe el enunciado de la pregunta…"
+          />
+        </div>
+
+        <MediaUploadField
+          label="Imagen del enunciado"
+          value={promptMedia}
+          onChange={setPromptMedia}
+        />
+
+        <details
+          className="inline-details code-details"
+          open={codeOpen}
+          onToggle={(event) => setCodeOpen(event.currentTarget.open)}
+        >
+          <summary>
+            <span><Icon name="code" size={17} /> Agregar bloque de código Java</span>
+            <small>Opcional</small>
+          </summary>
+          <div className="optional-form-content">
+            <JavaCodeEditor value={codeContent} onChange={setCodeContent} />
+          </div>
+        </details>
+      </section>
+
+      <section className="editor-card question-classification-card">
+        <div className="editor-grid single-type-grid">
+          <div className="form-field">
+            <label>Tipo de pregunta</label>
+            <select value={type} onChange={(event) => changeType(event.target.value as QuestionTypeCode)}>
+              {catalogs?.types.map((catalogType) => (
+                <option key={catalogType.code} value={catalogType.code}>{catalogType.name}</option>
+              ))}
+            </select>
+            <small>El contenido escrito se conserva cuando cambias de tipo.</small>
+          </div>
+        </div>
+
+        <div className="form-field category-picker-field">
+          <div className="category-picker-header">
+            <div>
+              <label>Categorías</label>
+              <span className="selection-count">
+                {categories.length} seleccionada{categories.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {categoryOptions.length > 6 && (
+              <input
+                className="category-filter-input"
+                type="search"
+                value={categoryQuery}
+                onChange={(event) => setCategoryQuery(event.target.value)}
+                placeholder="Buscar categoría"
+                aria-label="Buscar categoría"
+              />
+            )}
+          </div>
+          <div className="category-selector-compact" role="group" aria-label="Categorías de la pregunta">
+            {filteredCategoryOptions.map((category) => {
+              const selected = categories.includes(category.publicId)
+              return (
+                <button
+                  className={`category-choice-compact ${selected ? 'selected' : ''} ${category.status === 'INACTIVE' ? 'inactive' : ''}`}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={selected}
+                  key={category.publicId}
+                  onClick={() => setCategories((current) =>
+                    selected
+                      ? current.filter((id) => id !== category.publicId)
+                      : [...current, category.publicId]
+                  )}
+                >
+                  <span className="category-choice-indicator" aria-hidden="true">
+                    {selected && <Icon name="check" size={13} />}
+                  </span>
+                  <span className="category-choice-label">{category.name}</span>
+                  {category.status === 'INACTIVE' && <span className="category-choice-meta">Inactiva</span>}
+                </button>
+              )
+            })}
+          </div>
+          {filteredCategoryOptions.length === 0 && (
+            <p className="empty-inline-message">No hay categorías que coincidan con la búsqueda.</p>
+          )}
+        </div>
+      </section>
+
+      {usesOptions ? (
+        <section className="editor-card option-editor-card">
+          <div className="card-title-row">
+            <div>
+              <h2>{type === 'MATCHING' ? 'Relaciones' : 'Opciones de respuesta'}</h2>
+              <p className="muted">
+                {type === 'MATCHING'
+                  ? 'Cada fila representa una relación correcta entre ambas columnas.'
+                  : 'Puedes combinar texto e imagen y agregar retroalimentación individual.'}
+              </p>
+            </div>
+            {type !== 'TRUE_FALSE' && (
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                onClick={() => setOptions((current) => [...current, newOption({ correct: type === 'MATCHING' })])}
+              >
+                <Icon name="plus" size={15} /> Agregar
+              </button>
+            )}
+          </div>
+
+          <div className={`question-option-list ${type === 'MATCHING' ? 'matching-option-list' : ''}`}>
+            {options.map((option, index) => (
+              <article className="advanced-option-row option-card-v2" key={option.id}>
+                <div className="option-order-controls">
+                  <span>{index + 1}</span>
+                  <button
+                    aria-label={`Subir opción ${index + 1}`}
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => moveOption(index, -1)}
+                  >↑</button>
+                  <button
+                    aria-label={`Bajar opción ${index + 1}`}
+                    type="button"
+                    disabled={index === options.length - 1}
+                    onClick={() => moveOption(index, 1)}
+                  >↓</button>
+                </div>
+
+                {type !== 'MATCHING' && (
+                  <label className="option-correct-control">
+                    <input
+                      type={type === 'MULTIPLE_CHOICE' ? 'checkbox' : 'radio'}
+                      name="correct"
+                      checked={option.correct}
+                      onChange={(event) => toggleCorrect(option.id, event.target.checked)}
+                    />
+                    <span>{option.correct ? 'Correcta' : 'Marcar correcta'}</span>
+                  </label>
+                )}
+
+                <div className={`option-content ${type === 'MATCHING' ? 'matching-columns' : ''}`}>
+                  <div className="option-column">
+                    {type === 'MATCHING' && <strong className="option-column-label">Columna izquierda</strong>}
+                    <textarea
+                      rows={2}
+                      placeholder={type === 'MATCHING' ? `Elemento ${index + 1}` : `Opción ${index + 1}`}
+                      readOnly={type === 'TRUE_FALSE'}
+                      value={option.text}
+                      onChange={(event) => updateOption(option.id, { text: event.target.value })}
+                    />
+                    <MediaUploadField
+                      compact
+                      label="Imagen opcional"
+                      value={option.media}
+                      onChange={(media) => updateOption(option.id, { media })}
+                    />
+                  </div>
+
+                  {type === 'MATCHING' && (
+                    <div className="matching-connector" aria-hidden="true">↔</div>
+                  )}
+
+                  {type === 'MATCHING' && (
+                    <div className="option-column">
+                      <strong className="option-column-label">Columna derecha</strong>
+                      <textarea
+                        rows={2}
+                        placeholder={`Relación ${index + 1}`}
+                        value={option.matchText}
+                        onChange={(event) => updateOption(option.id, { matchText: event.target.value })}
+                      />
+                      <MediaUploadField
+                        compact
+                        label="Imagen opcional"
+                        value={option.matchMedia}
+                        onChange={(matchMedia) => updateOption(option.id, { matchMedia })}
+                      />
+                    </div>
+                  )}
+
+                  <details className="option-feedback-details">
+                    <summary>Retroalimentación de esta {type === 'MATCHING' ? 'relación' : 'opción'}</summary>
+                    <textarea
+                      rows={3}
+                      maxLength={4000}
+                      placeholder="Mensaje que se mostrará al revisar esta respuesta."
+                      value={option.feedback}
+                      onChange={(event) => updateOption(option.id, { feedback: event.target.value })}
+                    />
+                  </details>
+                </div>
+
+                {type !== 'TRUE_FALSE' && (
+                  <button
+                    aria-label={`Eliminar opción ${index + 1}`}
+                    className="icon-button danger-icon-button option-delete-button"
+                    type="button"
+                    onClick={() => setOptions((current) => current.filter((item) => item.id !== option.id))}
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section className="editor-card open-answer-card">
+          <div className="card-title-row">
+            <div>
+              <h2>Respuesta abierta</h2>
+              <p className="muted">La respuesta será revisada manualmente.</p>
+            </div>
+          </div>
+          <div className="form-field compact-number-field">
+            <label>Máximo de caracteres</label>
+            <input
+              type="number"
+              min="1"
+              max="100000"
+              value={settings.maxLength ?? ''}
+              onChange={(event) => setSettings((current) => ({
+                ...current,
+                maxLength: event.target.value ? Number(event.target.value) : undefined,
+                manualReview: true
+              }))}
+              placeholder="Sin límite"
+            />
+          </div>
+        </section>
+      )}
+
+      <details
+        className="editor-card inline-details feedback-card"
+        open={feedbackOpen}
+        onToggle={(event) => setFeedbackOpen(event.currentTarget.open)}
+      >
+        <summary>
+          <span>Explicación y retroalimentación general</span>
+          <small>Opcional</small>
+        </summary>
+        <div className="form-field optional-form-content">
+          <label>Explicación general</label>
+          <textarea
+            rows={4}
+            maxLength={10000}
+            value={explanation}
+            onChange={(event) => setExplanation(event.target.value)}
+            placeholder="Explica la respuesta correcta o agrega material de repaso."
+          />
+        </div>
+      </details>
+
+      <div className="sticky-form-actions">
+        <Link className="secondary-button button-link" to="/admin/questions">Cancelar</Link>
+        <button className="primary-button" disabled={busy || categories.length === 0} type="submit">
+          {busy ? 'Guardando…' : submitLabel}
+        </button>
+      </div>
+    </form>
+  )
+}

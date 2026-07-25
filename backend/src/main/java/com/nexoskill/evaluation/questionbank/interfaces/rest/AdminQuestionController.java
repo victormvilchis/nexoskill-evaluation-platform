@@ -41,11 +41,10 @@ public class AdminQuestionController {
     public QuestionPage search(@RequestParam(required = false) String query,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String typeCode,
-            @RequestParam(required = false) String difficultyCode,
             @RequestParam(required = false) String categoryPublicId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return search.execute(query, status, typeCode, difficultyCode, categoryPublicId, page, size);
+        return search.execute(query, status, typeCode, categoryPublicId, page, size);
     }
 
     @GetMapping("/{id}")
@@ -58,10 +57,9 @@ public class AdminQuestionController {
     @PreAuthorize("hasAuthority('QUESTION_CREATE')")
     public ResponseEntity<QuestionDetail> create(@Valid @RequestBody QuestionRequests.Create body,
             @AuthenticationPrincipal AuthenticatedUser actor) {
-        var question = create.execute(new CreateQuestionCommand(body.typeCode(), body.difficultyCode(),
-                body.categoryPublicIds(), body.statement(), body.explanation(), body.promptMediaPublicId(),
-                body.codeLanguage(), body.codeContent(), settings(body.answerSettings()), options(body.options()),
-                actor.internalId()));
+        var question = create.execute(new CreateQuestionCommand(body.typeCode(), body.categoryPublicIds(),
+                body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
+                settings(body.answerSettings()), options(body.options()), actor.internalId()));
         return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
     }
 
@@ -69,10 +67,10 @@ public class AdminQuestionController {
     @PreAuthorize("hasAuthority('QUESTION_UPDATE')")
     public QuestionDetail update(@PathVariable String id, @Valid @RequestBody QuestionRequests.Update body,
             @AuthenticationPrincipal AuthenticatedUser actor) {
-        return update.execute(new UpdateQuestionCommand(id, body.typeCode(), body.difficultyCode(),
-                body.categoryPublicIds(), body.statement(), body.explanation(), body.promptMediaPublicId(),
-                body.codeLanguage(), body.codeContent(), settings(body.answerSettings()), options(body.options()),
-                body.expectedEntityVersion(), actor.internalId()));
+        return update.execute(new UpdateQuestionCommand(id, body.typeCode(), body.categoryPublicIds(),
+                body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
+                settings(body.answerSettings()), options(body.options()), body.expectedEntityVersion(),
+                actor.internalId()));
     }
 
     @PostMapping("/{id}/duplicate")
@@ -114,7 +112,7 @@ public class AdminQuestionController {
     private static java.util.List<QuestionOptionCommand> options(java.util.List<QuestionRequests.Option> values) {
         return values == null ? java.util.List.of()
                 : values.stream().map(value -> new QuestionOptionCommand(value.text(), value.mediaPublicId(),
-                        value.correct())).toList();
+                        value.matchText(), value.matchMediaPublicId(), value.correct(), value.feedback())).toList();
     }
 
     private static QuestionAnswerSettings settings(QuestionRequests.AnswerSettings value) {

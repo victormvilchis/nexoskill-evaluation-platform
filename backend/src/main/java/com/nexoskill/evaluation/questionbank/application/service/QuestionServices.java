@@ -27,7 +27,7 @@ public final class QuestionServices {
         public QuestionDetail execute(CreateQuestionCommand command) {
             var type = parseType(command.typeCode());
             validator.validate(type, command.statement(), command.categoryPublicIds(), command.answerSettings(),
-                    command.options());
+                    command.options(), command.codeContent());
             return port.create(command);
         }
     }
@@ -48,7 +48,7 @@ public final class QuestionServices {
                     "La pregunta indicada no es válida.");
             var type = parseType(command.typeCode());
             validator.validate(type, command.statement(), command.categoryPublicIds(), command.answerSettings(),
-                    command.options());
+                    command.options(), command.codeContent());
             return port.update(command);
         }
     }
@@ -56,27 +56,18 @@ public final class QuestionServices {
     @Service
     public static class Get {
         private final QuestionBankPort port;
-
-        public Get(QuestionBankPort port) {
-            this.port = port;
-        }
-
+        public Get(QuestionBankPort port) { this.port = port; }
         @Transactional(readOnly = true)
-        public QuestionDetail execute(String id) {
-            return port.get(id);
-        }
+        public QuestionDetail execute(String id) { return port.get(id); }
     }
 
     @Service
     public static class Search {
         private final QuestionBankPort port;
-
-        public Search(QuestionBankPort port) {
-            this.port = port;
-        }
+        public Search(QuestionBankPort port) { this.port = port; }
 
         @Transactional(readOnly = true)
-        public QuestionPage execute(String query, String statusValue, String type, String difficulty, String category,
+        public QuestionPage execute(String query, String statusValue, String type, String category,
                 int page, int size) {
             QuestionStatus status = null;
             if (statusValue != null && !statusValue.isBlank()) {
@@ -86,7 +77,7 @@ public final class QuestionServices {
                     throw new BusinessException("QUESTION_STATUS_INVALID", "El estado indicado no es válido.");
                 }
             }
-            return port.search(query, status, type, difficulty, category, Math.max(0, page),
+            return port.search(query, status, type, category, Math.max(0, page),
                     Math.min(Math.max(size, 1), 100));
         }
     }
@@ -94,25 +85,15 @@ public final class QuestionServices {
     @Service
     public static class Duplicate {
         private final QuestionBankPort port;
-
-        public Duplicate(QuestionBankPort port) {
-            this.port = port;
-        }
-
+        public Duplicate(QuestionBankPort port) { this.port = port; }
         @Transactional
-        public QuestionDetail execute(String id, Long actor) {
-            return port.duplicate(id, actor);
-        }
+        public QuestionDetail execute(String id, Long actor) { return port.duplicate(id, actor); }
     }
 
     @Service
     public static class ChangeStatus {
         private final QuestionBankPort port;
-
-        public ChangeStatus(QuestionBankPort port) {
-            this.port = port;
-        }
-
+        public ChangeStatus(QuestionBankPort port) { this.port = port; }
         @Transactional
         public QuestionDetail execute(String id, QuestionStatus status, long version, Long actor) {
             if (status != QuestionStatus.ACTIVE && status != QuestionStatus.ARCHIVED) {
@@ -125,11 +106,7 @@ public final class QuestionServices {
     @Service
     public static class Delete {
         private final QuestionBankPort port;
-
-        public Delete(QuestionBankPort port) {
-            this.port = port;
-        }
-
+        public Delete(QuestionBankPort port) { this.port = port; }
         @Transactional
         public QuestionDetail execute(String id, long version, String reason, Long actor) {
             String normalizedReason = reason == null || reason.isBlank()
@@ -142,11 +119,7 @@ public final class QuestionServices {
     @Service
     public static class Restore {
         private final QuestionBankPort port;
-
-        public Restore(QuestionBankPort port) {
-            this.port = port;
-        }
-
+        public Restore(QuestionBankPort port) { this.port = port; }
         @Transactional
         public QuestionDetail execute(String id, long version, Long actor) {
             return port.restore(id, version, actor);

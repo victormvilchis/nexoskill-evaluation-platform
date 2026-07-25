@@ -6,63 +6,84 @@ import java.time.Instant;
 @Entity
 @Table(name = "QUESTION_OPTION")
 public class QuestionOptionJpaEntity {
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "QUESTION_OPTION_ID")
-	private Long id;
-	@Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
-	private String publicId;
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "QUESTION_ID", nullable = false)
-	private QuestionJpaEntity question;
-	@Column(name = "QUESTION_VERSION_ID", insertable = false, updatable = false)
-	private Long legacyVersionId;
-	@Column(name = "OPTION_ORDER", nullable = false)
-	private int optionOrder;
-	@Lob
-	@Column(name = "OPTION_TEXT")
-	private String text;
-	@ManyToOne(fetch = FetchType.EAGER)
-	@JoinColumn(name = "MEDIA_ID")
-	private QuestionMediaJpaEntity media;
-	@Column(name = "IS_CORRECT", nullable = false)
-	private Integer correct;
-	@Column(name = "CREATED_AT", nullable = false)
-	private Instant createdAt;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "QUESTION_OPTION_ID")
+    private Long id;
 
-	protected QuestionOptionJpaEntity() {
-	}
+    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+    private String publicId;
 
-	public static QuestionOptionJpaEntity create(QuestionJpaEntity q, String id, int order, String text,
-			QuestionMediaJpaEntity media, boolean correct, Instant now) {
-		var e = new QuestionOptionJpaEntity();
-		e.question = q;
-		e.publicId = id;
-		e.optionOrder = order;
-		e.text = text;
-		e.media = media;
-		e.correct = correct ? 1 : 0;
-		e.createdAt = now;
-		return e;
-	}
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "QUESTION_ID", nullable = false)
+    private QuestionJpaEntity question;
 
-	public String getPublicId() {
-		return publicId;
-	}
+    @Column(name = "QUESTION_VERSION_ID", insertable = false, updatable = false)
+    private Long legacyVersionId;
 
-	public int getOptionOrder() {
-		return optionOrder;
-	}
+    @Column(name = "OPTION_ORDER", nullable = false)
+    private int optionOrder;
 
-	public String getText() {
-		return text;
-	}
+    @Lob
+    @Column(name = "OPTION_TEXT")
+    private String text;
 
-	public QuestionMediaJpaEntity getMedia() {
-		return media;
-	}
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "MEDIA_ID")
+    private QuestionMediaJpaEntity media;
 
-	public boolean isCorrect() {
-		return Integer.valueOf(1).equals(correct);
-	}
+    @Lob
+    @Column(name = "MATCH_TEXT")
+    private String matchText;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "MATCH_MEDIA_ID")
+    private QuestionMediaJpaEntity matchMedia;
+
+    @Column(name = "IS_CORRECT", nullable = false)
+    private Integer correct;
+
+    @Lob
+    @Column(name = "FEEDBACK_TEXT")
+    private String feedback;
+
+    @Column(name = "CREATED_AT", nullable = false)
+    private Instant createdAt;
+
+    protected QuestionOptionJpaEntity() {
+    }
+
+    public static QuestionOptionJpaEntity create(
+            QuestionJpaEntity question,
+            String publicId,
+            int order,
+            String text,
+            QuestionMediaJpaEntity media,
+            String matchText,
+            QuestionMediaJpaEntity matchMedia,
+            boolean correct,
+            String feedback,
+            Instant now) {
+        var entity = new QuestionOptionJpaEntity();
+        entity.question = question;
+        entity.publicId = publicId;
+        entity.optionOrder = order;
+        entity.text = text;
+        entity.media = media;
+        entity.matchText = matchText;
+        entity.matchMedia = matchMedia;
+        entity.correct = correct ? 1 : 0;
+        entity.feedback = feedback;
+        entity.createdAt = now;
+        return entity;
+    }
+
+    public String getPublicId() { return publicId; }
+    public int getOptionOrder() { return optionOrder; }
+    public String getText() { return text; }
+    public QuestionMediaJpaEntity getMedia() { return media; }
+    public String getMatchText() { return matchText; }
+    public QuestionMediaJpaEntity getMatchMedia() { return matchMedia; }
+    public boolean isCorrect() { return Integer.valueOf(1).equals(correct); }
+    public String getFeedback() { return feedback; }
 }

@@ -60,7 +60,6 @@ export interface QuestionSearchParams {
   query?: string
   status?: QuestionStatus | ''
   typeCode?: string
-  difficultyCode?: string
   categoryPublicId?: string
   page?: number
   size?: number
@@ -75,7 +74,6 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
   if (params.query) query.set('query', params.query)
   if (params.status) query.set('status', params.status)
   if (params.typeCode) query.set('typeCode', params.typeCode)
-  if (params.difficultyCode) query.set('difficultyCode', params.difficultyCode)
   if (params.categoryPublicId) {
     query.set('categoryPublicId', params.categoryPublicId)
   }
