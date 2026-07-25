@@ -156,7 +156,7 @@ export function AdminCollectionsPage() {
                     <TableActions>
                       <TableActionLink
                         to={`/admin/collections/${collection.publicId}`}
-                        label="Ver y editar"
+                        label="Editar"
                         icon="edit"
                         tone="primary"
                       />
