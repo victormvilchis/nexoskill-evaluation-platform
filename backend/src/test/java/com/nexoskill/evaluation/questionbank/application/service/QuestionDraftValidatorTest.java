@@ -57,6 +57,37 @@ class QuestionDraftValidatorTest {
     }
 
     @Test
+    void rejectsPublicationWithoutExplanation() {
+        assertThatThrownBy(() -> validator.validateForPublication(
+                QuestionTypeCode.SINGLE_CHOICE,
+                "Pregunta",
+                " ",
+                List.of(
+                        new QuestionOptionCommand("A", true),
+                        new QuestionOptionCommand("B", false)
+                )
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("QUESTION_EXPLANATION_REQUIRED_FOR_PUBLICATION");
+    }
+
+    @Test
+    void rejectsMultipleChoiceWithOnlyTwoOptions() {
+        assertThatThrownBy(() -> validator.validate(
+                QuestionTypeCode.MULTIPLE_CHOICE,
+                "Pregunta",
+                List.of(
+                        new QuestionOptionCommand("A", true),
+                        new QuestionOptionCommand("B", true)
+                )
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("QUESTION_MULTIPLE_CORRECT_INVALID");
+    }
+
+    @Test
     void validatesTrueFalseLabels() {
         assertThatCode(() -> validator.validate(
                 QuestionTypeCode.TRUE_FALSE,

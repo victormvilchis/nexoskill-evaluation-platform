@@ -45,26 +45,17 @@
 - Auditoría con valores anteriores y posteriores.
 - Confirmaciones y mensajes de resultado en el frontend.
 
-## 0.3.0 - Parte 1: banco de preguntas
+## 0.3.0 - Parte 2: edición, versionado y flujo editorial
 
 ### Agregado
 
-- Catálogos de tipos, dificultades, categorías y etiquetas.
-- Banco de preguntas con separación entre entidad y versión de contenido.
-- Tipos iniciales: opción única, opción múltiple y verdadero/falso.
-- Alta de preguntas en estado `DRAFT`.
-- Consulta paginada con filtros por texto, estado, tipo, dificultad y categoría.
-- Consulta del detalle y las opciones de una pregunta.
-- Alta administrativa de categorías.
-- Permisos `QUESTION_VIEW`, `QUESTION_CREATE`, `QUESTION_UPDATE`,
-  `QUESTION_ARCHIVE` y `QUESTION_CATEGORY_MANAGE`.
-- Auditoría para creación de preguntas y categorías.
-- Pantallas React para listado, detalle, alta de preguntas y categorías.
-- Migraciones Flyway V009 a V012.
-
-### Seguridad y consistencia
-
-- Las respuestas correctas solo están disponibles en endpoints administrativos.
-- El backend valida las reglas de respuestas según el tipo de pregunta.
-- Las preguntas se crean como borrador y su contenido queda versionado desde la
-  primera captura.
+- Edición de preguntas en borrador.
+- Nueva versión automática al editar una pregunta publicada.
+- Preservación de la última versión publicada mientras se revisa una nueva.
+- Flujo editorial `DRAFT → UNDER_REVIEW → APPROVED → PUBLISHED → ARCHIVED`.
+- Retorno controlado a borrador desde revisión o aprobación.
+- Duplicación de preguntas como nuevos borradores.
+- Historial de versiones y resumen de cambios.
+- Control de concurrencia mediante la versión JPA de la entidad.
+- Permisos específicos de revisión, aprobación, publicación, duplicación e historial.
+- Auditoría de todas las acciones editoriales.

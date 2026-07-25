@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
+import com.nexoskill.evaluation.shared.domain.BusinessException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -51,6 +52,10 @@ public class QuestionJpaEntity {
     @JoinColumn(name = "CURRENT_VERSION_ID")
     private QuestionVersionJpaEntity currentVersion;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "PUBLISHED_VERSION_ID")
+    private QuestionVersionJpaEntity publishedVersion;
+
     @Column(name = "CREATED_BY", nullable = false)
     private Long createdBy;
 
@@ -67,11 +72,7 @@ public class QuestionJpaEntity {
     @Column(name = "VERSION_NO", nullable = false)
     private long version;
 
-    @OneToMany(
-            mappedBy = "question",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<QuestionVersionJpaEntity> versions = new ArrayList<>();
 
     protected QuestionJpaEntity() {
@@ -96,10 +97,46 @@ public class QuestionJpaEntity {
     }
 
     public void registerCurrentVersion(QuestionVersionJpaEntity version) {
-        if (!versions.contains(version)) {
-            versions.add(version);
-        }
+        if (!versions.contains(version)) versions.add(version);
         currentVersion = version;
+    }
+
+    public void registerNewDraftVersion(
+            QuestionVersionJpaEntity newVersion,
+            Long actorUserId,
+            Instant now) {
+        registerCurrentVersion(newVersion);
+        status = QuestionStatus.DRAFT;
+        touch(actorUserId, now);
+    }
+
+    public void updateClassification(
+            QuestionTypeJpaEntity type,
+            QuestionDifficultyJpaEntity difficulty,
+            QuestionCategoryJpaEntity category,
+            Long actorUserId,
+            Instant now) {
+        this.type = type;
+        this.difficulty = difficulty;
+        this.category = category;
+        touch(actorUserId, now);
+    }
+
+    public void transitionTo(QuestionStatus target, Long actorUserId, Instant now) {
+        if (!status.canTransitionTo(target)) {
+            throw new BusinessException(
+                    "QUESTION_TRANSITION_NOT_ALLOWED",
+                    "La transición editorial solicitada no está permitida."
+            );
+        }
+        status = target;
+        if (target == QuestionStatus.PUBLISHED) publishedVersion = currentVersion;
+        touch(actorUserId, now);
+    }
+
+    private void touch(Long actorUserId, Instant now) {
+        updatedBy = actorUserId;
+        updatedAt = now;
     }
 
     public Long getId() { return id; }
@@ -109,6 +146,8 @@ public class QuestionJpaEntity {
     public QuestionCategoryJpaEntity getCategory() { return category; }
     public QuestionStatus getStatus() { return status; }
     public QuestionVersionJpaEntity getCurrentVersion() { return currentVersion; }
+    public QuestionVersionJpaEntity getPublishedVersion() { return publishedVersion; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public long getVersion() { return version; }
 }

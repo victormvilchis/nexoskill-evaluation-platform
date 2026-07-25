@@ -1416,3 +1416,93 @@ textarea:read-only {
     flex-direction: column;
   }
 }
+
+.workflow-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface-soft);
+  padding: 1rem 1.2rem;
+}
+
+.workflow-actions > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.workflow-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.version-note {
+  margin-bottom: 1rem;
+  border-left: 4px solid var(--primary);
+  border-radius: 0.4rem;
+  background: var(--surface-soft);
+  padding: 0.8rem 1rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.version-history-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.version-history-list article {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 0.95rem 1rem;
+}
+
+.version-history-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.version-history-list p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.version-history-list small {
+  color: var(--muted);
+}
+
+.warning-message {
+  margin-bottom: 1rem;
+  border: 1px solid #e9c46a;
+  border-radius: 0.75rem;
+  background: #fff8e6;
+  padding: 0.9rem 1rem;
+  color: #7a5a00;
+}
+
+@media (max-width: 840px) {
+  .workflow-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-button-group {
+    justify-content: stretch;
+  }
+
+  .workflow-button-group button,
+  .workflow-button-group .button-link {
+    width: 100%;
+  }
+}

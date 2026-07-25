@@ -44,6 +44,20 @@ public class QuestionDraftValidator {
         }
     }
 
+    public void validateForPublication(
+            QuestionTypeCode type,
+            String statement,
+            String explanation,
+            List<QuestionOptionCommand> options) {
+        validate(type, statement, options);
+        if (explanation == null || explanation.isBlank()) {
+            throw new BusinessException(
+                    "QUESTION_EXPLANATION_REQUIRED_FOR_PUBLICATION",
+                    "Agrega una explicación antes de publicar la pregunta."
+            );
+        }
+    }
+
     private void validateOptionTexts(List<QuestionOptionCommand> options) {
         Set<String> normalizedTexts = new HashSet<>();
         for (QuestionOptionCommand option : options) {
@@ -79,10 +93,10 @@ public class QuestionDraftValidator {
     }
 
     private void validateMultipleChoice(long correctOptions, int optionCount) {
-        if (correctOptions < 2 || correctOptions >= optionCount) {
+        if (optionCount < 3 || correctOptions < 2 || correctOptions >= optionCount) {
             throw new BusinessException(
                     "QUESTION_MULTIPLE_CORRECT_INVALID",
-                    "Una pregunta de opción múltiple debe tener al menos dos respuestas correctas y una incorrecta."
+                    "Una pregunta de opción múltiple debe tener al menos tres opciones, dos respuestas correctas y una incorrecta."
             );
         }
     }

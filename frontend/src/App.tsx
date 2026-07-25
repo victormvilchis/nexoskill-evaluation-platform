@@ -8,6 +8,7 @@ import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { EditQuestionPage } from './pages/EditQuestionPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
@@ -50,6 +51,13 @@ export default function App() {
             <Route
               path="/admin/questions/new"
               element={<CreateQuestionPage />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute permission="QUESTION_UPDATE" />}>
+            <Route
+              path="/admin/questions/:publicId/edit"
+              element={<EditQuestionPage />}
             />
           </Route>
 

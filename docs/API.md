@@ -143,3 +143,59 @@ POST /api/v1/admin/question-catalogs/categories
 ```
 
 Requiere `QUESTION_CATEGORY_MANAGE`.
+
+## Flujo editorial de preguntas
+
+### Actualizar pregunta
+
+`PUT /api/v1/admin/questions/{publicId}`
+
+Requiere `QUESTION_UPDATE`. Una pregunta en `DRAFT` se actualiza sobre su versión actual. Si está `PUBLISHED`, se crea una nueva versión `DRAFT` y la versión publicada anterior permanece preservada.
+
+```json
+{
+  "typeCode": "SINGLE_CHOICE",
+  "difficultyCode": "INTERMEDIATE",
+  "categoryPublicId": "uuid-categoria",
+  "statement": "Enunciado actualizado",
+  "explanation": "Explicación obligatoria antes de publicar",
+  "changeSummary": "Se aclaró el enunciado",
+  "expectedEntityVersion": 2,
+  "options": [
+    { "text": "Opción A", "correct": true },
+    { "text": "Opción B", "correct": false }
+  ]
+}
+```
+
+### Cambiar estado editorial
+
+`POST /api/v1/admin/questions/{publicId}/transitions`
+
+```json
+{
+  "targetStatus": "UNDER_REVIEW",
+  "expectedEntityVersion": 3
+}
+```
+
+Transiciones válidas:
+
+- `DRAFT → UNDER_REVIEW`
+- `UNDER_REVIEW → APPROVED`
+- `UNDER_REVIEW → DRAFT`
+- `APPROVED → PUBLISHED`
+- `APPROVED → DRAFT`
+- `PUBLISHED → ARCHIVED`
+
+### Duplicar pregunta
+
+`POST /api/v1/admin/questions/{publicId}/duplicate`
+
+Requiere `QUESTION_DUPLICATE` y crea una pregunta independiente en `DRAFT`.
+
+### Historial de versiones
+
+`GET /api/v1/admin/questions/{publicId}/versions`
+
+Requiere `QUESTION_VERSION_VIEW`.

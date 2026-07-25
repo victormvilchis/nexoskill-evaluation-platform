@@ -6,9 +6,12 @@ import type {
   QuestionCategory,
   QuestionDetail,
   QuestionDifficultyCode,
+  QuestionHistory,
   QuestionPage,
   QuestionStatus,
-  QuestionTypeCode
+  QuestionTypeCode,
+  TransitionQuestionPayload,
+  UpdateQuestionPayload
 } from '../../../shared/types/questions'
 
 interface SearchQuestionsParams {
@@ -59,9 +62,39 @@ export function getQuestion(publicId: string) {
   return apiRequest<QuestionDetail>(`/admin/questions/${publicId}`)
 }
 
+export function getQuestionHistory(publicId: string) {
+  return apiRequest<QuestionHistory>(`/admin/questions/${publicId}/versions`)
+}
+
 export function createQuestion(payload: CreateQuestionPayload) {
   return apiRequest<QuestionDetail>('/admin/questions', {
     method: 'POST',
     body: JSON.stringify(payload)
+  })
+}
+
+export function updateQuestion(
+  publicId: string,
+  payload: UpdateQuestionPayload
+) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${publicId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function transitionQuestion(
+  publicId: string,
+  payload: TransitionQuestionPayload
+) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${publicId}/transitions`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function duplicateQuestion(publicId: string) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${publicId}/duplicate`, {
+    method: 'POST'
   })
 }

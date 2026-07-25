@@ -60,7 +60,24 @@ export interface QuestionSummary {
 
 export interface QuestionDetail extends QuestionSummary {
   explanation: string | null
+  entityVersion: number
+  publishedVersionNumber: number | null
   options: QuestionOption[]
+}
+
+export interface QuestionVersionSummary {
+  versionNumber: number
+  status: QuestionStatus
+  statement: string
+  changeSummary: string | null
+  createdAt: string
+  statusChangedAt: string | null
+  publishedAt: string | null
+}
+
+export interface QuestionHistory {
+  questionPublicId: string
+  versions: QuestionVersionSummary[]
 }
 
 export interface QuestionPage {
@@ -83,6 +100,16 @@ export interface CreateQuestionPayload {
   statement: string
   explanation?: string
   options: CreateQuestionOptionPayload[]
+}
+
+export interface UpdateQuestionPayload extends CreateQuestionPayload {
+  changeSummary?: string
+  expectedEntityVersion: number
+}
+
+export interface TransitionQuestionPayload {
+  targetStatus: QuestionStatus
+  expectedEntityVersion: number
 }
 
 export interface CreateQuestionCategoryPayload {

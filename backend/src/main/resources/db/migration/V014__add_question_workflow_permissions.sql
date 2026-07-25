@@ -1,0 +1,47 @@
+INSERT INTO APP_PERMISSION (
+    PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION
+) VALUES (
+    'QUESTION_REVIEW', 'Revisar preguntas', 'QUESTION_BANK',
+    'Permite enviar preguntas a revisión y devolverlas a borrador.'
+);
+
+INSERT INTO APP_PERMISSION (
+    PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION
+) VALUES (
+    'QUESTION_APPROVE', 'Aprobar preguntas', 'QUESTION_BANK',
+    'Permite aprobar preguntas que se encuentran en revisión.'
+);
+
+INSERT INTO APP_PERMISSION (
+    PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION
+) VALUES (
+    'QUESTION_PUBLISH', 'Publicar preguntas', 'QUESTION_BANK',
+    'Permite publicar una versión aprobada.'
+);
+
+INSERT INTO APP_PERMISSION (
+    PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION
+) VALUES (
+    'QUESTION_DUPLICATE', 'Duplicar preguntas', 'QUESTION_BANK',
+    'Permite crear un borrador nuevo a partir de una pregunta existente.'
+);
+
+INSERT INTO APP_PERMISSION (
+    PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION
+) VALUES (
+    'QUESTION_VERSION_VIEW', 'Consultar versiones de preguntas', 'QUESTION_BANK',
+    'Permite consultar el historial de versiones de una pregunta.'
+);
+
+INSERT INTO APP_ROLE_PERMISSION (ROLE_ID, PERMISSION_ID)
+SELECT r.ROLE_ID, p.PERMISSION_ID
+FROM APP_ROLE r
+CROSS JOIN APP_PERMISSION p
+WHERE r.ROLE_CODE = 'ADMINISTRATOR'
+  AND p.PERMISSION_CODE IN (
+      'QUESTION_REVIEW',
+      'QUESTION_APPROVE',
+      'QUESTION_PUBLISH',
+      'QUESTION_DUPLICATE',
+      'QUESTION_VERSION_VIEW'
+  );

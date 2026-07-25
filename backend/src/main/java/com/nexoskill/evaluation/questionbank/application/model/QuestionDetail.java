@@ -16,6 +16,8 @@ public record QuestionDetail(
         String categoryName,
         QuestionStatus status,
         int versionNumber,
+        long entityVersion,
+        Integer publishedVersionNumber,
         List<QuestionOptionView> options,
         Instant createdAt,
         Instant updatedAt
