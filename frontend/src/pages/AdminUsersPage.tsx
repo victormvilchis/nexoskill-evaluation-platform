@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import { Link, useSearchParams } from 'react-router-dom'
 import { searchUsers } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
@@ -65,6 +66,7 @@ export function AdminUsersPage() {
   const [now, setNow] = useState(() => Date.now())
 
   const page = Math.max(Number(searchParams.get('page') ?? 0), 0)
+  const debouncedQuery = useDebouncedValue(query, 300)
 
 
   useEffect(() => {
@@ -110,12 +112,17 @@ export function AdminUsersPage() {
     }
   }, [page, searchParams])
 
-  function applyFilters() {
+  useEffect(() => {
+    const currentQuery = searchParams.get('query') ?? ''
+    const currentStatus = searchParams.get('status') ?? ''
+    if (currentQuery === debouncedQuery.trim() && currentStatus === status) return
     const next = new URLSearchParams()
-    if (query.trim()) next.set('query', query.trim())
+    if (debouncedQuery.trim()) next.set('query', debouncedQuery.trim())
     if (status) next.set('status', status)
-    setSearchParams(next)
-  }
+    setSearchParams(next, { replace: true })
+  }, [debouncedQuery, status, searchParams, setSearchParams])
+
+  function clearFilters() { setQuery(''); setStatus('') }
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
@@ -140,16 +147,13 @@ export function AdminUsersPage() {
       </div>
 
 
-      <section className="filter-panel" aria-label="Filtros de usuarios">
+      <section className="filter-panel ns-dynamic-filter-panel" aria-label="Filtros de usuarios">
         <div className="form-field">
           <label htmlFor="user-query">Nombre o correo</label>
           <input
             id="user-query"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') applyFilters()
-            }}
             placeholder="Buscar usuario"
           />
         </div>
@@ -167,9 +171,7 @@ export function AdminUsersPage() {
             ))}
           </select>
         </div>
-        <button className="secondary-button" type="button" onClick={applyFilters}>
-          <Icon name="search" size={16} />Aplicar filtros
-        </button>
+        {(query || status) && <button className="secondary-button" type="button" onClick={clearFilters}>Limpiar filtros</button>}
       </section>
 
       {error && <div className="error-message">{error}</div>}

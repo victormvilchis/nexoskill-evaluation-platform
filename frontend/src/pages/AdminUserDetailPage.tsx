@@ -1,3 +1,4 @@
+import { BackButton } from '../shared/components/BackButton'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -280,12 +281,14 @@ export function AdminUserDetailPage() {
   }
 
   if (loading) {
-    return <main className="content-page"><p>Cargando usuario…</p></main>
+    return <main className="content-page">
+      <BackButton fallback="/admin/users" /><p>Cargando usuario…</p></main>
   }
 
   if (!user) {
     return (
       <main className="content-page">
+      <BackButton fallback="/admin/users" />
         <div className="error-message">
           {error ?? 'El usuario solicitado no está disponible.'}
         </div>
@@ -298,6 +301,7 @@ export function AdminUserDetailPage() {
 
   return (
     <main className="content-page">
+      <BackButton fallback="/admin/users" />
       <div className="page-heading">
         <div>
           <p className="eyebrow">Administración de usuarios</p>

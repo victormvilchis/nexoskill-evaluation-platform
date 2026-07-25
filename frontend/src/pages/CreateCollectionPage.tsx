@@ -3,6 +3,7 @@ import { createCollection } from '../features/questions/api/questionApi'
 import { CollectionEditor } from '../features/questions/components/CollectionEditor'
 import { useToast } from '../shared/components/ToastProvider'
 import type { CollectionPayload } from '../shared/types/questions'
+import { BackButton } from '../shared/components/BackButton'
 
 export function CreateCollectionPage() {
   const navigate = useNavigate()
@@ -16,6 +17,7 @@ export function CreateCollectionPage() {
 
   return (
     <main className="content-page editor-page collection-editor-page">
+      <BackButton fallback="/admin/question-collections" />
       <div className="page-heading compact resource-heading">
         <div>
           <p className="eyebrow">Colecciones</p>

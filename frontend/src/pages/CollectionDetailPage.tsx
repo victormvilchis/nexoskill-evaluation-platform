@@ -1,3 +1,4 @@
+import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -44,6 +45,7 @@ export function CollectionDetailPage() {
   if (error && !collection) {
     return (
       <main className="content-page">
+      <BackButton fallback="/admin/question-collections" />
         <section className="inline-error-panel" role="alert">
           <div className="inline-error-icon"><Icon name="error" /></div>
           <div>
@@ -93,6 +95,7 @@ export function CollectionDetailPage() {
   if (editing) {
     return (
       <main className="content-page editor-page collection-editor-page">
+      <BackButton fallback="/admin/question-collections" />
         <div className="page-heading compact resource-heading">
           <div>
             <p className="eyebrow">Colecciones</p>
@@ -111,6 +114,7 @@ export function CollectionDetailPage() {
 
   return (
     <main className="content-page resource-page">
+      <BackButton fallback="/admin/question-collections" />
       <div className="page-heading resource-heading">
         <div>
           <p className="eyebrow">Colección</p>

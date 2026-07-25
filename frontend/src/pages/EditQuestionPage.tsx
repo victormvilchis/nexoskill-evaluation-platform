@@ -1,3 +1,4 @@
+import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getQuestion, updateQuestion } from '../features/questions/api/questionApi'
@@ -39,6 +40,7 @@ export function EditQuestionPage() {
   if (error && !question) {
     return (
       <main className="content-page">
+      <BackButton fallback="/admin/questions" />
         <section className="inline-error-panel" role="alert">
           <div className="inline-error-icon"><Icon name="error" /></div>
           <div>
@@ -64,6 +66,7 @@ export function EditQuestionPage() {
 
   return (
     <main className="content-page editor-page">
+      <BackButton fallback="/admin/questions" />
       <div className="page-heading compact resource-heading">
         <div>
           <p className="eyebrow">Banco de preguntas</p>

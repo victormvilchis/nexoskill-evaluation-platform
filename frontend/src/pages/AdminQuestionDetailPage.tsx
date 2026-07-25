@@ -1,3 +1,4 @@
+import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { changeQuestionStatus, deleteQuestion, duplicateQuestion, getQuestion, restoreQuestion } from '../features/questions/api/questionApi'
@@ -14,7 +15,8 @@ export function AdminQuestionDetailPage(){
  const[action,setAction]=useState<Action>(null);const[error,setError]=useState<string>();const[reloadKey,setReloadKey]=useState(0);const[busy,setBusy]=useState(false)
  const reload=useCallback(()=>setReloadKey(v=>v+1),[])
  useEffect(()=>{const controller=new AbortController();setError(undefined);getQuestion(publicId,controller.signal).then(setQuestion).catch((e:unknown)=>{if(!controller.signal.aborted)setError(e instanceof ApiRequestError?e.message:'No fue posible consultar la pregunta.')});return()=>controller.abort()},[publicId,reloadKey])
- if(error&&!question)return <main className="content-page"><section className="inline-error-panel"><div className="inline-error-icon"><Icon name="error"/></div><div><strong>No fue posible cargar la pregunta</strong><p>{error}</p></div><button className="secondary-button" onClick={reload}>Reintentar</button></section></main>
+ if(error&&!question)return <main className="content-page">
+      <BackButton fallback="/admin/questions" /><section className="inline-error-panel"><div className="inline-error-icon"><Icon name="error"/></div><div><strong>No fue posible cargar la pregunta</strong><p>{error}</p></div><button className="secondary-button" onClick={reload}>Reintentar</button></section></main>
  if(!question)return <LoadingScreen/>
  const deleted=question.status==='DELETED'
  async function execute(){if(!action||!question)return;setBusy(true);try{let updated:QuestionDetail
@@ -26,7 +28,8 @@ export function AdminQuestionDetailPage(){
  async function duplicate(){setBusy(true);try{const copy=await duplicateQuestion(publicId);toast.success('Pregunta duplicada');navigate(`/admin/questions/${copy.publicId}/edit`)}catch(e){toast.error('No fue posible duplicar la pregunta',e instanceof ApiRequestError?e.message:undefined)}finally{setBusy(false)}}
  const title=action==='DELETE'?'Eliminar pregunta':action==='RESTORE'?'Restaurar pregunta':question.status==='ACTIVE'?'Archivar pregunta':'Reactivar pregunta'
  const description=action==='DELETE'?'Desaparecerá del banco normal y de las colecciones, pero el registro permanecerá almacenado.':action==='RESTORE'?'La pregunta volverá como archivada. Después podrás reactivarla.':question.status==='ACTIVE'?'Dejará de estar disponible para nuevas colecciones y formularios.':'Volverá a estar disponible.'
- return <main className="content-page narrow-content resource-page"><div className="page-heading resource-heading"><div><p className="eyebrow">Pregunta</p><h1>Detalle</h1></div>
+ return <main className="content-page narrow-content resource-page">
+      <BackButton fallback="/admin/questions" /><div className="page-heading resource-heading"><div><p className="eyebrow">Pregunta</p><h1>Detalle</h1></div>
   <div className="heading-actions resource-heading-actions">{!deleted&&<><button className="secondary-button" disabled={busy} onClick={()=>void duplicate()}><Icon name="copy" size={15}/>Duplicar</button>
    {question.status==='ACTIVE'&&<Link className="primary-button button-link" to={`/admin/questions/${publicId}/edit`}><Icon name="edit" size={15}/>Editar</Link>}
    <button className="secondary-button" disabled={busy} onClick={()=>setAction('STATUS')}>{question.status==='ACTIVE'?'Archivar':'Reactivar'}</button>

@@ -5,6 +5,7 @@ import App from './App'
 import { AuthProvider } from './features/authentication/context/AuthContext'
 import { ToastProvider } from './shared/components/ToastProvider'
 import './styles/global.css'
+import './styles/ui-foundation-r1.css'
 import './styles/r3-logical-deletion.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
