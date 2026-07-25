@@ -12,6 +12,8 @@ import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EditQuestionPage } from './pages/EditQuestionPage'
+import { AdminFormsPage } from './pages/AdminFormsPage'
+import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
@@ -72,6 +74,14 @@ export default function App() {
           <Route element={<PermissionRoute permission="COLLECTION_MANAGE" />}>
             <Route path="/admin/question-collections/new" element={<CreateCollectionPage />} />
           </Route>
+          <Route element={<PermissionRoute permission="FORM_VIEW" />}>
+            <Route path="/admin/forms" element={<AdminFormsPage />} />
+            <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="FORM_CREATE" />}>
+            <Route path="/admin/forms/new" element={<FormBuilderPage />} />
+          </Route>
+
           <Route
             element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}
           >

@@ -90,3 +90,54 @@ export async function apiRequest<T>(
 
   return body as T
 }
+
+function normalizeApiPath(path: string): string {
+  const normalizedPath = path.trim()
+
+  if (normalizedPath.startsWith('/api/v1/')) {
+    return normalizedPath.substring('/api/v1'.length)
+  }
+
+  if (normalizedPath === '/api/v1') {
+    return ''
+  }
+
+  return normalizedPath.startsWith('/')
+    ? normalizedPath
+    : `/${normalizedPath}`
+}
+
+export const apiClient = {
+  get<T>(path: string): Promise<T> {
+    return apiRequest<T>(normalizeApiPath(path), {
+      method: 'GET'
+    })
+  },
+
+  post<T>(path: string, body?: unknown): Promise<T> {
+    return apiRequest<T>(normalizeApiPath(path), {
+      method: 'POST',
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+  },
+
+  put<T>(path: string, body?: unknown): Promise<T> {
+    return apiRequest<T>(normalizeApiPath(path), {
+      method: 'PUT',
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+  },
+
+  patch<T>(path: string, body?: unknown): Promise<T> {
+    return apiRequest<T>(normalizeApiPath(path), {
+      method: 'PATCH',
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+  },
+
+  delete<T>(path: string): Promise<T> {
+    return apiRequest<T>(normalizeApiPath(path), {
+      method: 'DELETE'
+    })
+  }
+}

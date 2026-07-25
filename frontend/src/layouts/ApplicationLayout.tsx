@@ -64,7 +64,7 @@ export function ApplicationLayout() {
         label: 'Evaluaciones',
         icon: 'clipboard',
         items: [
-          { label: 'Constructor', icon: 'clipboard', disabled: true, badge: 'Próximamente' },
+          { label: 'Formularios', to: '/admin/forms', icon: 'clipboard', permission: 'FORM_VIEW' },
           { label: 'Resultados', icon: 'results', disabled: true, badge: 'Próximamente' }
         ]
       }
