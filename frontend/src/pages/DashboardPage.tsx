@@ -74,7 +74,9 @@ export function DashboardPage() {
               </div>
               <h3>{module.name}</h3>
               <p>{module.description}</p>
-              <span className="coming-soon">No disponible todavía</span>
+              <span className={module.enabled ? 'available-now' : 'coming-soon'}>
+                {module.enabled ? 'Disponible' : 'No disponible todavía'}
+              </span>
             </article>
           ))}
         </div>

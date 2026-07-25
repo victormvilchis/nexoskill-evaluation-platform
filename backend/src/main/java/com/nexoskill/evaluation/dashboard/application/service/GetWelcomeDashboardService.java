@@ -63,13 +63,13 @@ public class GetWelcomeDashboardService {
                         "USERS",
                         "Usuarios",
                         "Administración de usuarios y vigencias.",
-                        false
+                        true
                 ),
                 new DashboardModule(
                         "QUESTIONS",
                         "Banco de preguntas",
                         "Creación y clasificación de preguntas.",
-                        false
+                        true
                 ),
                 new DashboardModule(
                         "EXAMS",

@@ -124,7 +124,7 @@ El contenido generado en `frontend/dist` se copia a
 
 ## Alcance no incluido
 
-- Banco de preguntas.
+- Flujo editorial completo de publicación y aprobación de preguntas.
 - Evaluaciones.
 - Calificación.
 - Resultados.
@@ -150,4 +150,27 @@ Endpoints agregados:
 GET  /api/v1/admin/users
 POST /api/v1/admin/users
 GET  /api/v1/admin/roles
+```
+
+
+## Actualización 0.3.0 — Banco de preguntas, parte 1
+
+Esta entrega agrega:
+
+- Catálogos de tipos, dificultades y categorías.
+- Listado administrativo de preguntas con filtros y paginación.
+- Alta de preguntas de opción única, opción múltiple y verdadero/falso.
+- Versionado inicial del contenido y opciones.
+- Estado inicial `DRAFT`.
+- Alta de categorías desde el panel.
+- Auditoría y autorización por permisos.
+
+Endpoints principales:
+
+```text
+GET  /api/v1/admin/questions
+POST /api/v1/admin/questions
+GET  /api/v1/admin/questions/{publicId}
+GET  /api/v1/admin/question-catalogs
+POST /api/v1/admin/question-catalogs/categories
 ```

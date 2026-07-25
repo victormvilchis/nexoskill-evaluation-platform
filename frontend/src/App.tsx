@@ -1,12 +1,16 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ApplicationLayout } from './layouts/ApplicationLayout'
+import { AdminQuestionDetailPage } from './pages/AdminQuestionDetailPage'
+import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
+import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
 
@@ -32,6 +36,30 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="USER_CREATE" />}>
             <Route path="/admin/users/new" element={<CreateUserPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>
+            <Route path="/admin/questions" element={<AdminQuestionsPage />} />
+            <Route
+              path="/admin/questions/:publicId"
+              element={<AdminQuestionDetailPage />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute permission="QUESTION_CREATE" />}>
+            <Route
+              path="/admin/questions/new"
+              element={<CreateQuestionPage />}
+            />
+          </Route>
+
+          <Route
+            element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}
+          >
+            <Route
+              path="/admin/question-categories"
+              element={<QuestionCategoriesPage />}
+            />
           </Route>
         </Route>
       </Route>

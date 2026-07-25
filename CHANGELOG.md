@@ -44,3 +44,27 @@
 - Protección para impedir la auto-suspensión de un administrador.
 - Auditoría con valores anteriores y posteriores.
 - Confirmaciones y mensajes de resultado en el frontend.
+
+## 0.3.0 - Parte 1: banco de preguntas
+
+### Agregado
+
+- Catálogos de tipos, dificultades, categorías y etiquetas.
+- Banco de preguntas con separación entre entidad y versión de contenido.
+- Tipos iniciales: opción única, opción múltiple y verdadero/falso.
+- Alta de preguntas en estado `DRAFT`.
+- Consulta paginada con filtros por texto, estado, tipo, dificultad y categoría.
+- Consulta del detalle y las opciones de una pregunta.
+- Alta administrativa de categorías.
+- Permisos `QUESTION_VIEW`, `QUESTION_CREATE`, `QUESTION_UPDATE`,
+  `QUESTION_ARCHIVE` y `QUESTION_CATEGORY_MANAGE`.
+- Auditoría para creación de preguntas y categorías.
+- Pantallas React para listado, detalle, alta de preguntas y categorías.
+- Migraciones Flyway V009 a V012.
+
+### Seguridad y consistencia
+
+- Las respuestas correctas solo están disponibles en endpoints administrativos.
+- El backend valida las reglas de respuestas según el tipo de pregunta.
+- Las preguntas se crean como borrador y su contenido queda versionado desde la
+  primera captura.

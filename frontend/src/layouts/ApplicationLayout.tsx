@@ -23,6 +23,9 @@ export function ApplicationLayout() {
 
         <nav aria-label="Navegación principal">
           <NavLink to="/dashboard">Inicio</NavLink>
+          {user?.permissions.includes('QUESTION_VIEW') && (
+            <NavLink to="/admin/questions">Banco de preguntas</NavLink>
+          )}
           <button type="button" disabled>Evaluaciones</button>
           <button type="button" disabled>Resultados</button>
           {user?.permissions.includes('USER_VIEW') && (

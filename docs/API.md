@@ -82,3 +82,64 @@ POST /api/v1/admin/users/{publicId}/reset-password
 
 Las operaciones requieren permisos específicos. La suspensión, el cambio de rol
 y el restablecimiento de contraseña invalidan las sesiones activas del usuario.
+
+
+## Banco de preguntas
+
+### Consultar preguntas
+
+```http
+GET /api/v1/admin/questions?query=&status=DRAFT&typeCode=SINGLE_CHOICE&difficultyCode=BASIC&categoryPublicId=&page=0&size=20
+```
+
+Requiere `QUESTION_VIEW`.
+
+### Crear pregunta
+
+```http
+POST /api/v1/admin/questions
+```
+
+```json
+{
+  "typeCode": "SINGLE_CHOICE",
+  "difficultyCode": "BASIC",
+  "categoryPublicId": "11111111-1111-1111-1111-111111111102",
+  "statement": "¿Cuál es la palabra reservada para declarar una clase en Java?",
+  "explanation": "Java utiliza class para declarar una clase.",
+  "options": [
+    { "text": "class", "correct": true },
+    { "text": "object", "correct": false },
+    { "text": "type", "correct": false }
+  ]
+}
+```
+
+La pregunta se crea en estado `DRAFT`. Requiere `QUESTION_CREATE`.
+
+### Consultar detalle
+
+```http
+GET /api/v1/admin/questions/{publicId}
+```
+
+### Consultar catálogos
+
+```http
+GET /api/v1/admin/question-catalogs
+```
+
+### Crear categoría
+
+```http
+POST /api/v1/admin/question-catalogs/categories
+```
+
+```json
+{
+  "name": "Salesforce",
+  "description": "Preguntas de administración y desarrollo Salesforce."
+}
+```
+
+Requiere `QUESTION_CATEGORY_MANAGE`.

@@ -46,6 +46,7 @@ Los módulos iniciales son:
 - `dashboard`
 - `audit`
 - `shared`
+- `questionbank`
 
 ## Sesión
 
@@ -61,3 +62,11 @@ Flyway aplica automáticamente:
 - `V001__create_initial_schema.sql`
 - `V002__insert_security_catalogs.sql`
 - `V003__create_initial_indexes.sql`
+
+
+A partir del banco de preguntas también se aplican:
+
+- `V009__create_question_catalogs.sql`
+- `V010__create_question_bank.sql`
+- `V011__add_question_management_permissions.sql`
+- `V012__insert_initial_question_catalogs.sql`
