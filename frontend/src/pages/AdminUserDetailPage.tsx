@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   activateUser,
+  deleteUser,
   getRoles,
   getUser,
   resetUserPassword,
+  restoreUser,
   suspendUser,
   updateUserAccess,
   updateUserProfile,
@@ -221,6 +223,36 @@ export function AdminUserDetailPage() {
     })
   }
 
+  function handleDelete() {
+    if (isCurrentUser) return
+    requestConfirmation({
+      key: 'delete',
+      title: 'Eliminar usuario',
+      description: 'La cuenta desaparecerá de la lista normal, perderá el acceso y sus sesiones se cerrarán. El registro se conservará.',
+      confirmLabel: 'Eliminar usuario',
+      tone: 'danger',
+      action: () => runAction(
+        'delete',
+        () => deleteUser(publicId, 'Eliminación administrativa'),
+        'El usuario fue eliminado lógicamente.'
+      )
+    })
+  }
+
+  function handleRestore() {
+    requestConfirmation({
+      key: 'restore',
+      title: 'Restaurar usuario',
+      description: 'El usuario volverá como suspendido. Deberás activarlo explícitamente antes de que pueda iniciar sesión.',
+      confirmLabel: 'Restaurar usuario',
+      action: () => runAction(
+        'restore',
+        () => restoreUser(publicId),
+        'El usuario fue restaurado como suspendido.'
+      )
+    })
+  }
+
   function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (temporaryPassword !== confirmPassword) {
@@ -299,44 +331,46 @@ export function AdminUserDetailPage() {
       </section>
 
       {permissions.has('USER_STATUS_CHANGE') && (
-        <section className="management-section">
+        <section className={`management-section ${user.status === 'DELETED' ? 'deleted-management-section' : ''}`}>
           <div>
             <h2>Estado de la cuenta</h2>
             <p className="muted">
-              Suspender invalida todas las sesiones activas de inmediato.
+              {user.status === 'DELETED'
+                ? 'La cuenta está eliminada lógicamente y no puede acceder a la plataforma.'
+                : 'Suspender es reversible. Eliminar oculta la cuenta y conserva el registro.'}
             </p>
           </div>
           <div className="inline-actions">
-            {user.status === 'SUSPENDED' ? (
-              <button
-                className="primary-button"
-                type="button"
-                disabled={busyAction !== null}
-                onClick={handleActivate}
-              >
-                {busyAction === 'activate' ? 'Activando…' : 'Activar usuario'}
+            {user.status === 'DELETED' ? (
+              <button className="primary-button" type="button" disabled={busyAction !== null} onClick={handleRestore}>
+                {busyAction === 'restore' ? 'Restaurando…' : 'Restaurar usuario'}
               </button>
             ) : (
-              <button
-                className="danger-button"
-                type="button"
-                disabled={busyAction !== null || isCurrentUser}
-                title={isCurrentUser ? 'No puedes suspender tu propia cuenta.' : undefined}
-                onClick={handleSuspend}
-              >
-                {busyAction === 'suspend' ? 'Suspendiendo…' : 'Suspender usuario'}
-              </button>
+              <>
+                {user.status === 'SUSPENDED' ? (
+                  <button className="primary-button" type="button" disabled={busyAction !== null} onClick={handleActivate}>
+                    {busyAction === 'activate' ? 'Activando…' : 'Activar usuario'}
+                  </button>
+                ) : (
+                  <button className="secondary-button" type="button" disabled={busyAction !== null || isCurrentUser}
+                    title={isCurrentUser ? 'No puedes suspender tu propia cuenta.' : undefined} onClick={handleSuspend}>
+                    {busyAction === 'suspend' ? 'Suspendiendo…' : 'Suspender usuario'}
+                  </button>
+                )}
+                <button className="danger-button" type="button" disabled={busyAction !== null || isCurrentUser}
+                  title={isCurrentUser ? 'No puedes eliminar tu propia cuenta.' : undefined} onClick={handleDelete}>
+                  {busyAction === 'delete' ? 'Eliminando…' : 'Eliminar usuario'}
+                </button>
+              </>
             )}
           </div>
-          {isCurrentUser && (
-            <small className="field-help">
-              La plataforma impide que un administrador suspenda su propia cuenta.
-            </small>
+          {isCurrentUser && user.status !== 'DELETED' && (
+            <small className="field-help">No puedes suspender ni eliminar tu propia cuenta.</small>
           )}
         </section>
       )}
 
-      <div className="management-grid">
+      {user.status !== 'DELETED' && <div className="management-grid">
         {permissions.has('USER_UPDATE') && (
           <form className="management-section" onSubmit={(event) => void handleProfileSubmit(event)}>
             <div>
@@ -447,7 +481,7 @@ export function AdminUserDetailPage() {
             </div>
           </form>
         )}
-      </div>
+      </div>}
 
       <ConfirmDialog
         open={confirmation !== null}

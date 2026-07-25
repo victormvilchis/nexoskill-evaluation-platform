@@ -111,7 +111,7 @@ export function duplicateQuestion(id: string) {
 
 export function changeQuestionStatus(
   id: string,
-  status: QuestionStatus,
+  status: Exclude<QuestionStatus, 'DELETED'>,
   expectedEntityVersion: number
 ) {
   return apiRequest<QuestionDetail>(
@@ -121,6 +121,25 @@ export function changeQuestionStatus(
       body: JSON.stringify({ status, expectedEntityVersion })
     }
   )
+}
+
+
+export function deleteQuestion(
+  id: string,
+  expectedEntityVersion: number,
+  reason?: string
+) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${id}/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ expectedEntityVersion, reason })
+  })
+}
+
+export function restoreQuestion(id: string, expectedEntityVersion: number) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${id}/restore`, {
+    method: 'POST',
+    body: JSON.stringify({ expectedEntityVersion })
+  })
 }
 
 export function uploadQuestionMedia(file: File) {

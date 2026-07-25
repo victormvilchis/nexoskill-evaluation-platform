@@ -10,51 +10,52 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SpringDataUserJpaRepository extends JpaRepository<UserJpaEntity, Long> {
+    Optional<UserJpaEntity> findByNormalizedEmail(String normalizedEmail);
 
-	Optional<UserJpaEntity> findByNormalizedEmail(String normalizedEmail);
+    boolean existsByNormalizedEmail(String normalizedEmail);
 
-	boolean existsByNormalizedEmail(String normalizedEmail);
+    boolean existsByNormalizedEmailAndPublicIdNot(String normalizedEmail, String publicId);
 
-	boolean existsByNormalizedEmailAndPublicIdNot(String normalizedEmail, String publicId);
+    Optional<UserJpaEntity> findByPublicId(String publicId);
 
-	Optional<UserJpaEntity> findByPublicId(String publicId);
+    @Query(value = """
+            SELECT u
+            FROM UserJpaEntity u
+            WHERE (
+                :query IS NULL
+                OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
+            )
+            AND ((:status IS NULL AND u.status <> com.nexoskill.evaluation.users.domain.model.UserStatus.DELETED)
+                 OR u.status = :status)
+            """, countQuery = """
+            SELECT COUNT(u)
+            FROM UserJpaEntity u
+            WHERE (
+                :query IS NULL
+                OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
+                OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
+            )
+            AND ((:status IS NULL AND u.status <> com.nexoskill.evaluation.users.domain.model.UserStatus.DELETED)
+                 OR u.status = :status)
+            """)
+    Page<UserJpaEntity> search(@Param("query") String query, @Param("status") UserStatus status, Pageable pageable);
 
-	@Query(value = """
-			SELECT u
-			FROM UserJpaEntity u
-			WHERE (
-			    :query IS NULL
-			    OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
-			)
-			AND (:status IS NULL OR u.status = :status)
-			""", countQuery = """
-			SELECT COUNT(u)
-			FROM UserJpaEntity u
-			WHERE (
-			    :query IS NULL
-			    OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
-			    OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
-			)
-			AND (:status IS NULL OR u.status = :status)
-			""")
-	Page<UserJpaEntity> search(@Param("query") String query, @Param("status") UserStatus status, Pageable pageable);
-
-	@Query("""
-			SELECT COUNT(DISTINCT u)
-			FROM UserJpaEntity u
-			JOIN u.roles r
-			WHERE r.code = 'ADMINISTRATOR'
-			  AND u.status = :userStatus
-			  AND u.access.status = :accessStatus
-			  AND u.access.startsAt <= :now
-			  AND (u.access.expiresAt IS NULL OR u.access.expiresAt > :now)
-			""")
-	long countEffectiveAdministrators(@Param("now") java.time.Instant now, @Param("userStatus") UserStatus userStatus,
-			@Param("accessStatus") UserAccessStatus accessStatus);
-
+    @Query("""
+            SELECT COUNT(DISTINCT u)
+            FROM UserJpaEntity u
+            JOIN u.roles r
+            WHERE r.code = 'ADMINISTRATOR'
+              AND u.status = :userStatus
+              AND u.access.status = :accessStatus
+              AND u.access.startsAt <= :now
+              AND (u.access.expiresAt IS NULL OR u.access.expiresAt > :now)
+            """)
+    long countEffectiveAdministrators(@Param("now") java.time.Instant now,
+            @Param("userStatus") UserStatus userStatus,
+            @Param("accessStatus") UserAccessStatus accessStatus);
 }

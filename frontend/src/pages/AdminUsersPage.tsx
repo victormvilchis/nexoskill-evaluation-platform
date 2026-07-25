@@ -16,7 +16,8 @@ const USER_STATUSES: Array<{ value: UserStatus | ''; label: string }> = [
   { value: 'PENDING', label: 'Pendiente' },
   { value: 'SUSPENDED', label: 'Suspendido' },
   { value: 'LOCKED', label: 'Bloqueado' },
-  { value: 'DISABLED', label: 'Deshabilitado' }
+  { value: 'DISABLED', label: 'Deshabilitado' },
+  { value: 'DELETED', label: 'Eliminado' }
 ]
 
 const statusLabels: Record<UserStatus | UserAccessStatus, string> = {
@@ -25,6 +26,7 @@ const statusLabels: Record<UserStatus | UserAccessStatus, string> = {
   SUSPENDED: 'Suspendido',
   LOCKED: 'Bloqueado',
   DISABLED: 'Deshabilitado',
+  DELETED: 'Eliminado',
   EXPIRED: 'Vencido',
   CANCELED: 'Cancelado'
 }

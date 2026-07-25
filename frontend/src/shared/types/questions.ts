@@ -1,5 +1,5 @@
 export type CatalogStatus = 'ACTIVE' | 'INACTIVE'
-export type QuestionStatus = 'ACTIVE' | 'ARCHIVED'
+export type QuestionStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED'
 export type QuestionTypeCode = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'DROPDOWN' | 'SHORT_TEXT' | 'LONG_TEXT' | 'NUMBER' | 'CODE_RESPONSE'
 export type QuestionDifficultyCode = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | string
 export interface CatalogOption { code:string; name:string; description?:string }

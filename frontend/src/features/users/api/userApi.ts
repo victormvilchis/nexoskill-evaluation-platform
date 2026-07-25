@@ -88,6 +88,20 @@ export function suspendUser(publicId: string) {
   })
 }
 
+
+export function deleteUser(publicId: string, reason?: string) {
+  return apiRequest<AdminUser>(`/admin/users/${publicId}/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  })
+}
+
+export function restoreUser(publicId: string) {
+  return apiRequest<AdminUser>(`/admin/users/${publicId}/restore`, {
+    method: 'POST'
+  })
+}
+
 export function resetUserPassword(
   publicId: string,
   payload: ResetUserPasswordPayload

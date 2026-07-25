@@ -4,6 +4,7 @@ export type UserStatus =
   | 'SUSPENDED'
   | 'LOCKED'
   | 'DISABLED'
+  | 'DELETED'
 
 export type UserAccessStatus =
   | 'PENDING'
