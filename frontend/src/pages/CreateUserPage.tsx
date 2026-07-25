@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUser, getRoles } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { useToast } from '../shared/components/ToastProvider'
 import type { RoleOption } from '../shared/types/users'
 
 function toLocalInputValue(date: Date) {
@@ -10,6 +11,7 @@ function toLocalInputValue(date: Date) {
 }
 
 export function CreateUserPage() {
+  const toast = useToast()
   const navigate = useNavigate()
   const defaultDates = useMemo(() => {
     const start = new Date()
@@ -73,8 +75,11 @@ export function CreateUserPage() {
       if (requestError instanceof ApiRequestError) {
         setError(requestError.message)
         setFieldErrors(requestError.fieldErrors ?? {})
+        toast.error('No fue posible crear el usuario', requestError.message)
       } else {
-        setError('No fue posible crear el usuario.')
+        const message = 'No fue posible crear el usuario.'
+        setError(message)
+        toast.error('No fue posible crear el usuario', message)
       }
     } finally {
       setSubmitting(false)

@@ -7,16 +7,17 @@ import {
   type OwnProfile
 } from '../features/profile/api/profileApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { useToast } from '../shared/components/ToastProvider'
 
 export function ProfilePage() {
   const { refresh } = useAuth()
+  const toast = useToast()
   const [profile, setProfile] = useState<OwnProfile | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   function synchronize(value: OwnProfile) {
@@ -54,7 +55,6 @@ export function ProfilePage() {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
-    setMessage(null)
 
     try {
       const response = await updateOwnProfile({
@@ -64,7 +64,7 @@ export function ProfilePage() {
       })
       synchronize(response.profile)
       await refresh()
-      setMessage('Tu perfil fue actualizado correctamente.')
+      toast.success('Perfil actualizado', 'Tus cambios se guardaron correctamente.')
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -90,7 +90,6 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {message && <div className="success-message" role="status">{message}</div>}
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <div className="management-grid profile-grid">

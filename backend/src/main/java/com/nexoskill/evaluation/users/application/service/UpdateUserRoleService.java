@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.users.application.service;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
+import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.UpdateUserRoleCommand;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
@@ -35,10 +36,20 @@ public class UpdateUserRoleService {
                 userManagementPort.getByPublicId(command.publicId());
         AdminUserSummary before = managedUser.summary();
         Instant now = clock.instant();
+        String targetRole = command.roleCode().trim().toUpperCase();
+
+        if (before.roles().contains("ADMINISTRATOR")
+                && !"ADMINISTRATOR".equals(targetRole)
+                && userManagementPort.countEffectiveAdministrators(now) <= 1) {
+            throw new BusinessException(
+                    "LAST_ADMINISTRATOR_REQUIRED",
+                    "No puedes quitar el rol al último administrador activo de la plataforma."
+            );
+        }
 
         AdminUserSummary updated = userManagementPort.updateRole(
                 command.publicId(),
-                command.roleCode().trim().toUpperCase()
+                targetRole
         );
         int revokedSessions = userSessionPort.revokeActiveSessions(
                 managedUser.internalId(),

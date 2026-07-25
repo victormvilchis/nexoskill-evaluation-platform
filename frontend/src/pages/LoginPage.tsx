@@ -37,7 +37,7 @@ export function LoginPage() {
         <p className="eyebrow">Acceso</p>
         <h2 id="login-title">Inicia sesión</h2>
         <p className="muted">
-          Ingresa con la cuenta configurada en el backend.
+          Ingresa con la cuenta configurada en la plataforma.
         </p>
         {reason === 'expired' && (
           <div className="error-message" role="alert">
@@ -56,11 +56,6 @@ export function LoginPage() {
           </div>
         )}
         <LoginForm />
-        <div className="demo-credentials">
-          <strong>Ambiente local</strong>
-          <span>Administrador: admin@nexoskill.local</span>
-          <span>Usuario: usuario@nexoskill.local</span>
-        </div>
       </section>
     </main>
   )

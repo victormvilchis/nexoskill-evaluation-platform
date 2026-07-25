@@ -5,6 +5,7 @@ import {
   searchQuestions
 } from '../features/questions/api/questionApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { Icon } from '../shared/components/Icon'
 import type {
   QuestionCatalogs,
   QuestionDifficultyCode,
@@ -15,17 +16,14 @@ import type {
 
 const statusOptions: Array<{ value: QuestionStatus | ''; label: string }> = [
   { value: '', label: 'Todos los estados' },
-  { value: 'DRAFT', label: 'Borrador' },
-  { value: 'UNDER_REVIEW', label: 'En revisión' },
-  { value: 'APPROVED', label: 'Aprobada' },
-  { value: 'PUBLISHED', label: 'Publicada' },
-  { value: 'ARCHIVED', label: 'Archivada' }
+  { value: 'PUBLISHED', label: 'Publicadas' },
+  { value: 'ARCHIVED', label: 'Archivadas' }
 ]
 
 const statusLabels: Record<QuestionStatus, string> = {
-  DRAFT: 'Borrador',
-  UNDER_REVIEW: 'En revisión',
-  APPROVED: 'Aprobada',
+  DRAFT: 'Estado anterior',
+  UNDER_REVIEW: 'Estado anterior',
+  APPROVED: 'Estado anterior',
   PUBLISHED: 'Publicada',
   ARCHIVED: 'Archivada'
 }
@@ -63,7 +61,6 @@ export function AdminQuestionsPage() {
   const [error, setError] = useState<string | null>(null)
 
   const page = Math.max(Number(searchParams.get('page') ?? 0), 0)
-  const created = searchParams.get('created') === '1'
 
   useEffect(() => {
     getQuestionCatalogs()
@@ -145,26 +142,14 @@ export function AdminQuestionsPage() {
           </p>
         </div>
         <div className="heading-actions">
-          <Link
-            className="secondary-button button-link"
-            to="/admin/question-categories"
-          >
-            Categorías
+          <Link className="secondary-button button-link" to="/admin/question-categories">
+            <Icon name="categories" size={16} />Categorías
           </Link>
-          <Link
-            className="primary-button button-link"
-            to="/admin/questions/new"
-          >
-            Crear pregunta
+          <Link className="primary-button button-link" to="/admin/questions/new">
+            <Icon name="plus" size={16} />Nueva pregunta
           </Link>
         </div>
       </div>
-
-      {created && (
-        <div className="success-message" role="status">
-          La pregunta se guardó como borrador.
-        </div>
-      )}
 
       <section className="question-filter-panel" aria-label="Filtros">
         <div className="form-field question-search-field">
@@ -325,7 +310,8 @@ export function AdminQuestionsPage() {
                       className="table-link"
                       to={`/admin/questions/${question.publicId}`}
                     >
-                      Ver detalle
+                      Ver
+                      <Icon name="chevronRight" size={14} />
                     </Link>
                   </td>
                 </tr>

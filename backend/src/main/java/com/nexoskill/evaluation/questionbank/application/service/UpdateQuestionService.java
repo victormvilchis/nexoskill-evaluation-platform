@@ -62,11 +62,9 @@ public class UpdateQuestionService {
 
         auditLogPort.record(
                 command.actorUserId(),
-                result.createdNewVersion() ? "QUESTION_VERSION_CREATED" : "QUESTION_UPDATED",
+                "QUESTION_VERSION_PUBLISHED",
                 "QUESTION_BANK",
-                result.createdNewVersion()
-                        ? "Se creó una nueva versión en borrador de la pregunta."
-                        : "Se actualizó la pregunta en borrador.",
+                "Se creó y publicó una nueva versión de la pregunta.",
                 command.ipAddress(),
                 command.userAgent(),
                 Map.of(

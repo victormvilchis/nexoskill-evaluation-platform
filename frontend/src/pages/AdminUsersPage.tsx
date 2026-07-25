@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { searchUsers } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { Icon } from '../shared/components/Icon'
+import { useToast } from '../shared/components/ToastProvider'
 import type {
   AdminUserPage,
   UserAccessStatus,
@@ -49,6 +51,7 @@ function formatDate(value: string | null) {
 }
 
 export function AdminUsersPage() {
+  const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
   const [status, setStatus] = useState<UserStatus | ''>(
@@ -60,7 +63,15 @@ export function AdminUsersPage() {
   const [now, setNow] = useState(() => Date.now())
 
   const page = Math.max(Number(searchParams.get('page') ?? 0), 0)
-  const created = searchParams.get('created') === '1'
+
+
+  useEffect(() => {
+    if (searchParams.get('created') !== '1') return
+    toast.success('Usuario creado', 'La cuenta quedó disponible con la vigencia configurada.')
+    const next = new URLSearchParams(searchParams)
+    next.delete('created')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, toast])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -122,15 +133,10 @@ export function AdminUsersPage() {
           </p>
         </div>
         <Link className="primary-button button-link" to="/admin/users/new">
-          Crear usuario
+          <Icon name="plus" size={16} />Crear usuario
         </Link>
       </div>
 
-      {created && (
-        <div className="success-message" role="status">
-          El usuario fue creado correctamente.
-        </div>
-      )}
 
       <section className="filter-panel" aria-label="Filtros de usuarios">
         <div className="form-field">
@@ -160,7 +166,7 @@ export function AdminUsersPage() {
           </select>
         </div>
         <button className="secondary-button" type="button" onClick={applyFilters}>
-          Aplicar filtros
+          <Icon name="search" size={16} />Aplicar filtros
         </button>
       </section>
 
@@ -227,7 +233,7 @@ export function AdminUsersPage() {
                       className="table-action-link"
                       to={`/admin/users/${user.publicId}`}
                     >
-                      Ver detalle
+                      Ver
                     </Link>
                   </td>
                 </tr>

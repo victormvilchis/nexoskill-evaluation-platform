@@ -45,6 +45,13 @@ public class SuspendUserService {
         }
 
         Instant now = clock.instant();
+        if (managedUser.summary().roles().contains("ADMINISTRATOR")
+                && userManagementPort.countEffectiveAdministrators(now) <= 1) {
+            throw new BusinessException(
+                    "LAST_ADMINISTRATOR_REQUIRED",
+                    "No puedes suspender al último administrador activo de la plataforma."
+            );
+        }
         AdminUserSummary updated = userManagementPort.updateStatus(
                 command.publicId(),
                 UserStatus.SUSPENDED,

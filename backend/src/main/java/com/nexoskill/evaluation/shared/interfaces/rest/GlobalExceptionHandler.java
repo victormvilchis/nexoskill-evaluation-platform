@@ -37,8 +37,15 @@ public class GlobalExceptionHandler {
             BusinessException exception,
             HttpServletRequest request) {
 
+        HttpStatus status = switch (exception.getCode()) {
+            case "QUESTION_CONCURRENT_MODIFICATION",
+                    "USER_CONCURRENT_MODIFICATION",
+                    "DATA_CONFLICT" -> HttpStatus.CONFLICT;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+
         return response(
-                HttpStatus.BAD_REQUEST,
+                status,
                 exception.getCode(),
                 exception.getMessage(),
                 request.getRequestURI(),

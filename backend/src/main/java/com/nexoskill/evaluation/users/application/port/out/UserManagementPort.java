@@ -58,6 +58,8 @@ public interface UserManagementPort {
             Instant temporaryPasswordExpiresAt
     );
 
+    long countEffectiveAdministrators(Instant now);
+
     List<RoleOption> listActiveRoles();
 
     record NewUserData(

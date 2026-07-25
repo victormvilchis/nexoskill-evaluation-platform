@@ -127,7 +127,7 @@ public class AdminQuestionController {
     }
 
     @PostMapping("/{publicId}/transitions")
-    @PreAuthorize("hasAnyAuthority('QUESTION_REVIEW','QUESTION_APPROVE','QUESTION_PUBLISH','QUESTION_ARCHIVE')")
+    @PreAuthorize("hasAuthority('QUESTION_ARCHIVE')")
     public QuestionDetail transition(
             @PathVariable String publicId,
             @Valid @RequestBody TransitionQuestionRequest body,

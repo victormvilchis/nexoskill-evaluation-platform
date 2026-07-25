@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { changePassword } from '../features/authentication/api/authApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { useToast } from '../shared/components/ToastProvider'
 
 export function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user, refresh, logout } = useAuth()
+  const toast = useToast()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -30,6 +32,7 @@ export function ChangePasswordPage() {
         confirmPassword
       })
       await refresh()
+      toast.success('Contraseña actualizada', 'Tu cuenta quedó protegida con la nueva contraseña.')
       navigate('/dashboard', { replace: true })
     } catch (requestError) {
       setError(

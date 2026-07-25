@@ -106,29 +106,17 @@ public class QuestionVersionJpaEntity {
         return entity;
     }
 
-    public void updateDraft(
-            String statement,
-            String explanation,
-            String changeSummary,
-            List<QuestionOptionJpaEntity> replacementOptions) {
-        if (status != QuestionStatus.DRAFT) {
-            throw new BusinessException(
-                    "QUESTION_VERSION_IMMUTABLE",
-                    "Solo una versión en borrador puede modificarse directamente."
-            );
-        }
-        this.statement = statement;
-        this.explanation = explanation;
-        this.changeSummary = changeSummary;
-        options.clear();
-        options.addAll(replacementOptions);
-    }
-
-    public void transitionTo(QuestionStatus target, Long actorUserId, Instant now) {
-        status = target;
+    public void publish(Long actorUserId, Instant now) {
+        status = QuestionStatus.PUBLISHED;
         statusChangedBy = actorUserId;
         statusChangedAt = now;
-        if (target == QuestionStatus.PUBLISHED) publishedAt = now;
+        publishedAt = now;
+    }
+
+    public void archive(Long actorUserId, Instant now) {
+        status = QuestionStatus.ARCHIVED;
+        statusChangedBy = actorUserId;
+        statusChangedAt = now;
     }
 
     public void addOption(QuestionOptionJpaEntity option) { options.add(option); }

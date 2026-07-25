@@ -1,7 +1,6 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
-import com.nexoskill.evaluation.shared.domain.BusinessException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -96,17 +95,16 @@ public class QuestionJpaEntity {
         return entity;
     }
 
-    public void registerCurrentVersion(QuestionVersionJpaEntity version) {
-        if (!versions.contains(version)) versions.add(version);
-        currentVersion = version;
-    }
-
-    public void registerNewDraftVersion(
-            QuestionVersionJpaEntity newVersion,
+    public void registerPublishedVersion(
+            QuestionVersionJpaEntity published,
             Long actorUserId,
             Instant now) {
-        registerCurrentVersion(newVersion);
-        status = QuestionStatus.DRAFT;
+        if (!versions.contains(published)) {
+            versions.add(published);
+        }
+        currentVersion = published;
+        publishedVersion = published;
+        status = QuestionStatus.PUBLISHED;
         touch(actorUserId, now);
     }
 
@@ -122,20 +120,9 @@ public class QuestionJpaEntity {
         touch(actorUserId, now);
     }
 
-    public void transitionTo(QuestionStatus target, Long actorUserId, Instant now) {
-        if (!status.canTransitionTo(target)) {
-            throw new BusinessException(
-                    "QUESTION_TRANSITION_NOT_ALLOWED",
-                    "La transición editorial solicitada no está permitida."
-            );
-        }
-        status = target;
-        if (target == QuestionStatus.PUBLISHED) {
-            publishedVersion = currentVersion;
-        } else if (target == QuestionStatus.ARCHIVED
-                && publishedVersion == currentVersion) {
-            publishedVersion = null;
-        }
+    public void archive(Long actorUserId, Instant now) {
+        status = QuestionStatus.ARCHIVED;
+        publishedVersion = null;
         touch(actorUserId, now);
     }
 

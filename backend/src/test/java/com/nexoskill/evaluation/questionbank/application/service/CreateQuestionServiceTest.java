@@ -39,7 +39,7 @@ class CreateQuestionServiceTest {
                 "Básico",
                 "7a6ad962-20a8-4303-b98e-770997f48db8",
                 "Java",
-                QuestionStatus.DRAFT,
+                QuestionStatus.PUBLISHED,
                 1,
                 0,
                 null,

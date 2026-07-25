@@ -36,7 +36,7 @@ public class DuplicateQuestionService {
                 sourcePublicId, UUID.randomUUID().toString(), command.actorUserId());
         auditLogPort.record(
                 command.actorUserId(), "QUESTION_DUPLICATED", "QUESTION_BANK",
-                "Se duplicó una pregunta como un nuevo borrador.",
+                "Se duplicó y publicó una nueva pregunta.",
                 command.ipAddress(), command.userAgent(),
                 Map.of(
                         "sourceQuestionPublicId", sourcePublicId,

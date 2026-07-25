@@ -12,7 +12,6 @@ import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
@@ -54,62 +53,58 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         QuestionJpaEntity persistedQuestion = questionRepository.save(question);
         QuestionVersionJpaEntity version = createVersion(
                 persistedQuestion, 1, data.statement(), data.explanation(),
-                null, data.options(), data.createdBy(), now);
+                "Publicación inicial", data.options(), data.createdBy(), now);
+        version.publish(data.createdBy(), now);
         QuestionVersionJpaEntity persistedVersion = versionRepository.save(version);
-        persistedQuestion.registerCurrentVersion(persistedVersion);
+        persistedQuestion.registerPublishedVersion(
+                persistedVersion, data.createdBy(), now);
         return toDetail(questionRepository.saveAndFlush(persistedQuestion));
     }
 
     @Override
     public UpdateResult update(UpdateQuestionData data) {
-        QuestionJpaEntity question = requiredQuestion(data.publicId());
+        QuestionJpaEntity question = requiredQuestionForUpdate(data.publicId());
         assertExpectedVersion(question, data.expectedEntityVersion());
-        if (question.getStatus() != QuestionStatus.DRAFT
-                && question.getStatus() != QuestionStatus.PUBLISHED) {
-            throw new BusinessException(
-                    "QUESTION_NOT_EDITABLE",
-                    "Solo pueden editarse preguntas en borrador o publicadas."
-            );
-        }
 
         CatalogSelection catalogs = resolveCatalogsForUpdate(
                 question, data.typeCode(), data.difficultyCode(), data.categoryPublicId());
         Instant now = clock.instant();
-        int previousVersion = requiredCurrentVersion(question).getVersionNumber();
+        QuestionVersionJpaEntity previousCurrent = requiredCurrentVersion(question);
+        int previousVersion = previousCurrent.getVersionNumber();
+        int nextVersion = versionRepository
+                .findByQuestion_IdOrderByVersionNumberDesc(question.getId())
+                .stream()
+                .mapToInt(QuestionVersionJpaEntity::getVersionNumber)
+                .max()
+                .orElse(0) + 1;
+
+        String changeSummary = data.changeSummary() == null
+                || data.changeSummary().isBlank()
+                ? "Actualización automática desde la versión " + previousVersion
+                : data.changeSummary().trim();
+
+        QuestionVersionJpaEntity newVersion = createVersion(
+                question, nextVersion, data.statement(), data.explanation(),
+                changeSummary, data.options(), data.updatedBy(), now);
+        newVersion.publish(data.updatedBy(), now);
+        QuestionVersionJpaEntity persistedVersion = versionRepository.save(newVersion);
+
+        QuestionVersionJpaEntity previouslyPublished = question.getPublishedVersion();
+        if (previouslyPublished != null
+                && !previouslyPublished.getId().equals(persistedVersion.getId())) {
+            previouslyPublished.archive(data.updatedBy(), now);
+            versionRepository.save(previouslyPublished);
+        }
+
         question.updateClassification(
                 catalogs.type(), catalogs.difficulty(), catalogs.category(),
                 data.updatedBy(), now);
+        question.registerPublishedVersion(persistedVersion, data.updatedBy(), now);
 
-        boolean createNewVersion = question.getStatus() == QuestionStatus.PUBLISHED;
-        if (createNewVersion && (data.changeSummary() == null || data.changeSummary().isBlank())) {
-            throw new BusinessException(
-                    "QUESTION_CHANGE_SUMMARY_REQUIRED",
-                    "Describe el cambio realizado para crear una nueva versión."
-            );
-        }
-        if (createNewVersion) {
-            int nextVersion = versionRepository
-                    .findByQuestion_IdOrderByVersionNumberDesc(question.getId())
-                    .stream()
-                    .mapToInt(QuestionVersionJpaEntity::getVersionNumber)
-                    .max()
-                    .orElse(0) + 1;
-            QuestionVersionJpaEntity newVersion = createVersion(
-                    question, nextVersion, data.statement(), data.explanation(),
-                    data.changeSummary(), data.options(), data.updatedBy(), now);
-            QuestionVersionJpaEntity persisted = versionRepository.save(newVersion);
-            question.registerNewDraftVersion(persisted, data.updatedBy(), now);
-        } else {
-            QuestionVersionJpaEntity current = requiredCurrentVersion(question);
-            current.updateDraft(
-                    data.statement(), data.explanation(), data.changeSummary(),
-                    buildOptions(current, data.options(), now));
-            versionRepository.save(current);
-        }
         return new UpdateResult(
                 toDetail(questionRepository.saveAndFlush(question)),
                 previousVersion,
-                createNewVersion
+                true
         );
     }
 
@@ -119,23 +114,23 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             QuestionStatus targetStatus,
             long expectedEntityVersion,
             Long actorUserId) {
-        QuestionJpaEntity question = requiredQuestion(publicId);
+        if (targetStatus != QuestionStatus.ARCHIVED) {
+            throw new BusinessException(
+                    "QUESTION_WORKFLOW_SIMPLIFIED",
+                    "Las preguntas se publican automáticamente. Solo está disponible la acción de archivar."
+            );
+        }
+
+        QuestionJpaEntity question = requiredQuestionForUpdate(publicId);
         assertExpectedVersion(question, expectedEntityVersion);
         QuestionStatus previous = question.getStatus();
         Instant now = clock.instant();
         QuestionVersionJpaEntity current = requiredCurrentVersion(question);
-        QuestionVersionJpaEntity previouslyPublished = question.getPublishedVersion();
-        if (targetStatus == QuestionStatus.PUBLISHED
-                && previouslyPublished != null
-                && !previouslyPublished.getId().equals(current.getId())) {
-            previouslyPublished.transitionTo(QuestionStatus.ARCHIVED, actorUserId, now);
-            versionRepository.save(previouslyPublished);
-        }
-        question.transitionTo(targetStatus, actorUserId, now);
-        current.transitionTo(targetStatus, actorUserId, now);
+        current.archive(actorUserId, now);
         versionRepository.save(current);
+        question.archive(actorUserId, now);
         QuestionDetail detail = toDetail(questionRepository.saveAndFlush(question));
-        return new TransitionResult(detail, previous, targetStatus);
+        return new TransitionResult(detail, previous, QuestionStatus.ARCHIVED);
     }
 
     @Override
@@ -159,8 +154,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 sourceVersion.getExplanation(),
                 "Duplicada desde " + sourcePublicId,
                 options, actorUserId, now);
+        version.publish(actorUserId, now);
         QuestionVersionJpaEntity persistedVersion = versionRepository.save(version);
-        persisted.registerCurrentVersion(persistedVersion);
+        persisted.registerPublishedVersion(persistedVersion, actorUserId, now);
         return toDetail(questionRepository.saveAndFlush(persisted));
     }
 
@@ -228,20 +224,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         return version;
     }
 
-    private List<QuestionOptionJpaEntity> buildOptions(
-            QuestionVersionJpaEntity version,
-            List<QuestionOptionCommand> options,
-            Instant now) {
-        List<QuestionOptionJpaEntity> result = new ArrayList<>();
-        int order = 1;
-        for (QuestionOptionCommand option : options) {
-            result.add(QuestionOptionJpaEntity.create(
-                    version, UUID.randomUUID().toString(), order++,
-                    option.text(), option.correct(), now));
-        }
-        return result;
-    }
-
     private CatalogSelection resolveCatalogsForUpdate(
             QuestionJpaEntity question,
             String typeCode,
@@ -298,6 +280,13 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
 
     private QuestionJpaEntity requiredQuestion(String publicId) {
         return questionRepository.findByPublicId(publicId)
+                .orElseThrow(() -> new BusinessException(
+                        "QUESTION_NOT_FOUND",
+                        "La pregunta solicitada no existe."));
+    }
+
+    private QuestionJpaEntity requiredQuestionForUpdate(String publicId) {
+        return questionRepository.findByPublicIdForUpdate(publicId)
                 .orElseThrow(() -> new BusinessException(
                         "QUESTION_NOT_FOUND",
                         "La pregunta solicitada no existe."));

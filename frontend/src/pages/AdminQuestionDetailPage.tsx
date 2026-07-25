@@ -8,16 +8,15 @@ import {
   transitionQuestion
 } from '../features/questions/api/questionApi'
 import { ApiRequestError } from '../shared/api/apiClient'
-import type {
-  QuestionDetail,
-  QuestionHistory,
-  QuestionStatus
-} from '../shared/types/questions'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { Icon } from '../shared/components/Icon'
+import { useToast } from '../shared/components/ToastProvider'
+import type { QuestionDetail, QuestionHistory, QuestionStatus } from '../shared/types/questions'
 
 const statusLabels: Record<QuestionStatus, string> = {
-  DRAFT: 'Borrador',
-  UNDER_REVIEW: 'En revisión',
-  APPROVED: 'Aprobada',
+  DRAFT: 'Estado anterior',
+  UNDER_REVIEW: 'Estado anterior',
+  APPROVED: 'Estado anterior',
   PUBLISHED: 'Publicada',
   ARCHIVED: 'Archivada'
 }
@@ -25,22 +24,23 @@ const statusLabels: Record<QuestionStatus, string> = {
 function formatDate(value: string | null) {
   if (!value) return 'Sin registro'
   return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'long',
+    dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(value))
 }
 
 export function AdminQuestionDetailPage() {
   const { publicId } = useParams()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
   const [question, setQuestion] = useState<QuestionDetail | null>(null)
   const [history, setHistory] = useState<QuestionHistory | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [criticalError, setCriticalError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<'archive' | 'duplicate' | null>(null)
 
   const hasPermission = useCallback(
     (permission: string) => user?.permissions.includes(permission) ?? false,
@@ -58,53 +58,72 @@ export function AdminQuestionDetailPage() {
 
   useEffect(() => {
     if (!publicId) {
-      setError('No se indicó la pregunta.')
+      setCriticalError('No se indicó la pregunta.')
       setLoading(false)
       return
     }
     load()
-      .catch((requestError) => setError(
-        requestError instanceof ApiRequestError
+      .catch((requestError) => {
+        const message = requestError instanceof ApiRequestError
           ? requestError.message
           : 'No fue posible consultar la pregunta.'
-      ))
+        setCriticalError(message)
+        toast.error('No fue posible cargar la pregunta', message)
+      })
       .finally(() => setLoading(false))
-  }, [load, publicId])
+  }, [load, publicId, toast])
 
-  async function changeStatus(
-    targetStatus: QuestionStatus,
-    confirmation: string,
-    message: string
-  ) {
-    if (!question || !publicId || !window.confirm(confirmation)) return
+  useEffect(() => {
+    const created = searchParams.get('created') === '1'
+    const updated = searchParams.get('updated') === '1'
+    const duplicated = searchParams.get('duplicated') === '1'
+    if (!created && !updated && !duplicated) return
+
+    if (created) toast.success('Pregunta creada', 'La pregunta quedó publicada y disponible.')
+    if (updated) toast.success('Cambios publicados', 'Se creó una nueva versión de la pregunta.')
+    if (duplicated) toast.success('Pregunta duplicada', 'La copia quedó publicada correctamente.')
+    setSearchParams(new URLSearchParams(), { replace: true })
+  }, [searchParams, setSearchParams, toast])
+
+  async function archiveQuestion() {
+    if (!question || !publicId) return
     setProcessing(true)
-    setError(null)
     try {
       const updated = await transitionQuestion(publicId, {
-        targetStatus,
+        targetStatus: 'ARCHIVED',
         expectedEntityVersion: question.entityVersion
       })
       setQuestion(updated)
-      setSuccess(message)
       if (hasPermission('QUESTION_VERSION_VIEW')) {
         setHistory(await getQuestionHistory(publicId))
       }
+      toast.success('Pregunta archivada', 'Ya no estará disponible para nuevas evaluaciones.')
+      setConfirmation(null)
     } catch (requestError) {
-      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible cambiar el estado.')
+      toast.error(
+        'No fue posible archivar',
+        requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'Intenta nuevamente.'
+      )
     } finally {
       setProcessing(false)
     }
   }
 
   async function handleDuplicate() {
-    if (!publicId || !window.confirm('Se creará una nueva pregunta en borrador. ¿Continuar?')) return
+    if (!publicId) return
     setProcessing(true)
-    setError(null)
     try {
       const duplicated = await duplicateQuestion(publicId)
       navigate(`/admin/questions/${duplicated.publicId}?duplicated=1`)
     } catch (requestError) {
-      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible duplicar la pregunta.')
+      toast.error(
+        'No fue posible duplicar',
+        requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'Intenta nuevamente.'
+      )
       setProcessing(false)
     }
   }
@@ -119,80 +138,104 @@ export function AdminQuestionDetailPage() {
         <div>
           <p className="eyebrow">Banco de preguntas</p>
           <h1>Detalle de pregunta</h1>
-          <p className="muted">Administra el contenido, el estado editorial y sus versiones.</p>
+          <p className="muted">Consulta el contenido, clasificación e historial.</p>
         </div>
         <div className="heading-actions">
-          <Link className="secondary-button button-link" to="/admin/questions">Volver</Link>
-          {question && hasPermission('QUESTION_UPDATE') && (question.status === 'DRAFT' || question.status === 'PUBLISHED') && (
-            <Link className="secondary-button button-link" to={`/admin/questions/${question.publicId}/edit`}>Editar</Link>
+          <Link className="secondary-button button-link" to="/admin/questions">
+            Volver
+          </Link>
+          {question && hasPermission('QUESTION_UPDATE') && (
+            <Link className="primary-button button-link" to={`/admin/questions/${question.publicId}/edit`}>
+              <Icon name="edit" size={16} />Editar
+            </Link>
           )}
         </div>
       </div>
 
-      {(searchParams.get('created') === '1' || searchParams.get('updated') === '1') && (
-        <div className="success-message" role="status">La pregunta se guardó correctamente.</div>
-      )}
-      {searchParams.get('duplicated') === '1' && <div className="success-message">La pregunta se duplicó como borrador.</div>}
-      {success && <div className="success-message" role="status">{success}</div>}
-      {error && <div className="error-message">{error}</div>}
+      {criticalError && <div className="error-message">{criticalError}</div>}
 
       {question && (
         <>
-          <section className="workflow-actions" aria-label="Flujo editorial">
-            <div>
-              <strong>Acciones editoriales</strong>
-              <span className="muted">Versión actual: {question.versionNumber}</span>
+          <section className="compact-action-bar" aria-label="Acciones de pregunta">
+            <div className="compact-action-summary">
+              <span className={`entity-status question-status-${question.status.toLowerCase()}`}>
+                {statusLabels[question.status]}
+              </span>
+              <span>Versión {question.versionNumber}</span>
             </div>
-            <div className="workflow-button-group">
-              {question.status === 'DRAFT' && hasPermission('QUESTION_REVIEW') && <button className="primary-button" disabled={processing} onClick={() => void changeStatus('UNDER_REVIEW', '¿Enviar esta pregunta a revisión?', 'La pregunta fue enviada a revisión.')}>Enviar a revisión</button>}
-              {question.status === 'UNDER_REVIEW' && hasPermission('QUESTION_APPROVE') && <button className="primary-button" disabled={processing} onClick={() => void changeStatus('APPROVED', '¿Aprobar esta pregunta?', 'La pregunta fue aprobada.')}>Aprobar</button>}
-              {(question.status === 'UNDER_REVIEW' || question.status === 'APPROVED') && hasPermission('QUESTION_REVIEW') && <button className="secondary-button" disabled={processing} onClick={() => void changeStatus('DRAFT', '¿Devolver esta pregunta a borrador?', 'La pregunta volvió a borrador.')}>Devolver a borrador</button>}
-              {question.status === 'APPROVED' && hasPermission('QUESTION_PUBLISH') && <button className="primary-button" disabled={processing} onClick={() => void changeStatus('PUBLISHED', 'La versión quedará disponible para futuras evaluaciones. ¿Publicar?', 'La pregunta fue publicada.')}>Publicar</button>}
-              {question.status === 'PUBLISHED' && hasPermission('QUESTION_ARCHIVE') && <button className="danger-button" disabled={processing} onClick={() => void changeStatus('ARCHIVED', '¿Archivar esta pregunta publicada?', 'La pregunta fue archivada.')}>Archivar</button>}
-              {hasPermission('QUESTION_DUPLICATE') && <button className="secondary-button" disabled={processing} onClick={() => void handleDuplicate()}>Duplicar</button>}
+            <div className="heading-actions">
+              {hasPermission('QUESTION_DUPLICATE') && (
+                <button className="secondary-button" disabled={processing} type="button" onClick={() => setConfirmation('duplicate')}>
+                  <Icon name="copy" size={16} />Duplicar
+                </button>
+              )}
+              {question.status === 'PUBLISHED' && hasPermission('QUESTION_ARCHIVE') && (
+                <button className="danger-button" disabled={processing} type="button" onClick={() => setConfirmation('archive')}>
+                  <Icon name="archive" size={16} />Archivar
+                </button>
+              )}
             </div>
           </section>
 
           <div className="question-detail-layout">
             <section className="detail-card question-statement-card">
               <div className="detail-card-heading">
-                <div><span className="muted-label">Enunciado</span><h2>{question.statement}</h2></div>
-                <span className={`entity-status question-status-${question.status.toLowerCase()}`}>{statusLabels[question.status]}</span>
+                <div>
+                  <span className="muted-label">Enunciado</span>
+                  <h2>{question.statement}</h2>
+                </div>
               </div>
-              {question.publishedVersionNumber && question.publishedVersionNumber !== question.versionNumber && (
-                <div className="version-note">La versión {question.publishedVersionNumber} continúa publicada mientras se trabaja en la versión {question.versionNumber}.</div>
-              )}
               <dl className="question-metadata-grid">
                 <div><dt>Tipo</dt><dd>{question.typeName}</dd></div>
                 <div><dt>Dificultad</dt><dd>{question.difficultyName}</dd></div>
                 <div><dt>Categoría</dt><dd>{question.categoryName}</dd></div>
                 <div><dt>Versión</dt><dd>{question.versionNumber}</dd></div>
-                <div><dt>Creada</dt><dd>{formatDate(question.createdAt)}</dd></div>
-                <div><dt>Última modificación</dt><dd>{formatDate(question.updatedAt)}</dd></div>
+                <div><dt>Creación</dt><dd>{formatDate(question.createdAt)}</dd></div>
+                <div><dt>Modificación</dt><dd>{formatDate(question.updatedAt)}</dd></div>
               </dl>
             </section>
 
             <section className="detail-card">
-              <p className="eyebrow">Configuración</p><h2>Opciones de respuesta</h2>
+              <div className="card-title-row">
+                <div><p className="eyebrow">Configuración</p><h2>Opciones de respuesta</h2></div>
+                <span className="count-badge">{question.options.length}</span>
+              </div>
               <ol className="question-answer-list">
-                {question.options.map((option) => <li className={option.correct ? 'correct-answer' : ''} key={option.publicId}><span>{option.text}</span>{option.correct && <strong>Respuesta correcta</strong>}</li>)}
+                {question.options.map((option) => (
+                  <li className={option.correct ? 'correct-answer' : ''} key={option.publicId}>
+                    <span>{option.text}</span>
+                    {option.correct && <strong><Icon name="check" size={14} />Correcta</strong>}
+                  </li>
+                ))}
               </ol>
             </section>
 
             <section className="detail-card">
-              <p className="eyebrow">Retroalimentación</p><h2>Explicación</h2>
-              <p className="question-explanation">{question.explanation || 'No se agregó una explicación.'}</p>
+              <p className="eyebrow">Retroalimentación</p>
+              <h2>Explicación</h2>
+              <p className="question-explanation">
+                {question.explanation || 'No se agregó una explicación.'}
+              </p>
             </section>
 
             {history && (
               <section className="detail-card">
-                <p className="eyebrow">Trazabilidad</p><h2>Historial de versiones</h2>
+                <p className="eyebrow">Trazabilidad</p>
+                <h2>Historial de versiones</h2>
                 <div className="version-history-list">
                   {history.versions.map((version) => (
                     <article key={version.versionNumber}>
-                      <div><strong>Versión {version.versionNumber}</strong><span className={`entity-status question-status-${version.status.toLowerCase()}`}>{statusLabels[version.status]}</span></div>
-                      <p>{version.changeSummary || 'Sin resumen de cambios.'}</p>
-                      <small>Creada: {formatDate(version.createdAt)}{version.publishedAt ? ` · Publicada: ${formatDate(version.publishedAt)}` : ''}</small>
+                      <div>
+                        <strong>Versión {version.versionNumber}</strong>
+                        <span className={`entity-status question-status-${version.status.toLowerCase()}`}>
+                          {statusLabels[version.status]}
+                        </span>
+                      </div>
+                      <p>{version.changeSummary || 'Actualización de contenido.'}</p>
+                      <small>
+                        {formatDate(version.createdAt)}
+                        {version.publishedAt ? ` · Publicada ${formatDate(version.publishedAt)}` : ''}
+                      </small>
                     </article>
                   ))}
                 </div>
@@ -201,6 +244,26 @@ export function AdminQuestionDetailPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmation === 'archive'}
+        title="Archivar pregunta"
+        description="La pregunta dejará de estar disponible para nuevas evaluaciones. Su historial se conservará."
+        confirmLabel="Archivar"
+        tone="danger"
+        busy={processing}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => void archiveQuestion()}
+      />
+      <ConfirmDialog
+        open={confirmation === 'duplicate'}
+        title="Duplicar pregunta"
+        description="Se creará una copia independiente y se publicará automáticamente."
+        confirmLabel="Duplicar y publicar"
+        busy={processing}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => void handleDuplicate()}
+      />
     </main>
   )
 }

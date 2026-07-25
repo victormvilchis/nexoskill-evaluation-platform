@@ -73,7 +73,7 @@ public class CreateQuestionService {
                 command.actorUserId(),
                 "QUESTION_CREATED",
                 "QUESTION_BANK",
-                "Se creó una pregunta en estado borrador.",
+                "Se creó y publicó una pregunta.",
                 command.ipAddress(),
                 command.userAgent(),
                 Map.of(

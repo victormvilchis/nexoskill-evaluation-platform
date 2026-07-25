@@ -46,10 +46,8 @@ public class GetWelcomeDashboardService {
                 administrator ? "ADMIN" : "USER",
                 "Bienvenido, " + user.displayName(),
                 administrator
-                        ? "La base administrativa está lista para incorporar "
-                          + "usuarios, preguntas y evaluaciones."
-                        : "Tu cuenta está activa. Próximamente podrás consultar "
-                          + "y realizar las evaluaciones asignadas.",
+                        ? "Administra accesos y contenidos desde un solo lugar."
+                        : "Consulta tu actividad y administra la seguridad de tu cuenta.",
                 now,
                 administrator
                         ? adminModules()

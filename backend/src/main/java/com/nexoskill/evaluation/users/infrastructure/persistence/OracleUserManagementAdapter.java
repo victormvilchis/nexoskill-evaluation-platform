@@ -159,6 +159,13 @@ public class OracleUserManagementAdapter implements UserManagementPort {
     }
 
     @Override
+    public long countEffectiveAdministrators(Instant now) {
+        return userRepository.countEffectiveAdministrators(
+                now, UserStatus.ACTIVE, UserAccessStatus.ACTIVE
+        );
+    }
+
+    @Override
     public List<RoleOption> listActiveRoles() {
         return roleRepository.findByStatusOrderByNameAsc("ACTIVE").stream()
                 .map(role -> new RoleOption(role.getCode(), role.getName()))

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class QuestionJpaEntityTest {
 
     @Test
-    void clearsPublishedVersionWhenPublishedQuestionIsArchived() {
+    void publishesImmediatelyAndClearsPublishedReferenceWhenArchived() {
         QuestionJpaEntity question = QuestionJpaEntity.create(
                 "7a6ad962-20a8-4303-b98e-770997f48db8",
                 mock(QuestionTypeJpaEntity.class),
@@ -20,15 +20,21 @@ class QuestionJpaEntityTest {
                 Instant.parse("2026-07-24T12:00:00Z")
         );
         QuestionVersionJpaEntity version = mock(QuestionVersionJpaEntity.class);
-        question.registerCurrentVersion(version);
 
-        question.transitionTo(QuestionStatus.UNDER_REVIEW, 1L, Instant.now());
-        question.transitionTo(QuestionStatus.APPROVED, 1L, Instant.now());
-        question.transitionTo(QuestionStatus.PUBLISHED, 1L, Instant.now());
+        question.registerPublishedVersion(
+                version,
+                1L,
+                Instant.parse("2026-07-24T12:01:00Z")
+        );
+
+        assertThat(question.getStatus()).isEqualTo(QuestionStatus.PUBLISHED);
+        assertThat(question.getCurrentVersion()).isSameAs(version);
         assertThat(question.getPublishedVersion()).isSameAs(version);
 
-        question.transitionTo(QuestionStatus.ARCHIVED, 1L, Instant.now());
+        question.archive(1L, Instant.parse("2026-07-24T12:02:00Z"));
 
+        assertThat(question.getStatus()).isEqualTo(QuestionStatus.ARCHIVED);
+        assertThat(question.getCurrentVersion()).isSameAs(version);
         assertThat(question.getPublishedVersion()).isNull();
     }
 }

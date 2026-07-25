@@ -12,6 +12,8 @@ import {
 } from '../features/users/api/userApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { useToast } from '../shared/components/ToastProvider'
 import type { AdminUser, RoleOption } from '../shared/types/users'
 
 function toLocalInputValue(value: string) {
@@ -32,15 +34,25 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiRequestError ? error.message : fallback
 }
 
+interface PendingConfirmation {
+  key: string
+  title: string
+  description: string
+  confirmLabel: string
+  tone?: 'primary' | 'danger'
+  action: () => Promise<void>
+}
+
 export function AdminUserDetailPage() {
   const { publicId = '' } = useParams()
   const { user: currentUser } = useAuth()
+  const toast = useToast()
   const [user, setUser] = useState<AdminUser | null>(null)
   const [roles, setRoles] = useState<RoleOption[]>([])
   const [loading, setLoading] = useState(true)
   const [busyAction, setBusyAction] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null)
 
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -109,13 +121,14 @@ export function AdminUserDetailPage() {
   ) {
     setBusyAction(key)
     setError(null)
-    setMessage(null)
     try {
       const response = await action()
       synchronize(response)
-      setMessage(successMessage)
+      toast.success(successMessage)
     } catch (requestError) {
-      setError(errorMessage(requestError, 'No fue posible completar la operación.'))
+      const message = errorMessage(requestError, 'No fue posible completar la operación.')
+      setError(message)
+      toast.error('Operación no completada', message)
     } finally {
       setBusyAction(null)
     }
@@ -135,78 +148,103 @@ export function AdminUserDetailPage() {
     )
   }
 
-  async function handleAccessSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const confirmation = window.confirm(
-      '¿Confirmas la modificación de la vigencia del usuario?'
-    )
-    if (!confirmation) return
-
-    await runAction(
-      'access',
-      () => updateUserAccess(publicId, {
-        startsAt: new Date(startsAt).toISOString(),
-        expiresAt: withoutExpiration ? null : new Date(expiresAt).toISOString()
-      }),
-      'La vigencia fue actualizada.'
-    )
+  function requestConfirmation(value: PendingConfirmation) {
+    setConfirmation(value)
   }
 
-  async function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const confirmation = window.confirm(
-      `¿Confirmas asignar el rol ${roleCode} a este usuario?`
-    )
+  async function executeConfirmation() {
     if (!confirmation) return
-
-    await runAction(
-      'role',
-      () => updateUserRole(publicId, { roleCode }),
-      'El rol fue actualizado.'
-    )
+    await confirmation.action()
+    setConfirmation(null)
   }
 
-  async function handleSuspend() {
+  function handleAccessSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    requestConfirmation({
+      key: 'access',
+      title: 'Actualizar vigencia',
+      description: 'El nuevo periodo se aplicará inmediatamente. Si la vigencia ya terminó, la sesión del usuario será bloqueada en su siguiente validación.',
+      confirmLabel: 'Guardar vigencia',
+      action: () => runAction(
+        'access',
+        () => updateUserAccess(publicId, {
+          startsAt: new Date(startsAt).toISOString(),
+          expiresAt: withoutExpiration ? null : new Date(expiresAt).toISOString()
+        }),
+        'La vigencia fue actualizada.'
+      )
+    })
+  }
+
+  function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    requestConfirmation({
+      key: 'role',
+      title: 'Cambiar rol',
+      description: `Se asignará el rol ${roleCode}. Las sesiones activas del usuario se cerrarán para aplicar los permisos nuevos.`,
+      confirmLabel: 'Cambiar rol',
+      action: () => runAction(
+        'role',
+        () => updateUserRole(publicId, { roleCode }),
+        'El rol fue actualizado.'
+      )
+    })
+  }
+
+  function handleSuspend() {
     if (isCurrentUser) return
-    const confirmation = window.confirm(
-      '¿Confirmas suspender al usuario? Sus sesiones activas se cerrarán inmediatamente.'
-    )
-    if (!confirmation) return
-    await runAction(
-      'suspend',
-      () => suspendUser(publicId),
-      'El usuario fue suspendido y sus sesiones fueron invalidadas.'
-    )
+    requestConfirmation({
+      key: 'suspend',
+      title: 'Suspender usuario',
+      description: 'El usuario perderá el acceso y todas sus sesiones activas se cerrarán inmediatamente.',
+      confirmLabel: 'Suspender usuario',
+      tone: 'danger',
+      action: () => runAction(
+        'suspend',
+        () => suspendUser(publicId),
+        'El usuario fue suspendido y sus sesiones fueron invalidadas.'
+      )
+    })
   }
 
-  async function handleActivate() {
-    const confirmation = window.confirm('¿Confirmas activar al usuario?')
-    if (!confirmation) return
-    await runAction(
-      'activate',
-      () => activateUser(publicId),
-      'El usuario fue activado.'
-    )
+  function handleActivate() {
+    requestConfirmation({
+      key: 'activate',
+      title: 'Activar usuario',
+      description: 'La cuenta volverá a estar disponible siempre que su periodo de vigencia también esté activo.',
+      confirmLabel: 'Activar usuario',
+      action: () => runAction(
+        'activate',
+        () => activateUser(publicId),
+        'El usuario fue activado.'
+      )
+    })
   }
 
-  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
+  function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (temporaryPassword !== confirmPassword) {
-      setError('La confirmación de contraseña no coincide.')
+      const message = 'La confirmación de contraseña no coincide.'
+      setError(message)
+      toast.warning('Revisa la contraseña', message)
       return
     }
-    const confirmation = window.confirm(
-      '¿Confirmas restablecer la contraseña? Todas las sesiones del usuario se cerrarán.'
-    )
-    if (!confirmation) return
-
-    await runAction(
-      'password',
-      () => resetUserPassword(publicId, { temporaryPassword }),
-      'La contraseña temporal fue restablecida y las sesiones fueron invalidadas.'
-    )
-    setTemporaryPassword('')
-    setConfirmPassword('')
+    requestConfirmation({
+      key: 'password',
+      title: 'Restablecer contraseña',
+      description: 'Se establecerá una contraseña temporal y todas las sesiones activas del usuario se cerrarán.',
+      confirmLabel: 'Restablecer contraseña',
+      tone: 'danger',
+      action: async () => {
+        await runAction(
+          'password',
+          () => resetUserPassword(publicId, { temporaryPassword }),
+          'La contraseña temporal fue restablecida y las sesiones fueron invalidadas.'
+        )
+        setTemporaryPassword('')
+        setConfirmPassword('')
+      }
+    })
   }
 
   if (loading) {
@@ -239,7 +277,6 @@ export function AdminUserDetailPage() {
         </Link>
       </div>
 
-      {message && <div className="success-message" role="status">{message}</div>}
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="user-overview-grid">
@@ -275,7 +312,7 @@ export function AdminUserDetailPage() {
                 className="primary-button"
                 type="button"
                 disabled={busyAction !== null}
-                onClick={() => void handleActivate()}
+                onClick={handleActivate}
               >
                 {busyAction === 'activate' ? 'Activando…' : 'Activar usuario'}
               </button>
@@ -285,7 +322,7 @@ export function AdminUserDetailPage() {
                 type="button"
                 disabled={busyAction !== null || isCurrentUser}
                 title={isCurrentUser ? 'No puedes suspender tu propia cuenta.' : undefined}
-                onClick={() => void handleSuspend()}
+                onClick={handleSuspend}
               >
                 {busyAction === 'suspend' ? 'Suspendiendo…' : 'Suspender usuario'}
               </button>
@@ -411,6 +448,19 @@ export function AdminUserDetailPage() {
           </form>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmation !== null}
+        title={confirmation?.title ?? ''}
+        description={confirmation?.description ?? ''}
+        confirmLabel={confirmation?.confirmLabel ?? 'Confirmar'}
+        tone={confirmation?.tone}
+        busy={confirmation !== null && busyAction === confirmation.key}
+        onCancel={() => {
+          if (busyAction === null) setConfirmation(null)
+        }}
+        onConfirm={() => void executeConfirmation()}
+      />
     </main>
   )
 }

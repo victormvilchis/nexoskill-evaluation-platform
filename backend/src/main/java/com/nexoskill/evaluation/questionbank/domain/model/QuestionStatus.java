@@ -1,5 +1,10 @@
 package com.nexoskill.evaluation.questionbank.domain.model;
 
+/**
+ * Editorial states retained for compatibility with historical records.
+ * New questions are published immediately; the only interactive transition
+ * available in the simplified workflow is PUBLISHED -> ARCHIVED.
+ */
 public enum QuestionStatus {
     DRAFT,
     UNDER_REVIEW,
@@ -8,12 +13,6 @@ public enum QuestionStatus {
     ARCHIVED;
 
     public boolean canTransitionTo(QuestionStatus target) {
-        return switch (this) {
-            case DRAFT -> target == UNDER_REVIEW;
-            case UNDER_REVIEW -> target == APPROVED || target == DRAFT;
-            case APPROVED -> target == PUBLISHED || target == DRAFT;
-            case PUBLISHED -> target == ARCHIVED;
-            case ARCHIVED -> false;
-        };
+        return this == PUBLISHED && target == ARCHIVED;
     }
 }
