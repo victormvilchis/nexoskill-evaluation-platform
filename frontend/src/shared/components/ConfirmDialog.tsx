@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Icon } from './Icon'
 
 interface ConfirmDialogProps {
@@ -8,6 +9,7 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   tone?: 'primary' | 'danger'
   busy?: boolean
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -20,6 +22,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   tone = 'primary',
   busy = false,
+  children,
   onConfirm,
   onCancel
 }: ConfirmDialogProps) {
@@ -41,6 +44,7 @@ export function ConfirmDialog({
           <h2 id="confirm-dialog-title">{title}</h2>
           <p>{description}</p>
         </div>
+        {children && <div className="dialog-content">{children}</div>}
         <div className="dialog-actions">
           <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>
             {cancelLabel}

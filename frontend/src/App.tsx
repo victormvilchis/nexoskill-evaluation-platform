@@ -7,6 +7,7 @@ import { CollectionDetailPage } from './pages/CollectionDetailPage'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
+import { AdminUserManagementPage } from './pages/AdminUserManagementPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
@@ -73,7 +74,15 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
-            <Route path="/admin/users/:publicId" element={<AdminUserDetailPage />} />
+            <Route path="/admin/users/:publicId" element={<AdminUserDetailPage mode="view" />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission="USER_UPDATE" />}>
+            <Route path="/admin/users/:publicId/edit" element={<AdminUserDetailPage mode="edit" />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission="USER_STATUS_CHANGE" />}>
+            <Route path="/admin/users/:publicId/manage" element={<AdminUserManagementPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>

@@ -58,7 +58,9 @@ final class UserManagementSupport {
 		data.put("displayName", user.displayName());
 		data.put("status", user.status().name());
 		data.put("roles", user.roles());
+		data.put("organizationPublicId", user.organizationPublicId() == null ? "GLOBAL" : user.organizationPublicId());
 		data.put("accessStatus", user.accessStatus().name());
+		data.put("statusReason", user.statusReason() == null ? "NO_REASON" : user.statusReason());
 		data.put("startsAt", user.startsAt().toString());
 		data.put("expiresAt", user.expiresAt() == null ? "NO_EXPIRATION" : user.expiresAt().toString());
 		return data;

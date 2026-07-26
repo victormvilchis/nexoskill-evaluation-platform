@@ -31,8 +31,9 @@ class UpdateUserRoleServiceTest {
 		UpdateUserRoleService service = new UpdateUserRoleService(userManagementPort, userSessionPort, auditLogPort,
 				Clock.fixed(NOW, ZoneOffset.UTC));
 		AdminUserSummary summary = new AdminUserSummary("admin-public-id", "admin@nexoskill.local", "Administrador",
-				"NexoSkill", "Administrador NexoSkill", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"),
-				UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null);
+				"NexoSkill", "Administrador NexoSkill", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"), null, null,
+				UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null, NOW.minusSeconds(3600),
+				NOW.minusSeconds(300), "Sistema", "Creación de usuario");
 		when(userManagementPort.getByPublicId("admin-public-id"))
 				.thenReturn(new UserManagementPort.ManagedUser(10L, summary));
 		when(userManagementPort.countEffectiveAdministrators(NOW)).thenReturn(1L);

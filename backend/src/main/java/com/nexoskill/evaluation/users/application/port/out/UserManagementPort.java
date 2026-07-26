@@ -18,16 +18,19 @@ public interface UserManagementPort {
             String firstName, String lastName, String displayName);
     AdminUserSummary updateAccess(String publicId, Instant startsAt, Instant expiresAt);
     AdminUserSummary updateRole(String publicId, String roleCode);
-    AdminUserSummary updateStatus(String publicId, UserStatus userStatus,
-            UserAccessStatus accessStatus, Instant changedAt);
+    AdminUserSummary updateOrganization(String publicId, String organizationPublicId, Long actorUserId,
+            Instant changedAt);
+    AdminUserSummary updateStatus(String publicId, UserStatus userStatus, UserAccessStatus accessStatus,
+            Long actorUserId, String reason, Instant changedAt);
     AdminUserSummary softDelete(String publicId, Long actorUserId, String reason, Instant changedAt);
-    AdminUserSummary restore(String publicId, Instant changedAt);
+    AdminUserSummary restore(String publicId, Long actorUserId, String reason, Instant changedAt);
     AdminUserSummary updatePassword(String publicId, String passwordHash, Instant temporaryPasswordExpiresAt);
     long countEffectiveAdministrators(Instant now);
     List<RoleOption> listActiveRoles();
 
     record NewUserData(String publicId, String email, String normalizedEmail, String passwordHash,
-            String firstName, String lastName, String displayName, String roleCode, Instant startsAt,
-            Instant expiresAt, Instant temporaryPasswordExpiresAt) {}
+            String firstName, String lastName, String displayName, String roleCode, String organizationPublicId,
+            UserStatus initialStatus, Instant startsAt, Instant expiresAt, Instant temporaryPasswordExpiresAt,
+            Long actorUserId, Instant createdAt) {}
     record ManagedUser(Long internalId, AdminUserSummary summary) {}
 }

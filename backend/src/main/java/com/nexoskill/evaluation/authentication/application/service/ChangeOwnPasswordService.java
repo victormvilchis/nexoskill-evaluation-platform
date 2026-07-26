@@ -42,8 +42,17 @@ public class ChangeOwnPasswordService {
 		this.clock = clock;
 	}
 
-	@Transactional
+	@Transactional(noRollbackFor = BusinessException.class)
 	public void change(ChangePasswordCommand command) {
+		try {
+			changeValidated(command);
+		} catch (BusinessException exception) {
+			recordFailure(command, exception);
+			throw exception;
+		}
+	}
+
+	private void changeValidated(ChangePasswordCommand command) {
 		if (!command.newPassword().equals(command.confirmPassword())) {
 			throw new BusinessException("PASSWORD_CONFIRMATION_MISMATCH",
 					"La confirmación de la contraseña no coincide.");
@@ -66,15 +75,22 @@ public class ChangeOwnPasswordService {
 		user.changePassword(passwordHasher.encode(command.newPassword()), now);
 		userRepository.save(user);
 
-		int revokedSessions = userSessionPort.revokeOtherActiveSessions(user.getId(), command.currentSessionTokenHash(),
-				now);
+		int revokedSessions = userSessionPort.revokeActiveSessions(user.getId(), now);
 
 		Map<String, Object> data = new LinkedHashMap<>();
 		data.put("revokedSessions", revokedSessions);
 		data.put("passwordChangeRequiredBefore", passwordChangeRequiredBefore);
 
-		auditLogPort.record(user.getId(), "PASSWORD_CHANGED", "PROFILE", "El usuario cambió su contraseña.",
+		auditLogPort.record(user.getId(), "PASSWORD_CHANGED", "PROFILE", "El usuario cambió su contraseña y se invalidaron todos los tokens anteriores.",
 				command.ipAddress(), command.userAgent(), data, now);
+	}
+
+	private void recordFailure(ChangePasswordCommand command, BusinessException exception) {
+		Map<String, Object> data = new LinkedHashMap<>();
+		data.put("reasonCode", exception.getCode());
+		auditLogPort.record(command.userId(), "PASSWORD_CHANGE_FAILED", "PROFILE",
+				"Se rechazó un intento de cambio de contraseña por una validación funcional.",
+				command.ipAddress(), command.userAgent(), data, clock.instant());
 	}
 
 	private void rejectReusedPassword(UserAccount user, String newPassword) {

@@ -1,10 +1,4 @@
-export type UserStatus =
-  | 'PENDING'
-  | 'ACTIVE'
-  | 'SUSPENDED'
-  | 'LOCKED'
-  | 'DISABLED'
-  | 'DELETED'
+export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'DELETED'
 
 export type UserAccessStatus =
   | 'PENDING'
@@ -13,6 +7,10 @@ export type UserAccessStatus =
   | 'EXPIRED'
   | 'CANCELED'
 
+export type InternalRoleCode = 'ADMINISTRATOR' | 'MANAGER' | 'SUPERVISOR'
+export type AuthSessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
+export type AuthSessionScope = 'FULL' | 'PASSWORD_CHANGE'
+
 export interface AdminUser {
   publicId: string
   email: string
@@ -20,11 +18,17 @@ export interface AdminUser {
   lastName: string
   displayName: string
   status: UserStatus
-  roles: string[]
+  roles: InternalRoleCode[]
+  organizationPublicId: string | null
+  organizationName: string | null
   accessStatus: UserAccessStatus
   startsAt: string
   expiresAt: string | null
   lastLoginAt: string | null
+  createdAt: string
+  statusChangedAt: string | null
+  statusChangedBy: string | null
+  statusReason: string | null
 }
 
 export interface AdminUserPage {
@@ -36,7 +40,7 @@ export interface AdminUserPage {
 }
 
 export interface RoleOption {
-  code: string
+  code: InternalRoleCode
   name: string
 }
 
@@ -45,28 +49,54 @@ export interface CreateUserPayload {
   firstName: string
   lastName: string
   displayName?: string
-  roleCode: string
-  temporaryPassword: string
+  roleCode: InternalRoleCode
+  organizationPublicId: string | null
+  initialStatus: 'ACTIVE' | 'INACTIVE'
   startsAt: string
   expiresAt: string | null
 }
 
-export interface UpdateUserProfilePayload {
+export interface CreateUserResponse {
+  user: AdminUser
+  temporaryPassword: string
+}
+
+export interface UpdateInternalUserPayload {
   email: string
   firstName: string
   lastName: string
   displayName?: string
-}
-
-export interface UpdateUserAccessPayload {
+  roleCode: InternalRoleCode
+  organizationPublicId: string | null
   startsAt: string
   expiresAt: string | null
 }
 
-export interface UpdateUserRolePayload {
-  roleCode: string
+export interface UserStatusChangePayload {
+  reason?: string
 }
 
-export interface ResetUserPasswordPayload {
+export interface TemporaryPasswordResponse {
+  user: AdminUser
   temporaryPassword: string
+}
+
+export interface InternalUserStatusHistory {
+  previousStatus: UserStatus | null
+  newStatus: UserStatus
+  reason: string | null
+  actorDisplayName: string
+  occurredAt: string
+}
+
+export interface InternalUserSession {
+  publicId: string
+  status: AuthSessionStatus
+  scope: AuthSessionScope
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: string
+  lastActivityAt: string | null
+  expiresAt: string
+  revokedAt: string | null
 }

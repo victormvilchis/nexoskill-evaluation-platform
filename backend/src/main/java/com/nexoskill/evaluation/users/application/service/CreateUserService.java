@@ -5,9 +5,10 @@ import com.nexoskill.evaluation.authentication.application.port.out.PasswordHash
 import com.nexoskill.evaluation.authentication.application.service.EmailNormalizer;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
-import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.CreateUserCommand;
+import com.nexoskill.evaluation.users.application.model.CreateUserResult;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
+import com.nexoskill.evaluation.users.domain.model.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -18,63 +19,87 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CreateUserService {
 
-	private final UserManagementPort userManagementPort;
-	private final PasswordHasher passwordHasher;
-	private final PasswordPolicy passwordPolicy;
-	private final AuditLogPort auditLogPort;
-	private final AppProperties properties;
-	private final Clock clock;
+    private final UserManagementPort userManagementPort;
+    private final PasswordHasher passwordHasher;
+    private final PasswordPolicy passwordPolicy;
+    private final SecureTemporaryPasswordGenerator passwordGenerator;
+    private final InternalRolePolicy rolePolicy;
+    private final InternalUserStatusHistoryService statusHistoryService;
+    private final AuditLogPort auditLogPort;
+    private final AppProperties properties;
+    private final Clock clock;
 
-	public CreateUserService(UserManagementPort userManagementPort, PasswordHasher passwordHasher,
-			PasswordPolicy passwordPolicy, AuditLogPort auditLogPort, AppProperties properties, Clock clock) {
-		this.userManagementPort = userManagementPort;
-		this.passwordHasher = passwordHasher;
-		this.passwordPolicy = passwordPolicy;
-		this.auditLogPort = auditLogPort;
-		this.properties = properties;
-		this.clock = clock;
-	}
+    public CreateUserService(UserManagementPort userManagementPort, PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy, SecureTemporaryPasswordGenerator passwordGenerator,
+            InternalRolePolicy rolePolicy, InternalUserStatusHistoryService statusHistoryService,
+            AuditLogPort auditLogPort, AppProperties properties, Clock clock) {
+        this.userManagementPort = userManagementPort;
+        this.passwordHasher = passwordHasher;
+        this.passwordPolicy = passwordPolicy;
+        this.passwordGenerator = passwordGenerator;
+        this.rolePolicy = rolePolicy;
+        this.statusHistoryService = statusHistoryService;
+        this.auditLogPort = auditLogPort;
+        this.properties = properties;
+        this.clock = clock;
+    }
 
-	@Transactional
-	public AdminUserSummary create(CreateUserCommand command) {
-		String normalizedEmail = EmailNormalizer.normalize(command.email());
-		validateDates(command.startsAt(), command.expiresAt());
-		passwordPolicy.validate(command.temporaryPassword(), command.email());
+    @Transactional
+    public CreateUserResult create(CreateUserCommand command) {
+        String normalizedEmail = EmailNormalizer.normalize(command.email());
+        UserManagementSupport.validateDates(command.startsAt(), command.expiresAt());
+        String roleCode = rolePolicy.normalizeAndValidate(command.roleCode());
+        rolePolicy.validateOrganization(roleCode, command.organizationPublicId());
+        UserStatus initialStatus = command.initialStatus() == null ? UserStatus.ACTIVE : command.initialStatus();
+        if (initialStatus != UserStatus.ACTIVE && initialStatus != UserStatus.INACTIVE) {
+            throw new BusinessException("USER_INITIAL_STATUS_INVALID",
+                    "Un usuario nuevo solamente puede crearse activo o inactivo.");
+        }
+        if (userManagementPort.existsByNormalizedEmail(normalizedEmail)) {
+            throw new BusinessException("USER_EMAIL_EXISTS", "Ya existe un usuario registrado con ese correo.");
+        }
 
-		if (userManagementPort.existsByNormalizedEmail(normalizedEmail)) {
-			throw new BusinessException("USER_EMAIL_EXISTS", "Ya existe un usuario registrado con ese correo.");
-		}
+        String temporaryPassword = generateValidTemporaryPassword(command.email());
+        Instant now = clock.instant();
+        var created = userManagementPort.create(new UserManagementPort.NewUserData(UUID.randomUUID().toString(),
+                command.email().trim(), normalizedEmail, passwordHasher.encode(temporaryPassword),
+                command.firstName().trim(), command.lastName().trim(),
+                UserManagementSupport.displayName(command.firstName(), command.lastName(), command.displayName()),
+                roleCode, normalizeOrganization(command.organizationPublicId()), initialStatus, command.startsAt(),
+                command.expiresAt(), now.plus(properties.getSecurity().getTemporaryPasswordDuration()),
+                command.actorUserId(), now));
 
-		AdminUserSummary created = userManagementPort
-				.create(new UserManagementPort.NewUserData(UUID.randomUUID().toString(), command.email().trim(),
-						normalizedEmail, passwordHasher.encode(command.temporaryPassword()), command.firstName().trim(),
-						command.lastName().trim(), normalizedDisplayName(command),
-						command.roleCode().trim().toUpperCase(), command.startsAt(), command.expiresAt(),
-						clock.instant().plus(properties.getSecurity().getTemporaryPasswordDuration())));
+        Long createdInternalId = userManagementPort.getByPublicId(created.publicId()).internalId();
+        statusHistoryService.record(createdInternalId, command.actorUserId(), null, initialStatus,
+                "Creación de usuario", now);
 
-		auditLogPort.record(command.actorUserId(), "USER_CREATED", "USER_MANAGEMENT",
-				"Se creó un usuario desde el panel administrativo.", command.ipAddress(), command.userAgent(),
-				Map.of("targetUserPublicId", created.publicId(), "targetEmail", created.email(), "role",
-						command.roleCode().trim().toUpperCase()),
-				clock.instant());
+        auditLogPort.record(command.actorUserId(), "USER_CREATED", "USER_MANAGEMENT",
+                "Se creó un usuario interno con contraseña temporal de visualización única.", command.ipAddress(),
+                command.userAgent(), Map.of("targetUserPublicId", created.publicId(), "targetEmail", created.email(),
+                        "role", roleCode, "initialStatus", initialStatus.name()), now);
+        auditLogPort.record(command.actorUserId(), "TEMPORARY_PASSWORD_GENERATED", "USER_MANAGEMENT",
+                "Se generó una contraseña temporal para un usuario interno.", command.ipAddress(),
+                command.userAgent(), Map.of("targetUserPublicId", created.publicId()), now);
 
-		return created;
-	}
+        return new CreateUserResult(created, temporaryPassword);
+    }
 
-	private void validateDates(Instant startsAt, Instant expiresAt) {
-		if (startsAt == null) {
-			throw new BusinessException("USER_ACCESS_START_REQUIRED", "La fecha de inicio es obligatoria.");
-		}
-		if (expiresAt != null && !expiresAt.isAfter(startsAt)) {
-			throw new BusinessException("USER_ACCESS_DATES_INVALID",
-					"La fecha de vencimiento debe ser posterior a la fecha de inicio.");
-		}
-	}
+    private String generateValidTemporaryPassword(String email) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String candidate = passwordGenerator.generate();
+            try {
+                passwordPolicy.validate(candidate, email);
+                return candidate;
+            } catch (BusinessException exception) {
+                if (!"PASSWORD_CONTAINS_EMAIL".equals(exception.getCode())) {
+                    throw exception;
+                }
+            }
+        }
+        throw new IllegalStateException("No fue posible generar una contraseña temporal segura.");
+    }
 
-	private String normalizedDisplayName(CreateUserCommand command) {
-		if (command.displayName() != null && !command.displayName().isBlank()) {
-			return command.displayName().trim();
-		}
-		return command.firstName().trim() + " " + command.lastName().trim();
-	}
+    private String normalizeOrganization(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
 }

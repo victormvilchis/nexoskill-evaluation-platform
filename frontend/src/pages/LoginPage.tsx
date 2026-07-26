@@ -39,6 +39,31 @@ export function LoginPage() {
         <p className="muted">
           Ingresa con la cuenta configurada en la plataforma.
         </p>
+        {reason === 'password-changed' && (
+          <div className="success-message" role="status">
+            Tu contraseña fue actualizada. Inicia sesión nuevamente.
+          </div>
+        )}
+        {reason === 'inactive' && (
+          <div className="error-message" role="alert">
+            Tu cuenta se encuentra inactiva. Contacta a un administrador.
+          </div>
+        )}
+        {reason === 'suspended' && (
+          <div className="error-message" role="alert">
+            Tu acceso se encuentra suspendido. Contacta a un administrador.
+          </div>
+        )}
+        {reason === 'organization-inactive' && (
+          <div className="error-message" role="alert">
+            La organización asociada a tu cuenta se encuentra inactiva.
+          </div>
+        )}
+        {reason === 'organization-expired' && (
+          <div className="error-message" role="alert">
+            La organización asociada a tu cuenta ya no se encuentra vigente.
+          </div>
+        )}
         {reason === 'expired' && (
           <div className="error-message" role="alert">
             Tu acceso a la plataforma ha expirado. Solicita una nueva vigencia

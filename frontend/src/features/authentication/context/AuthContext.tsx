@@ -66,6 +66,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
         redirectToLogin('temporary-password-expired')
         return
       }
+      if (detail?.code === 'ACCOUNT_INACTIVE') {
+        redirectToLogin('inactive')
+        return
+      }
+      if (detail?.code === 'ACCOUNT_SUSPENDED') {
+        redirectToLogin('suspended')
+        return
+      }
+      if (detail?.code === 'ORGANIZATION_INACTIVE') {
+        redirectToLogin('organization-inactive')
+        return
+      }
+      if (detail?.code === 'ORGANIZATION_EXPIRED') {
+        redirectToLogin('organization-expired')
+        return
+      }
       redirectToLogin('session')
     }
 

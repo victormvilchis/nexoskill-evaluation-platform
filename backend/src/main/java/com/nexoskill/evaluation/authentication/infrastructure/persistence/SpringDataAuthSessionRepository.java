@@ -12,6 +12,8 @@ public interface SpringDataAuthSessionRepository extends JpaRepository<AuthSessi
 
 	Optional<AuthSessionJpaEntity> findByTokenHash(String tokenHash);
 
+	java.util.List<AuthSessionJpaEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
+
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("""
 			UPDATE AuthSessionJpaEntity session

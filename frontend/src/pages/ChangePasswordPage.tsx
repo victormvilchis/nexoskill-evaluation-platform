@@ -7,7 +7,7 @@ import { useToast } from '../shared/components/ToastProvider'
 
 export function ChangePasswordPage() {
   const navigate = useNavigate()
-  const { user, refresh, logout } = useAuth()
+  const { user, logout, refresh } = useAuth()
   const toast = useToast()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -32,8 +32,8 @@ export function ChangePasswordPage() {
         confirmPassword
       })
       await refresh()
-      toast.success('Contraseña actualizada', 'Tu cuenta quedó protegida con la nueva contraseña.')
-      navigate('/dashboard', { replace: true })
+      toast.success('Contraseña actualizada', 'Inicia sesión nuevamente con tu contraseña definitiva.')
+      navigate('/login?reason=password-changed', { replace: true })
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError

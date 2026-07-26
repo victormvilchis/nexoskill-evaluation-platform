@@ -3,24 +3,26 @@ import type {
   AdminUser,
   AdminUserPage,
   CreateUserPayload,
-  ResetUserPasswordPayload,
+  CreateUserResponse,
+  InternalUserSession,
+  InternalUserStatusHistory,
   RoleOption,
-  UpdateUserAccessPayload,
-  UpdateUserProfilePayload,
-  UpdateUserRolePayload,
-  UserStatus
+  TemporaryPasswordResponse,
+  UpdateInternalUserPayload,
+  UserStatus,
+  UserStatusChangePayload
 } from '../../../shared/types/users'
 
 interface SearchUsersParams {
   query?: string
-  status?: UserStatus | ''
+  status?: UserStatus | 'ALL'
   page?: number
   size?: number
 }
 
 export function searchUsers({
   query = '',
-  status = '',
+  status = 'ACTIVE',
   page = 0,
   size = 20
 }: SearchUsersParams = {}) {
@@ -30,7 +32,7 @@ export function searchUsers({
   })
 
   if (query.trim()) parameters.set('query', query.trim())
-  if (status) parameters.set('status', status)
+  parameters.set('status', status)
 
   return apiRequest<AdminUserPage>(`/admin/users?${parameters.toString()}`)
 }
@@ -40,75 +42,70 @@ export function getUser(publicId: string) {
 }
 
 export function createUser(payload: CreateUserPayload) {
-  return apiRequest<AdminUser>('/admin/users', {
+  return apiRequest<CreateUserResponse>('/admin/users', {
     method: 'POST',
     body: JSON.stringify(payload)
   })
 }
 
-export function updateUserProfile(
-  publicId: string,
-  payload: UpdateUserProfilePayload
-) {
+export function updateUser(publicId: string, payload: UpdateInternalUserPayload) {
   return apiRequest<AdminUser>(`/admin/users/${publicId}`, {
     method: 'PUT',
     body: JSON.stringify(payload)
   })
 }
 
-export function updateUserAccess(
+function statusAction(
   publicId: string,
-  payload: UpdateUserAccessPayload
+  action: 'activate' | 'deactivate' | 'suspend' | 'restore',
+  payload: UserStatusChangePayload = {}
 ) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/access`, {
-    method: 'PUT',
-    body: JSON.stringify(payload)
-  })
-}
-
-export function updateUserRole(
-  publicId: string,
-  payload: UpdateUserRolePayload
-) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/role`, {
-    method: 'PUT',
-    body: JSON.stringify(payload)
-  })
-}
-
-export function activateUser(publicId: string) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/activate`, {
-    method: 'POST'
-  })
-}
-
-export function suspendUser(publicId: string) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/suspend`, {
-    method: 'POST'
-  })
-}
-
-
-export function deleteUser(publicId: string, reason?: string) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/delete`, {
-    method: 'POST',
-    body: JSON.stringify({ reason })
-  })
-}
-
-export function restoreUser(publicId: string) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/restore`, {
-    method: 'POST'
-  })
-}
-
-export function resetUserPassword(
-  publicId: string,
-  payload: ResetUserPasswordPayload
-) {
-  return apiRequest<AdminUser>(`/admin/users/${publicId}/reset-password`, {
+  return apiRequest<AdminUser>(`/admin/users/${publicId}/${action}`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  })
+}
+
+export function activateUser(publicId: string, payload: UserStatusChangePayload = {}) {
+  return statusAction(publicId, 'activate', payload)
+}
+
+export function deactivateUser(publicId: string, payload: UserStatusChangePayload = {}) {
+  return statusAction(publicId, 'deactivate', payload)
+}
+
+export function suspendUser(publicId: string, payload: UserStatusChangePayload) {
+  return statusAction(publicId, 'suspend', payload)
+}
+
+export function restoreUser(publicId: string, payload: UserStatusChangePayload = {}) {
+  return statusAction(publicId, 'restore', payload)
+}
+
+export function deleteUser(publicId: string, payload: UserStatusChangePayload) {
+  return apiRequest<AdminUser>(`/admin/users/${publicId}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function resetUserPassword(publicId: string) {
+  return apiRequest<TemporaryPasswordResponse>(`/admin/users/${publicId}/reset-password`, {
+    method: 'POST'
+  })
+}
+
+export function getUserStatusHistory(publicId: string) {
+  return apiRequest<InternalUserStatusHistory[]>(`/admin/users/${publicId}/status-history`)
+}
+
+export function getUserSessions(publicId: string) {
+  return apiRequest<InternalUserSession[]>(`/admin/users/${publicId}/sessions`)
+}
+
+export function revokeUserSessions(publicId: string) {
+  return apiRequest<{ revokedSessions: number }>(`/admin/users/${publicId}/revoke-sessions`, {
+    method: 'POST'
   })
 }
 

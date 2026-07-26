@@ -1,10 +1,8 @@
 package com.nexoskill.evaluation.users.domain.model;
 
 public enum UserStatus {
-    PENDING,
     ACTIVE,
+    INACTIVE,
     SUSPENDED,
-    LOCKED,
-    DISABLED,
     DELETED
 }

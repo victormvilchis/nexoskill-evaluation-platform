@@ -14,33 +14,37 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ActivateUserService {
+    private final UserManagementPort users;
+    private final InternalUserTransitionPolicy transitionPolicy;
+    private final InternalUserStatusHistoryService history;
+    private final AuditLogPort audit;
+    private final Clock clock;
 
-	private final UserManagementPort userManagementPort;
-	private final AuditLogPort auditLogPort;
-	private final Clock clock;
+    public ActivateUserService(UserManagementPort users, InternalUserTransitionPolicy transitionPolicy,
+            InternalUserStatusHistoryService history, AuditLogPort audit, Clock clock) {
+        this.users = users;
+        this.transitionPolicy = transitionPolicy;
+        this.history = history;
+        this.audit = audit;
+        this.clock = clock;
+    }
 
-	public ActivateUserService(UserManagementPort userManagementPort, AuditLogPort auditLogPort, Clock clock) {
-		this.userManagementPort = userManagementPort;
-		this.auditLogPort = auditLogPort;
-		this.clock = clock;
-	}
-
-	@Transactional
-	public AdminUserSummary activate(UserStatusCommand command) {
-		UserManagementPort.ManagedUser managedUser = userManagementPort.getByPublicId(command.publicId());
-		Instant now = clock.instant();
-		AdminUserSummary before = managedUser.summary();
-
-		if (before.expiresAt() != null && !before.expiresAt().isAfter(now)) {
-			throw new BusinessException("USER_ACCESS_EXPIRED",
-					"Actualiza la fecha de vencimiento antes de activar al usuario.");
-		}
-
-		AdminUserSummary updated = userManagementPort.updateStatus(command.publicId(), UserStatus.ACTIVE,
-				UserAccessStatus.ACTIVE, now);
-
-		auditLogPort.record(command.actorUserId(), "USER_ACTIVATED", "USER_MANAGEMENT", "Se activó un usuario.",
-				command.ipAddress(), command.userAgent(), UserManagementSupport.auditData(before, updated), now);
-		return updated;
-	}
+    @Transactional
+    public AdminUserSummary activate(UserStatusCommand command) {
+        var managed = users.getByPublicId(command.publicId());
+        AdminUserSummary before = managed.summary();
+        transitionPolicy.validate(before.status(), UserStatus.ACTIVE);
+        Instant now = clock.instant();
+        if (before.expiresAt() != null && !before.expiresAt().isAfter(now)) {
+            throw new BusinessException("USER_ACCESS_EXPIRED",
+                    "Actualiza la fecha de vencimiento antes de activar al usuario.");
+        }
+        String reason = transitionPolicy.normalizeReason(command.reason(), false, "Reactivación administrativa");
+        AdminUserSummary updated = users.updateStatus(command.publicId(), UserStatus.ACTIVE, UserAccessStatus.ACTIVE,
+                command.actorUserId(), reason, now);
+        history.record(managed.internalId(), command.actorUserId(), before.status(), UserStatus.ACTIVE, reason, now);
+        audit.record(command.actorUserId(), "USER_ACTIVATED", "USER_MANAGEMENT", "Se activó un usuario interno.",
+                command.ipAddress(), command.userAgent(), UserManagementSupport.auditData(before, updated), now);
+        return updated;
+    }
 }

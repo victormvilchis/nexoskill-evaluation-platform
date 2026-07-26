@@ -39,8 +39,6 @@ public class InitialDataSeeder implements ApplicationRunner {
 		createIfMissing(properties.getSeed().getAdminEmail(), properties.getSeed().getAdminPassword(), "Administrador",
 				"NexoSkill", "Administrador NexoSkill", "ADMINISTRATOR");
 
-		createIfMissing(properties.getSeed().getUserEmail(), properties.getSeed().getUserPassword(), "Usuario", "Demo",
-				"Usuario Demo", "USER");
 	}
 
 	private void createIfMissing(String email, String password, String firstName, String lastName, String displayName,
@@ -58,8 +56,9 @@ public class InitialDataSeeder implements ApplicationRunner {
 		RoleJpaEntity role = roleRepository.findByCode(roleCode)
 				.orElseThrow(() -> new IllegalStateException("No existe el rol inicial " + roleCode));
 
-		userRepository.save(UserJpaEntity.create(UUID.randomUUID().toString(), email.trim(), normalizedEmail,
-				passwordHasher.encode(password), firstName, lastName, displayName, role, Instant.now(), null, false,
-				Instant.now(), null));
+		Instant now = Instant.now();
+        userRepository.save(UserJpaEntity.create(UUID.randomUUID().toString(), email.trim(), normalizedEmail,
+                passwordHasher.encode(password), firstName, lastName, displayName, role, now, null,
+                com.nexoskill.evaluation.users.domain.model.UserStatus.ACTIVE, false, now, null, null, now));
 	}
 }

@@ -15,44 +15,49 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SuspendUserService {
+    private final UserManagementPort users;
+    private final UserSessionPort sessions;
+    private final InternalUserTransitionPolicy transitionPolicy;
+    private final InternalUserStatusHistoryService history;
+    private final AuditLogPort audit;
+    private final Clock clock;
 
-	private final UserManagementPort userManagementPort;
-	private final UserSessionPort userSessionPort;
-	private final AuditLogPort auditLogPort;
-	private final Clock clock;
+    public SuspendUserService(UserManagementPort users, UserSessionPort sessions,
+            InternalUserTransitionPolicy transitionPolicy, InternalUserStatusHistoryService history,
+            AuditLogPort audit, Clock clock) {
+        this.users = users;
+        this.sessions = sessions;
+        this.transitionPolicy = transitionPolicy;
+        this.history = history;
+        this.audit = audit;
+        this.clock = clock;
+    }
 
-	public SuspendUserService(UserManagementPort userManagementPort, UserSessionPort userSessionPort,
-			AuditLogPort auditLogPort, Clock clock) {
-		this.userManagementPort = userManagementPort;
-		this.userSessionPort = userSessionPort;
-		this.auditLogPort = auditLogPort;
-		this.clock = clock;
-	}
-
-	@Transactional
-	public AdminUserSummary suspend(UserStatusCommand command) {
-		UserManagementPort.ManagedUser managedUser = userManagementPort.getByPublicId(command.publicId());
-
-		if (managedUser.internalId().equals(command.actorUserId())) {
-			throw new BusinessException("SELF_SUSPEND_NOT_ALLOWED", "No puedes suspender tu propia cuenta.");
-		}
-
-		Instant now = clock.instant();
-		if (managedUser.summary().roles().contains("ADMINISTRATOR")
-				&& userManagementPort.countEffectiveAdministrators(now) <= 1) {
-			throw new BusinessException("LAST_ADMINISTRATOR_REQUIRED",
-					"No puedes suspender al último administrador activo de la plataforma.");
-		}
-		AdminUserSummary updated = userManagementPort.updateStatus(command.publicId(), UserStatus.SUSPENDED,
-				UserAccessStatus.SUSPENDED, now);
-		int revokedSessions = userSessionPort.revokeActiveSessions(managedUser.internalId(), now);
-
-		var data = UserManagementSupport.auditData(managedUser.summary(), updated);
-		data.put("revokedSessions", revokedSessions);
-
-		auditLogPort.record(command.actorUserId(), "USER_SUSPENDED", "USER_MANAGEMENT",
-				"Se suspendió un usuario y se invalidaron sus sesiones.", command.ipAddress(), command.userAgent(),
-				data, now);
-		return updated;
-	}
+    @Transactional
+    public AdminUserSummary suspend(UserStatusCommand command) {
+        var managed = users.getByPublicId(command.publicId());
+        if (managed.internalId().equals(command.actorUserId())) {
+            throw new BusinessException("SELF_SUSPEND_NOT_ALLOWED", "No puedes suspender tu propia cuenta.");
+        }
+        AdminUserSummary before = managed.summary();
+        transitionPolicy.validate(before.status(), UserStatus.SUSPENDED);
+        Instant now = clock.instant();
+        if (before.status() == UserStatus.ACTIVE && before.roles().contains("ADMINISTRATOR")
+                && users.countEffectiveAdministrators(now) <= 1) {
+            throw new BusinessException("LAST_ADMINISTRATOR_REQUIRED",
+                    "No puedes suspender al último administrador activo de la plataforma.");
+        }
+        String reason = transitionPolicy.normalizeReason(command.reason(), true, null);
+        AdminUserSummary updated = users.updateStatus(command.publicId(), UserStatus.SUSPENDED,
+                UserAccessStatus.SUSPENDED, command.actorUserId(), reason, now);
+        int revoked = sessions.revokeActiveSessions(managed.internalId(), now);
+        history.record(managed.internalId(), command.actorUserId(), before.status(), UserStatus.SUSPENDED, reason, now);
+        var data = UserManagementSupport.auditData(before, updated);
+        data.put("revokedSessions", revoked);
+        data.put("reason", reason);
+        audit.record(command.actorUserId(), "USER_SUSPENDED", "USER_MANAGEMENT",
+                "Se suspendió un usuario interno y se invalidaron sus sesiones.", command.ipAddress(),
+                command.userAgent(), data, now);
+        return updated;
+    }
 }

@@ -1,504 +1,278 @@
-import { BackButton } from '../shared/components/BackButton'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import {
-  activateUser,
-  deleteUser,
-  getRoles,
-  getUser,
-  resetUserPassword,
-  restoreUser,
-  suspendUser,
-  updateUserAccess,
-  updateUserProfile,
-  updateUserRole
-} from '../features/users/api/userApi'
-import { useAuth } from '../features/authentication/context/AuthContext'
+import { useNavigate, useParams } from 'react-router-dom'
+import { searchOrganizations } from '../features/organizations/api/organizationApi'
+import { getRoles, getUser, updateUser } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
-import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { BackButton } from '../shared/components/BackButton'
+import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useToast } from '../shared/components/ToastProvider'
-import type { AdminUser, RoleOption } from '../shared/types/users'
+import type { OrganizationSummary } from '../features/organizations/types/organizations'
+import type { AdminUser, InternalRoleCode, RoleOption } from '../shared/types/users'
 
-function toLocalInputValue(value: string) {
-  const date = new Date(value)
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 16)
+interface AdminUserDetailPageProps {
+  mode?: 'view' | 'edit'
 }
 
-function formatDate(value: string | null) {
-  if (!value) return 'Sin vencimiento'
+function toLocalDateTime(value: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function toInstant(value: string) {
+  return new Date(value).toISOString()
+}
+
+function formatDate(value: string | null, fallback = 'Sin registro') {
+  if (!value) return fallback
   return new Intl.DateTimeFormat('es-MX', {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(value))
 }
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiRequestError ? error.message : fallback
+const roleLabels: Record<string, string> = {
+  ADMINISTRATOR: 'Administrador',
+  MANAGER: 'Gestor',
+  SUPERVISOR: 'Supervisor'
 }
 
-interface PendingConfirmation {
-  key: string
-  title: string
-  description: string
-  confirmLabel: string
-  tone?: 'primary' | 'danger'
-  action: () => Promise<void>
+const statusLabels: Record<string, string> = {
+  ACTIVE: 'Activo',
+  INACTIVE: 'Inactivo',
+  SUSPENDED: 'Suspendido',
+  DELETED: 'Eliminado'
 }
 
-export function AdminUserDetailPage() {
-  const { publicId = '' } = useParams()
-  const { user: currentUser } = useAuth()
+export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps) {
+  const { publicId } = useParams()
+  const navigate = useNavigate()
   const toast = useToast()
+  const editing = mode === 'edit'
   const [user, setUser] = useState<AdminUser | null>(null)
   const [roles, setRoles] = useState<RoleOption[]>([])
-  const [loading, setLoading] = useState(true)
-  const [busyAction, setBusyAction] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null)
-
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [roleCode, setRoleCode] = useState<InternalRoleCode>('MANAGER')
+  const [organizationPublicId, setOrganizationPublicId] = useState('')
   const [startsAt, setStartsAt] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [withoutExpiration, setWithoutExpiration] = useState(false)
-  const [roleCode, setRoleCode] = useState('')
-  const [temporaryPassword, setTemporaryPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-
-  const permissions = useMemo(
-    () => new Set(currentUser?.permissions ?? []),
-    [currentUser]
-  )
-  const isCurrentUser = currentUser?.publicId === publicId
-
-  function synchronize(response: AdminUser) {
-    setUser(response)
-    setEmail(response.email)
-    setFirstName(response.firstName)
-    setLastName(response.lastName)
-    setDisplayName(response.displayName)
-    setStartsAt(toLocalInputValue(response.startsAt))
-    setWithoutExpiration(response.expiresAt === null)
-    setExpiresAt(
-      response.expiresAt
-        ? toLocalInputValue(response.expiresAt)
-        : ''
-    )
-    setRoleCode(response.roles[0] ?? '')
-  }
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
+    if (!publicId) return
     let active = true
+    setLoading(true)
+    setError(null)
+
     Promise.all([
       getUser(publicId),
-      permissions.has('USER_ROLE_ASSIGN') ? getRoles() : Promise.resolve([])
+      editing ? getRoles() : Promise.resolve([] as RoleOption[]),
+      editing ? searchOrganizations({ status: 'ACTIVE', page: 0, size: 100 }) : Promise.resolve(null)
     ])
-      .then(([response, roleOptions]) => {
+      .then(([response, roleOptions, organizationPage]) => {
         if (!active) return
-        synchronize(response)
+        setUser(response)
         setRoles(roleOptions)
+        setOrganizations(organizationPage?.content ?? [])
+        setEmail(response.email)
+        setFirstName(response.firstName)
+        setLastName(response.lastName)
+        setDisplayName(response.displayName)
+        setRoleCode(response.roles[0] ?? 'MANAGER')
+        setOrganizationPublicId(response.organizationPublicId ?? '')
+        setStartsAt(toLocalDateTime(response.startsAt))
+        setExpiresAt(toLocalDateTime(response.expiresAt))
+        setWithoutExpiration(!response.expiresAt)
       })
       .catch((requestError) => {
-        if (active) {
-          setError(errorMessage(
-            requestError,
-            'No fue posible consultar el usuario.'
-          ))
-        }
+        if (!active) return
+        setError(requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible cargar el usuario.')
       })
       .finally(() => {
         if (active) setLoading(false)
       })
-    return () => {
-      active = false
-    }
-  }, [publicId, permissions])
 
-  async function runAction(
-    key: string,
-    action: () => Promise<AdminUser>,
-    successMessage: string
-  ) {
-    setBusyAction(key)
+    return () => { active = false }
+  }, [editing, publicId])
+
+  const organizationRequired = roleCode === 'MANAGER' || roleCode === 'SUPERVISOR'
+  const organizationOptions = useMemo(() => {
+    if (!user?.organizationPublicId || organizations.some((item) => item.publicId === user.organizationPublicId)) {
+      return organizations
+    }
+    return [{
+      publicId: user.organizationPublicId,
+      code: 'ACTUAL',
+      name: `${user.organizationName ?? 'Organización actual'} (no activa)`,
+      status: 'INACTIVE' as const,
+      contentMode: 'CUSTOM' as const,
+      updatedAt: user.statusChangedAt ?? user.createdAt
+    }, ...organizations]
+  }, [organizations, user])
+  const roleName = useMemo(
+    () => roleLabels[user?.roles[0] ?? ''] ?? user?.roles[0] ?? 'Sin rol',
+    [user]
+  )
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editing || !publicId) return
     setError(null)
+    setFieldErrors({})
+
+    if (organizationRequired && !organizationPublicId) {
+      setFieldErrors({ organizationPublicId: 'Selecciona una organización.' })
+      return
+    }
+    if (!startsAt) {
+      setFieldErrors({ startsAt: 'La fecha de inicio es obligatoria.' })
+      return
+    }
+    if (!withoutExpiration && !expiresAt) {
+      setFieldErrors({ expiresAt: 'Selecciona una fecha de vencimiento o marca acceso sin vencimiento.' })
+      return
+    }
+    if (!withoutExpiration && new Date(expiresAt) <= new Date(startsAt)) {
+      setFieldErrors({ expiresAt: 'El vencimiento debe ser posterior al inicio.' })
+      return
+    }
+
+    setSubmitting(true)
     try {
-      const response = await action()
-      synchronize(response)
-      toast.success(successMessage)
+      const updated = await updateUser(publicId, {
+        email: email.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        displayName: displayName.trim() || undefined,
+        roleCode,
+        organizationPublicId: organizationRequired ? organizationPublicId : null,
+        startsAt: toInstant(startsAt),
+        expiresAt: withoutExpiration ? null : toInstant(expiresAt)
+      })
+      setUser(updated)
+      toast.success('Usuario actualizado', 'Los cambios se guardaron correctamente.')
+      navigate(`/admin/users/${publicId}`, { replace: true })
     } catch (requestError) {
-      const message = errorMessage(requestError, 'No fue posible completar la operación.')
-      setError(message)
-      toast.error('Operación no completada', message)
+      if (requestError instanceof ApiRequestError) {
+        setError(requestError.message)
+        setFieldErrors(requestError.fieldErrors ?? {})
+      } else {
+        setError('No fue posible guardar los cambios.')
+      }
     } finally {
-      setBusyAction(null)
+      setSubmitting(false)
     }
   }
 
-  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    await runAction(
-      'profile',
-      () => updateUserProfile(publicId, {
-        email,
-        firstName,
-        lastName,
-        displayName: displayName || undefined
-      }),
-      'Los datos generales fueron actualizados.'
+  if (loading) return <LoadingScreen />
+
+  if (!user || error && !editing) {
+    return (
+      <main className="content-page">
+        <BackButton fallback="/admin/users" />
+        <div className="error-message" role="alert">{error ?? 'El usuario no está disponible.'}</div>
+      </main>
     )
   }
 
-  function requestConfirmation(value: PendingConfirmation) {
-    setConfirmation(value)
-  }
-
-  async function executeConfirmation() {
-    if (!confirmation) return
-    await confirmation.action()
-    setConfirmation(null)
-  }
-
-  function handleAccessSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    requestConfirmation({
-      key: 'access',
-      title: 'Actualizar vigencia',
-      description: 'El nuevo periodo se aplicará inmediatamente. Si la vigencia ya terminó, la sesión del usuario será bloqueada en su siguiente validación.',
-      confirmLabel: 'Guardar vigencia',
-      action: () => runAction(
-        'access',
-        () => updateUserAccess(publicId, {
-          startsAt: new Date(startsAt).toISOString(),
-          expiresAt: withoutExpiration ? null : new Date(expiresAt).toISOString()
-        }),
-        'La vigencia fue actualizada.'
-      )
-    })
-  }
-
-  function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    requestConfirmation({
-      key: 'role',
-      title: 'Cambiar rol',
-      description: `Se asignará el rol ${roleCode}. Las sesiones activas del usuario se cerrarán para aplicar los permisos nuevos.`,
-      confirmLabel: 'Cambiar rol',
-      action: () => runAction(
-        'role',
-        () => updateUserRole(publicId, { roleCode }),
-        'El rol fue actualizado.'
-      )
-    })
-  }
-
-  function handleSuspend() {
-    if (isCurrentUser) return
-    requestConfirmation({
-      key: 'suspend',
-      title: 'Suspender usuario',
-      description: 'El usuario perderá el acceso y todas sus sesiones activas se cerrarán inmediatamente.',
-      confirmLabel: 'Suspender usuario',
-      tone: 'danger',
-      action: () => runAction(
-        'suspend',
-        () => suspendUser(publicId),
-        'El usuario fue suspendido y sus sesiones fueron invalidadas.'
-      )
-    })
-  }
-
-  function handleActivate() {
-    requestConfirmation({
-      key: 'activate',
-      title: 'Activar usuario',
-      description: 'La cuenta volverá a estar disponible siempre que su periodo de vigencia también esté activo.',
-      confirmLabel: 'Activar usuario',
-      action: () => runAction(
-        'activate',
-        () => activateUser(publicId),
-        'El usuario fue activado.'
-      )
-    })
-  }
-
-  function handleDelete() {
-    if (isCurrentUser) return
-    requestConfirmation({
-      key: 'delete',
-      title: 'Eliminar usuario',
-      description: 'La cuenta desaparecerá de la lista normal, perderá el acceso y sus sesiones se cerrarán. El registro se conservará.',
-      confirmLabel: 'Eliminar usuario',
-      tone: 'danger',
-      action: () => runAction(
-        'delete',
-        () => deleteUser(publicId, 'Eliminación administrativa'),
-        'El usuario fue eliminado lógicamente.'
-      )
-    })
-  }
-
-  function handleRestore() {
-    requestConfirmation({
-      key: 'restore',
-      title: 'Restaurar usuario',
-      description: 'El usuario volverá como suspendido. Deberás activarlo explícitamente antes de que pueda iniciar sesión.',
-      confirmLabel: 'Restaurar usuario',
-      action: () => runAction(
-        'restore',
-        () => restoreUser(publicId),
-        'El usuario fue restaurado como suspendido.'
-      )
-    })
-  }
-
-  function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (temporaryPassword !== confirmPassword) {
-      const message = 'La confirmación de contraseña no coincide.'
-      setError(message)
-      toast.warning('Revisa la contraseña', message)
-      return
-    }
-    requestConfirmation({
-      key: 'password',
-      title: 'Restablecer contraseña',
-      description: 'Se establecerá una contraseña temporal y todas las sesiones activas del usuario se cerrarán.',
-      confirmLabel: 'Restablecer contraseña',
-      tone: 'danger',
-      action: async () => {
-        await runAction(
-          'password',
-          () => resetUserPassword(publicId, { temporaryPassword }),
-          'La contraseña temporal fue restablecida y las sesiones fueron invalidadas.'
-        )
-        setTemporaryPassword('')
-        setConfirmPassword('')
-      }
-    })
-  }
-
-  if (loading) {
-    return <main className="content-page">
-      <BackButton fallback="/admin/users" /><p>Cargando usuario…</p></main>
-  }
-
-  if (!user) {
+  if (!editing) {
     return (
-      <main className="content-page">
-      <BackButton fallback="/admin/users" />
-        <div className="error-message">
-          {error ?? 'El usuario solicitado no está disponible.'}
-        </div>
-        <Link className="secondary-button button-link" to="/admin/users">
-          Volver a usuarios
-        </Link>
+      <main className="content-page resource-page internal-user-detail-page">
+        <BackButton fallback="/admin/users" />
+        <header className="ns-page-header">
+          <div>
+            <p className="eyebrow">Administración · Usuarios</p>
+            <h1>{user.displayName}</h1>
+            <p className="muted">Consulta de solo lectura del usuario interno.</p>
+          </div>
+        </header>
+
+        <section className="user-overview-grid">
+          <article className="summary-card"><span>Estado</span><strong>{statusLabels[user.status]}</strong></article>
+          <article className="summary-card"><span>Rol</span><strong>{roleName}</strong></article>
+          <article className="summary-card"><span>Organización</span><strong>{user.organizationName ?? 'Global'}</strong></article>
+          <article className="summary-card"><span>Último acceso</span><strong>{formatDate(user.lastLoginAt)}</strong></article>
+        </section>
+
+        <section className="detail-card internal-user-readonly-grid">
+          <div><span>Nombre</span><strong>{user.firstName}</strong></div>
+          <div><span>Apellidos</span><strong>{user.lastName}</strong></div>
+          <div><span>Correo electrónico</span><strong>{user.email}</strong></div>
+          <div><span>Nombre para mostrar</span><strong>{user.displayName}</strong></div>
+          <div><span>Inicio de vigencia</span><strong>{formatDate(user.startsAt)}</strong></div>
+          <div><span>Vencimiento</span><strong>{formatDate(user.expiresAt, 'Sin vencimiento')}</strong></div>
+          <div><span>Fecha de creación</span><strong>{formatDate(user.createdAt)}</strong></div>
+          <div><span>Último cambio de estado</span><strong>{formatDate(user.statusChangedAt)}</strong></div>
+          <div className="form-wide"><span>Motivo de estado</span><strong>{user.statusReason || 'Sin motivo registrado'}</strong></div>
+        </section>
       </main>
     )
   }
 
   return (
-    <main className="content-page">
-      <BackButton fallback="/admin/users" />
-      <div className="page-heading">
+    <main className="content-page resource-page internal-user-editor-page">
+      <BackButton fallback={`/admin/users/${publicId}`} />
+      <header className="ns-page-header">
         <div>
-          <p className="eyebrow">Administración de usuarios</p>
-          <h1>{user.displayName}</h1>
-          <p className="muted">{user.email}</p>
+          <p className="eyebrow">Administración · Usuarios</p>
+          <h1>Editar usuario</h1>
+          <p className="muted">Modifica los datos operativos. Los estados y sesiones se administran por separado.</p>
         </div>
-        <Link className="secondary-button button-link" to="/admin/users">
-          Volver
-        </Link>
-      </div>
+      </header>
 
-      {error && <div className="error-message" role="alert">{error}</div>}
-
-      <section className="user-overview-grid">
-        <article className="summary-card">
-          <span>Estado de cuenta</span>
-          <strong>{user.status}</strong>
-        </article>
-        <article className="summary-card">
-          <span>Estado de acceso</span>
-          <strong>{user.accessStatus}</strong>
-        </article>
-        <article className="summary-card">
-          <span>Rol</span>
-          <strong>{user.roles.join(', ')}</strong>
-        </article>
-        <article className="summary-card">
-          <span>Vencimiento</span>
-          <strong>{formatDate(user.expiresAt)}</strong>
-        </article>
-      </section>
-
-      {permissions.has('USER_STATUS_CHANGE') && (
-        <section className={`management-section ${user.status === 'DELETED' ? 'deleted-management-section' : ''}`}>
-          <div>
-            <h2>Estado de la cuenta</h2>
-            <p className="muted">
-              {user.status === 'DELETED'
-                ? 'La cuenta está eliminada lógicamente y no puede acceder a la plataforma.'
-                : 'Suspender es reversible. Eliminar oculta la cuenta y conserva el registro.'}
-            </p>
+      <form className="entity-form internal-user-form" onSubmit={(event) => void handleSubmit(event)}>
+        <section className="form-section form-wide">
+          <div className="form-section-heading">
+            <span className="form-section-number">1</span>
+            <div><h2>Datos generales</h2><p>Información de identificación y contacto.</p></div>
           </div>
-          <div className="inline-actions">
-            {user.status === 'DELETED' ? (
-              <button className="primary-button" type="button" disabled={busyAction !== null} onClick={handleRestore}>
-                {busyAction === 'restore' ? 'Restaurando…' : 'Restaurar usuario'}
-              </button>
-            ) : (
-              <>
-                {user.status === 'SUSPENDED' ? (
-                  <button className="primary-button" type="button" disabled={busyAction !== null} onClick={handleActivate}>
-                    {busyAction === 'activate' ? 'Activando…' : 'Activar usuario'}
-                  </button>
-                ) : (
-                  <button className="secondary-button" type="button" disabled={busyAction !== null || isCurrentUser}
-                    title={isCurrentUser ? 'No puedes suspender tu propia cuenta.' : undefined} onClick={handleSuspend}>
-                    {busyAction === 'suspend' ? 'Suspendiendo…' : 'Suspender usuario'}
-                  </button>
-                )}
-                <button className="danger-button" type="button" disabled={busyAction !== null || isCurrentUser}
-                  title={isCurrentUser ? 'No puedes eliminar tu propia cuenta.' : undefined} onClick={handleDelete}>
-                  {busyAction === 'delete' ? 'Eliminando…' : 'Eliminar usuario'}
-                </button>
-              </>
-            )}
+          <div className="form-grid-three">
+            <label className="form-field"><span>Nombre</span><input value={firstName} required onChange={(event) => setFirstName(event.target.value)} />{fieldErrors.firstName && <small className="field-error">{fieldErrors.firstName}</small>}</label>
+            <label className="form-field"><span>Apellidos</span><input value={lastName} required onChange={(event) => setLastName(event.target.value)} />{fieldErrors.lastName && <small className="field-error">{fieldErrors.lastName}</small>}</label>
+            <label className="form-field"><span>Nombre para mostrar</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />{fieldErrors.displayName && <small className="field-error">{fieldErrors.displayName}</small>}</label>
           </div>
-          {isCurrentUser && user.status !== 'DELETED' && (
-            <small className="field-help">No puedes suspender ni eliminar tu propia cuenta.</small>
-          )}
+          <label className="form-field"><span>Correo electrónico</span><input type="email" value={email} required onChange={(event) => setEmail(event.target.value)} />{fieldErrors.email && <small className="field-error">{fieldErrors.email}</small>}</label>
         </section>
-      )}
 
-      {user.status !== 'DELETED' && <div className="management-grid">
-        {permissions.has('USER_UPDATE') && (
-          <form className="management-section" onSubmit={(event) => void handleProfileSubmit(event)}>
-            <div>
-              <h2>Datos generales</h2>
-              <p className="muted">Actualiza nombre, correo y nombre visible.</p>
-            </div>
-            <div className="form-field">
-              <label htmlFor="detail-firstName">Nombre</label>
-              <input id="detail-firstName" value={firstName} required onChange={(event) => setFirstName(event.target.value)} />
-            </div>
-            <div className="form-field">
-              <label htmlFor="detail-lastName">Apellidos</label>
-              <input id="detail-lastName" value={lastName} required onChange={(event) => setLastName(event.target.value)} />
-            </div>
-            <div className="form-field form-wide">
-              <label htmlFor="detail-displayName">Nombre visible</label>
-              <input id="detail-displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-            </div>
-            <div className="form-field form-wide">
-              <label htmlFor="detail-email">Correo</label>
-              <input id="detail-email" type="email" value={email} required onChange={(event) => setEmail(event.target.value)} />
-            </div>
-            <div className="form-actions form-wide">
-              <button className="primary-button" type="submit" disabled={busyAction !== null}>
-                {busyAction === 'profile' ? 'Guardando…' : 'Guardar datos'}
-              </button>
-            </div>
-          </form>
-        )}
+        <section className="form-section form-wide">
+          <div className="form-section-heading">
+            <span className="form-section-number">2</span>
+            <div><h2>Rol y organización</h2><p>La organización es obligatoria para Gestores y Supervisores.</p></div>
+          </div>
+          <div className="form-grid-three">
+            <label className="form-field"><span>Rol</span><select value={roleCode} onChange={(event) => setRoleCode(event.target.value as InternalRoleCode)}>{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</select></label>
+            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={!organizationRequired} required={organizationRequired} onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">{organizationRequired ? 'Seleccionar organización' : 'Acceso global'}</option>{organizationOptions.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
+          </div>
+        </section>
 
-        {permissions.has('USER_ACCESS_MANAGE') && (
-          <form className="management-section" onSubmit={(event) => void handleAccessSubmit(event)}>
-            <div>
-              <h2>Vigencia</h2>
-              <p className="muted">
-                Una fecha vencida cerrará la sesión del usuario automáticamente.
-              </p>
-            </div>
-            <div className="form-field">
-              <label htmlFor="detail-startsAt">Inicio</label>
-              <div className="date-input-wrapper">
-                <input id="detail-startsAt" type="datetime-local" value={startsAt} required onChange={(event) => setStartsAt(event.target.value)} />
-              </div>
-            </div>
-            <div className="form-field">
-              <label htmlFor="detail-expiresAt">Vencimiento</label>
-              <div className="date-input-wrapper">
-                <input id="detail-expiresAt" type="datetime-local" value={expiresAt} disabled={withoutExpiration} required={!withoutExpiration} onChange={(event) => setExpiresAt(event.target.value)} />
-              </div>
-            </div>
-            <label className="checkbox-row form-wide">
-              <input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />
-              Acceso sin fecha de vencimiento
-            </label>
-            <div className="form-actions form-wide">
-              <button className="primary-button" type="submit" disabled={busyAction !== null}>
-                {busyAction === 'access' ? 'Guardando…' : 'Guardar vigencia'}
-              </button>
-            </div>
-          </form>
-        )}
+        <section className="form-section form-wide">
+          <div className="form-section-heading">
+            <span className="form-section-number">3</span>
+            <div><h2>Vigencia</h2><p>La vigencia no modifica el estado administrativo.</p></div>
+          </div>
+          <div className="form-grid-three">
+            <label className="form-field"><span>Inicio de vigencia</span><input type="datetime-local" value={startsAt} required onChange={(event) => setStartsAt(event.target.value)} />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
+            <label className="form-field"><span>Vencimiento</span><input type="datetime-local" value={expiresAt} disabled={withoutExpiration} required={!withoutExpiration} onChange={(event) => setExpiresAt(event.target.value)} />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
+            <label className="checkbox-row internal-user-expiration-check"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</label>
+          </div>
+        </section>
 
-        {permissions.has('USER_ROLE_ASSIGN') && (
-          <form className="management-section" onSubmit={(event) => void handleRoleSubmit(event)}>
-            <div>
-              <h2>Rol</h2>
-              <p className="muted">Modifica los permisos funcionales del usuario.</p>
-            </div>
-            <div className="form-field form-wide">
-              <label htmlFor="detail-role">Rol asignado</label>
-              <select id="detail-role" value={roleCode} onChange={(event) => setRoleCode(event.target.value)}>
-                {roles.map((role) => (
-                  <option key={role.code} value={role.code}>{role.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-actions form-wide">
-              <button className="primary-button" type="submit" disabled={busyAction !== null}>
-                {busyAction === 'role' ? 'Guardando…' : 'Guardar rol'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {permissions.has('USER_PASSWORD_RESET') && (
-          <form className="management-section" onSubmit={(event) => void handlePasswordReset(event)}>
-            <div>
-              <h2>Restablecer contraseña</h2>
-              <p className="muted">
-                Define una contraseña temporal. No se mostrará ni se almacenará en texto plano.
-              </p>
-            </div>
-            <div className="form-field form-wide">
-              <label htmlFor="temporaryPassword">Contraseña temporal</label>
-              <input id="temporaryPassword" type="password" minLength={10} value={temporaryPassword} required onChange={(event) => setTemporaryPassword(event.target.value)} />
-            </div>
-            <div className="form-field form-wide">
-              <label htmlFor="confirmPassword">Confirmar contraseña</label>
-              <input id="confirmPassword" type="password" minLength={10} value={confirmPassword} required onChange={(event) => setConfirmPassword(event.target.value)} />
-            </div>
-            <small className="field-help form-wide">
-              Mínimo 10 caracteres, mayúscula, minúscula, número y símbolo.
-            </small>
-            <div className="form-actions form-wide">
-              <button className="danger-button" type="submit" disabled={busyAction !== null}>
-                {busyAction === 'password' ? 'Restableciendo…' : 'Restablecer contraseña'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>}
-
-      <ConfirmDialog
-        open={confirmation !== null}
-        title={confirmation?.title ?? ''}
-        description={confirmation?.description ?? ''}
-        confirmLabel={confirmation?.confirmLabel ?? 'Confirmar'}
-        tone={confirmation?.tone}
-        busy={confirmation !== null && busyAction === confirmation.key}
-        onCancel={() => {
-          if (busyAction === null) setConfirmation(null)
-        }}
-        onConfirm={() => void executeConfirmation()}
-      />
+        {error && <div className="error-message form-wide" role="alert">{error}</div>}
+        <div className="form-actions form-wide">
+          <button className="primary-button" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : 'Guardar cambios'}</button>
+        </div>
+      </form>
     </main>
   )
 }

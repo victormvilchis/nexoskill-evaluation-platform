@@ -1,0 +1,176 @@
+.internal-user-readonly-grid,
+.internal-user-admin-metadata {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.internal-user-readonly-grid > div,
+.internal-user-admin-metadata > div {
+  display: grid;
+  gap: .35rem;
+  min-width: 0;
+}
+
+.internal-user-readonly-grid span,
+.internal-user-admin-metadata span,
+.temporary-credential-grid span {
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.internal-user-readonly-grid strong,
+.internal-user-admin-metadata strong {
+  overflow-wrap: anywhere;
+}
+
+.internal-user-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.internal-user-expiration-check {
+  align-self: end;
+  min-height: 37px;
+}
+
+.internal-user-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+}
+
+.internal-panel-heading {
+  border-bottom: 1px solid var(--border);
+  padding: 1rem;
+}
+
+.internal-panel-heading h2,
+.internal-panel-heading p {
+  margin: 0;
+}
+
+.internal-panel-heading h2 {
+  font-size: 1rem;
+}
+
+.internal-panel-heading p {
+  margin-top: .25rem;
+}
+
+.internal-user-history-panel,
+.internal-user-sessions-panel,
+.internal-user-admin-metadata,
+.temporary-credential-panel {
+  margin-top: 1rem;
+}
+
+.temporary-credential-panel {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #9fc2f4;
+  border-radius: var(--radius);
+  background: #f4f8ff;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.temporary-credential-panel h1,
+.temporary-credential-panel h2,
+.temporary-credential-panel p {
+  margin: 0;
+}
+
+.temporary-credential-panel code {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px dashed #7ba7e5;
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: .75rem 1rem;
+  color: var(--primary-dark);
+  font-size: 1rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  overflow-wrap: anywhere;
+}
+
+.temporary-credential-panel-large {
+  width: min(780px, 100%);
+  margin-inline: auto;
+}
+
+.temporary-credential-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.temporary-credential-grid > div {
+  display: grid;
+  gap: .45rem;
+}
+
+.temporary-credential-grid code {
+  width: 100%;
+}
+
+.dialog-content {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: .8rem;
+  border-top: 1px solid var(--border);
+  padding-top: .85rem;
+}
+
+.dialog-content .form-field {
+  margin: 0;
+}
+
+.dialog-content textarea,
+.dialog-content input {
+  width: 100%;
+}
+
+.status-inactive,
+.status-revoked {
+  border-color: #cdd5df;
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.status-expired {
+  border-color: #f0c58d;
+  background: #fff7e8;
+  color: #8a4b08;
+}
+
+.summary-card small {
+  color: var(--muted);
+  font-size: .68rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 920px) {
+  .internal-user-readonly-grid,
+  .internal-user-admin-metadata,
+  .temporary-credential-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .internal-user-readonly-grid,
+  .internal-user-admin-metadata,
+  .temporary-credential-grid,
+  .form-grid-three {
+    grid-template-columns: 1fr;
+  }
+
+  .internal-user-action-list > button,
+  .temporary-credential-panel .inline-actions > button {
+    width: 100%;
+  }
+}

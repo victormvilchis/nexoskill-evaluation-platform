@@ -39,6 +39,15 @@ public class UserJpaEntity {
     @Column(name = "STATUS", nullable = false, length = 30)
     private UserStatus status;
 
+    @Column(name = "STATUS_REASON", length = 500)
+    private String statusReason;
+
+    @Column(name = "STATUS_CHANGED_AT")
+    private Instant statusChangedAt;
+
+    @Column(name = "STATUS_CHANGED_BY")
+    private Long statusChangedBy;
+
     @Column(name = "FAILED_LOGIN_ATTEMPTS", nullable = false)
     private int failedLoginAttempts;
 
@@ -66,6 +75,12 @@ public class UserJpaEntity {
     @Column(name = "DELETE_REASON", length = 500)
     private String deleteReason;
 
+    @Column(name = "CREATED_AT", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "UPDATED_AT")
+    private Instant updatedAt;
+
     @Version
     @Column(name = "VERSION_NO", nullable = false)
     private long version;
@@ -84,8 +99,8 @@ public class UserJpaEntity {
 
     public static UserJpaEntity create(String publicId, String email, String normalizedEmail, String passwordHash,
             String firstName, String lastName, String displayName, RoleJpaEntity role, Instant startsAt,
-            Instant expiresAt, boolean passwordChangeRequired, Instant passwordChangedAt,
-            Instant temporaryPasswordExpiresAt) {
+            Instant expiresAt, UserStatus initialStatus, boolean passwordChangeRequired, Instant passwordChangedAt,
+            Instant temporaryPasswordExpiresAt, Long actorUserId, Instant now) {
         var entity = new UserJpaEntity();
         entity.publicId = publicId;
         entity.email = email;
@@ -94,14 +109,27 @@ public class UserJpaEntity {
         entity.firstName = firstName;
         entity.lastName = lastName;
         entity.displayName = displayName;
-        entity.status = UserStatus.ACTIVE;
+        entity.status = initialStatus;
+        entity.statusReason = "Creación de usuario";
+        entity.statusChangedAt = now;
+        entity.statusChangedBy = actorUserId;
         entity.failedLoginAttempts = 0;
         entity.passwordChangeRequired = passwordChangeRequired ? 1 : 0;
         entity.passwordChangedAt = passwordChangedAt;
         entity.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
+        entity.createdAt = now;
+        entity.updatedAt = now;
         entity.roles.add(role);
         entity.access = UserAccessJpaEntity.create(entity, startsAt, expiresAt);
+        if (initialStatus != UserStatus.ACTIVE) {
+            entity.access.changeStatus(com.nexoskill.evaluation.users.domain.model.UserAccessStatus.SUSPENDED, now);
+        }
         return entity;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = Instant.now();
     }
 
     public Long getId() { return id; }
@@ -113,6 +141,9 @@ public class UserJpaEntity {
     public String getLastName() { return lastName; }
     public String getDisplayName() { return displayName; }
     public UserStatus getStatus() { return status; }
+    public String getStatusReason() { return statusReason; }
+    public Instant getStatusChangedAt() { return statusChangedAt; }
+    public Long getStatusChangedBy() { return statusChangedBy; }
     public int getFailedLoginAttempts() { return failedLoginAttempts; }
     public Instant getLockedUntil() { return lockedUntil; }
     public Instant getLastLoginAt() { return lastLoginAt; }
@@ -124,6 +155,8 @@ public class UserJpaEntity {
     public Instant getDeletedAt() { return deletedAt; }
     public Long getDeletedBy() { return deletedBy; }
     public String getDeleteReason() { return deleteReason; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
     public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
             String displayName) {
@@ -139,8 +172,11 @@ public class UserJpaEntity {
         roles.add(role);
     }
 
-    public void changeStatus(UserStatus nextStatus) {
+    public void changeStatus(UserStatus nextStatus, Long actorUserId, String reason, Instant changedAt) {
         status = nextStatus;
+        statusReason = reason;
+        statusChangedBy = actorUserId;
+        statusChangedAt = changedAt;
         if (nextStatus == UserStatus.ACTIVE) {
             failedLoginAttempts = 0;
             lockedUntil = null;
@@ -148,7 +184,7 @@ public class UserJpaEntity {
     }
 
     public void softDelete(Long actor, Instant now, String reason) {
-        status = UserStatus.DELETED;
+        changeStatus(UserStatus.DELETED, actor, reason, now);
         deletedAt = now;
         deletedBy = actor;
         deleteReason = reason;
@@ -156,8 +192,8 @@ public class UserJpaEntity {
         lockedUntil = null;
     }
 
-    public void restoreAsSuspended() {
-        status = UserStatus.SUSPENDED;
+    public void restoreAsInactive(Long actor, Instant now, String reason) {
+        changeStatus(UserStatus.INACTIVE, actor, reason, now);
         deletedAt = null;
         deletedBy = null;
         deleteReason = null;

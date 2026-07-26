@@ -19,7 +19,7 @@ public class OracleAuthSessionRepositoryAdapter implements AuthSessionRepository
 		AuthSessionJpaEntity entity;
 		if (session.getId() == null) {
 			entity = AuthSessionJpaEntity.create(session.getPublicId(), session.getUserId(), session.getTokenHash(),
-					session.getStatus(), session.getIpAddress(), session.getUserAgent(), session.getCreatedAt(),
+					session.getStatus(), session.getScope(), session.getIpAddress(), session.getUserAgent(), session.getCreatedAt(),
 					session.getLastActivityAt(), session.getExpiresAt(), session.getRevokedAt());
 		} else {
 			entity = repository.findById(session.getId())
@@ -36,7 +36,7 @@ public class OracleAuthSessionRepositoryAdapter implements AuthSessionRepository
 
 	private AuthSession toDomain(AuthSessionJpaEntity entity) {
 		return new AuthSession(entity.getId(), entity.getPublicId(), entity.getUserId(), entity.getTokenHash(),
-				entity.getStatus(), entity.getIpAddress(), entity.getUserAgent(), entity.getCreatedAt(),
+				entity.getStatus(), entity.getScope(), entity.getIpAddress(), entity.getUserAgent(), entity.getCreatedAt(),
 				entity.getLastActivityAt(), entity.getExpiresAt(), entity.getRevokedAt());
 	}
 }

@@ -11,37 +11,36 @@ import org.springframework.data.repository.query.Param;
 
 public interface SpringDataUserJpaRepository extends JpaRepository<UserJpaEntity, Long> {
     Optional<UserJpaEntity> findByNormalizedEmail(String normalizedEmail);
-
     boolean existsByNormalizedEmail(String normalizedEmail);
-
     boolean existsByNormalizedEmailAndPublicIdNot(String normalizedEmail, String publicId);
-
     Optional<UserJpaEntity> findByPublicId(String publicId);
 
     @Query(value = """
-            SELECT u
+            SELECT DISTINCT u
             FROM UserJpaEntity u
-            WHERE (
+            JOIN u.roles r
+            WHERE r.code IN ('ADMINISTRATOR', 'MANAGER', 'SUPERVISOR')
+              AND (
                 :query IS NULL
                 OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
-            )
-            AND ((:status IS NULL AND u.status <> com.nexoskill.evaluation.users.domain.model.UserStatus.DELETED)
-                 OR u.status = :status)
+              )
+              AND (:status IS NULL OR u.status = :status)
             """, countQuery = """
-            SELECT COUNT(u)
+            SELECT COUNT(DISTINCT u)
             FROM UserJpaEntity u
-            WHERE (
+            JOIN u.roles r
+            WHERE r.code IN ('ADMINISTRATOR', 'MANAGER', 'SUPERVISOR')
+              AND (
                 :query IS NULL
                 OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.displayName) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.firstName) LIKE CONCAT(CONCAT('%', :query), '%')
                 OR LOWER(u.lastName) LIKE CONCAT(CONCAT('%', :query), '%')
-            )
-            AND ((:status IS NULL AND u.status <> com.nexoskill.evaluation.users.domain.model.UserStatus.DELETED)
-                 OR u.status = :status)
+              )
+              AND (:status IS NULL OR u.status = :status)
             """)
     Page<UserJpaEntity> search(@Param("query") String query, @Param("status") UserStatus status, Pageable pageable);
 

@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.authentication.infrastructure.persistence;
 
+import com.nexoskill.evaluation.authentication.domain.model.AuthSessionScope;
 import com.nexoskill.evaluation.authentication.domain.model.SessionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,6 +34,10 @@ public class AuthSessionJpaEntity {
 	@Column(name = "STATUS", nullable = false, length = 30)
 	private SessionStatus status;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "SESSION_SCOPE", nullable = false, length = 30)
+	private AuthSessionScope scope;
+
 	@Column(name = "IP_ADDRESS", length = 64)
 	private String ipAddress;
 
@@ -55,14 +60,15 @@ public class AuthSessionJpaEntity {
 	}
 
 	public static AuthSessionJpaEntity create(String publicId, Long userId, String tokenHash, SessionStatus status,
-			String ipAddress, String userAgent, Instant createdAt, Instant lastActivityAt, Instant expiresAt,
-			Instant revokedAt) {
+            AuthSessionScope scope, String ipAddress, String userAgent, Instant createdAt, Instant lastActivityAt,
+            Instant expiresAt, Instant revokedAt) {
 
 		AuthSessionJpaEntity entity = new AuthSessionJpaEntity();
 		entity.publicId = publicId;
 		entity.userId = userId;
 		entity.tokenHash = tokenHash;
 		entity.status = status;
+        entity.scope = scope;
 		entity.ipAddress = ipAddress;
 		entity.userAgent = userAgent;
 		entity.createdAt = createdAt;
@@ -91,6 +97,10 @@ public class AuthSessionJpaEntity {
 	public SessionStatus getStatus() {
 		return status;
 	}
+
+	public AuthSessionScope getScope() {
+        return scope;
+    }
 
 	public String getIpAddress() {
 		return ipAddress;

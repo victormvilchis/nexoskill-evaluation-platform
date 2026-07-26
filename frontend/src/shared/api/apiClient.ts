@@ -35,6 +35,10 @@ function publishAuthenticationFailure(code: string, message: string) {
     code === 'ACCESS_EXPIRED' ||
     code === 'SESSION_EXPIRED' ||
     code === 'ACCOUNT_UNAVAILABLE' ||
+    code === 'ACCOUNT_INACTIVE' ||
+    code === 'ACCOUNT_SUSPENDED' ||
+    code === 'ORGANIZATION_INACTIVE' ||
+    code === 'ORGANIZATION_EXPIRED' ||
     code === 'TEMP_PASSWORD_EXPIRED'
   ) {
     window.dispatchEvent(

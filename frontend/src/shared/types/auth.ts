@@ -24,6 +24,7 @@ export interface CurrentUser {
 
 export interface LoginResponse {
   user: CurrentUser
+  requiresPasswordChange: boolean
 }
 
 export interface CurrentUserResponse {

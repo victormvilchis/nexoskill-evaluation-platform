@@ -20,52 +20,53 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class SuspendUserServiceTest {
+    private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
 
-	private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
+    @Test
+    void shouldPreventAdministratorFromSuspendingOwnAccount() {
+        UserManagementPort users = mock(UserManagementPort.class);
+        UserSessionPort sessions = mock(UserSessionPort.class);
+        InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
+        AuditLogPort audit = mock(AuditLogPort.class);
+        SuspendUserService service = new SuspendUserService(users, sessions, new InternalUserTransitionPolicy(),
+                history, audit, Clock.fixed(NOW, ZoneOffset.UTC));
 
-	@Test
-	void shouldPreventAdministratorFromSuspendingOwnAccount() {
-		UserManagementPort userManagementPort = mock(UserManagementPort.class);
-		UserSessionPort userSessionPort = mock(UserSessionPort.class);
-		AuditLogPort auditLogPort = mock(AuditLogPort.class);
-		SuspendUserService service = new SuspendUserService(userManagementPort, userSessionPort, auditLogPort,
-				Clock.fixed(NOW, ZoneOffset.UTC));
+        when(users.getByPublicId("public-admin"))
+                .thenReturn(new UserManagementPort.ManagedUser(10L, summary("public-admin")));
 
-		AdminUserSummary summary = new AdminUserSummary("public-admin", "admin@nexoskill.local", "Administrador",
-				"NexoSkill", "Administrador NexoSkill", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"),
-				UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null);
+        assertThatThrownBy(() -> service.suspend(
+                new UserStatusCommand("public-admin", "Seguridad", 10L, "127.0.0.1", "JUnit")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("No puedes suspender tu propia cuenta.");
 
-		when(userManagementPort.getByPublicId("public-admin"))
-				.thenReturn(new UserManagementPort.ManagedUser(10L, summary));
+        verifyNoInteractions(sessions, history, audit);
+    }
 
-		UserStatusCommand command = new UserStatusCommand("public-admin", 10L, "127.0.0.1", "JUnit");
+    @Test
+    void shouldPreventSuspendingTheLastEffectiveAdministrator() {
+        UserManagementPort users = mock(UserManagementPort.class);
+        UserSessionPort sessions = mock(UserSessionPort.class);
+        InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
+        AuditLogPort audit = mock(AuditLogPort.class);
+        SuspendUserService service = new SuspendUserService(users, sessions, new InternalUserTransitionPolicy(),
+                history, audit, Clock.fixed(NOW, ZoneOffset.UTC));
 
-		assertThatThrownBy(() -> service.suspend(command)).isInstanceOf(BusinessException.class)
-				.hasMessage("No puedes suspender tu propia cuenta.");
+        when(users.getByPublicId("other-admin"))
+                .thenReturn(new UserManagementPort.ManagedUser(20L, summary("other-admin")));
+        when(users.countEffectiveAdministrators(NOW)).thenReturn(1L);
 
-		verifyNoInteractions(userSessionPort, auditLogPort);
-	}
+        assertThatThrownBy(() -> service.suspend(
+                new UserStatusCommand("other-admin", "Seguridad", 10L, "127.0.0.1", "JUnit")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("No puedes suspender al último administrador activo de la plataforma.");
 
-	@Test
-	void shouldPreventSuspendingTheLastEffectiveAdministrator() {
-		UserManagementPort userManagementPort = mock(UserManagementPort.class);
-		UserSessionPort userSessionPort = mock(UserSessionPort.class);
-		AuditLogPort auditLogPort = mock(AuditLogPort.class);
-		SuspendUserService service = new SuspendUserService(userManagementPort, userSessionPort, auditLogPort,
-				Clock.fixed(NOW, ZoneOffset.UTC));
+        verifyNoInteractions(sessions, history, audit);
+    }
 
-		AdminUserSummary summary = new AdminUserSummary("other-admin", "other.admin@nexoskill.local", "Otro",
-				"Administrador", "Otro Administrador", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"),
-				UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null);
-		when(userManagementPort.getByPublicId("other-admin"))
-				.thenReturn(new UserManagementPort.ManagedUser(20L, summary));
-		when(userManagementPort.countEffectiveAdministrators(NOW)).thenReturn(1L);
-
-		assertThatThrownBy(() -> service.suspend(new UserStatusCommand("other-admin", 10L, "127.0.0.1", "JUnit")))
-				.isInstanceOf(BusinessException.class)
-				.hasMessage("No puedes suspender al último administrador activo de la plataforma.");
-
-		verifyNoInteractions(userSessionPort, auditLogPort);
-	}
-
+    private AdminUserSummary summary(String id) {
+        return new AdminUserSummary(id, id + "@nexoskill.local", "Administrador", "NexoSkill",
+                "Administrador NexoSkill", UserStatus.ACTIVE, Set.of("ADMINISTRATOR"), null, null,
+                UserAccessStatus.ACTIVE, NOW.minusSeconds(60), null, null, NOW.minusSeconds(3600),
+                NOW.minusSeconds(300), "Sistema", "Creación de usuario");
+    }
 }

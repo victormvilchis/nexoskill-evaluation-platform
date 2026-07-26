@@ -58,27 +58,30 @@ public class AuthenticationController {
 						.create(result.rawSessionToken(), positiveDurationBetween(clock.instant(), result.expiresAt()))
 						.toString());
 
-		return ResponseEntity.ok(new LoginResponse(result.user()));
+		return ResponseEntity.ok(new LoginResponse(result.user(), result.user().passwordChangeRequired()));
 	}
 
 	@PostMapping("/change-password")
 	@PreAuthorize("hasAuthority('PASSWORD_CHANGE')")
 	public ResponseEntity<Void> changePassword(@AuthenticationPrincipal AuthenticatedUser principal,
-			@Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request) {
+			@Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request, HttpServletResponse response) {
 
-		String rawSessionToken = cookieSupport.readToken(request);
-		changeOwnPasswordService.change(new ChangePasswordCommand(principal.internalId(), body.currentPassword(),
-				body.newPassword(), body.confirmPassword(), tokenHasher.hash(rawSessionToken),
-				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
-
-		return ResponseEntity.noContent().build();
+        String rawSessionToken = cookieSupport.readToken(request);
+        if (principal == null || rawSessionToken == null || rawSessionToken.isBlank()) {
+            throw com.nexoskill.evaluation.authentication.domain.AuthenticationException.unauthorized();
+        }
+        changeOwnPasswordService.change(new ChangePasswordCommand(principal.internalId(), body.currentPassword(),
+                body.newPassword(), body.confirmPassword(), tokenHasher.hash(rawSessionToken),
+                ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
+        response.addHeader(HttpHeaders.SET_COOKIE, cookieSupport.clear().toString());
+        return ResponseEntity.noContent().build();
 	}
 
 	@PostMapping("/logout")
 	public ResponseEntity<Void> logout(@AuthenticationPrincipal AuthenticatedUser principal, HttpServletRequest request,
 			HttpServletResponse response) {
 
-		logoutService.logout(cookieSupport.readToken(request), principal.internalId(),
+		logoutService.logout(cookieSupport.readToken(request), principal == null ? null : principal.internalId(),
 				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request));
 
 		response.addHeader(HttpHeaders.SET_COOKIE, cookieSupport.clear().toString());
