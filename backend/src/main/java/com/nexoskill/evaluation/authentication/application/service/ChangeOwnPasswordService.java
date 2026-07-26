@@ -81,16 +81,17 @@ public class ChangeOwnPasswordService {
 		data.put("revokedSessions", revokedSessions);
 		data.put("passwordChangeRequiredBefore", passwordChangeRequiredBefore);
 
-		auditLogPort.record(user.getId(), "PASSWORD_CHANGED", "PROFILE", "El usuario cambió su contraseña y se invalidaron todos los tokens anteriores.",
-				command.ipAddress(), command.userAgent(), data, now);
+		auditLogPort.record(user.getId(), "PASSWORD_CHANGED", "PROFILE",
+				"El usuario cambió su contraseña y se invalidaron todos los tokens anteriores.", command.ipAddress(),
+				command.userAgent(), data, now);
 	}
 
 	private void recordFailure(ChangePasswordCommand command, BusinessException exception) {
 		Map<String, Object> data = new LinkedHashMap<>();
 		data.put("reasonCode", exception.getCode());
 		auditLogPort.record(command.userId(), "PASSWORD_CHANGE_FAILED", "PROFILE",
-				"Se rechazó un intento de cambio de contraseña por una validación funcional.",
-				command.ipAddress(), command.userAgent(), data, clock.instant());
+				"Se rechazó un intento de cambio de contraseña por una validación funcional.", command.ipAddress(),
+				command.userAgent(), data, clock.instant());
 	}
 
 	private void rejectReusedPassword(UserAccount user, String newPassword) {

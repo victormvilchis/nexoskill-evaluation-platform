@@ -16,28 +16,28 @@ import java.time.OffsetDateTime;
 @Table(name = "LEARNING_COLLECTION_LEVEL")
 public class LearningCollectionLevelJpaEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "LEVEL_ID")
-    public Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "LEVEL_ID")
+	public Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "COLLECTION_ID", nullable = false)
-    public LearningCollectionJpaEntity collection;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "COLLECTION_ID", nullable = false)
+	public LearningCollectionJpaEntity collection;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "FORM_ID", nullable = false)
-    public FormJpaEntity form;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "FORM_ID", nullable = false)
+	public FormJpaEntity form;
 
-    @Column(name = "LEVEL_ORDER", nullable = false)
-    public Integer levelOrder;
+	@Column(name = "LEVEL_ORDER", nullable = false)
+	public Integer levelOrder;
 
-    @Column(name = "UNLOCK_RULE", nullable = false, length = 30)
-    public String unlockRule;
+	@Column(name = "UNLOCK_RULE", nullable = false, length = 30)
+	public String unlockRule;
 
-    @Column(name = "CREATED_AT", nullable = false)
-    public OffsetDateTime createdAt;
+	@Column(name = "CREATED_AT", nullable = false)
+	public OffsetDateTime createdAt;
 
-    public LearningCollectionLevelJpaEntity() {
-    }
+	public LearningCollectionLevelJpaEntity() {
+	}
 }

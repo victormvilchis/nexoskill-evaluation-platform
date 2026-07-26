@@ -28,7 +28,8 @@ public class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter,
-			StudentSessionAuthenticationFilter studentSessionFilter, OriginProtectionFilter originFilter) throws Exception {
+			StudentSessionAuthenticationFilter studentSessionFilter, OriginProtectionFilter originFilter)
+			throws Exception {
 
 		return http.csrf(csrf -> csrf.disable()).cors(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -58,7 +59,8 @@ public class SecurityConfig {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(properties.getSecurity().getAllowedOrigins());
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		configuration.setAllowedHeaders(List.of("Content-Type", "Accept", "X-Requested-With", "X-Organization-Context"));
+		configuration
+				.setAllowedHeaders(List.of("Content-Type", "Accept", "X-Requested-With", "X-Organization-Context"));
 		configuration.setAllowCredentials(true);
 		configuration.setMaxAge(3600L);
 

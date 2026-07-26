@@ -18,41 +18,40 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/forms")
 public class AdminFormController {
-    private final FormService service;
+	private final FormService service;
 
-    public AdminFormController(FormService service) {
-        this.service = service;
-    }
+	public AdminFormController(FormService service) {
+		this.service = service;
+	}
 
-    @GetMapping
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public List<FormModels.FormSummary> list(@RequestParam(defaultValue = "ACTIVE") String status) {
-        return service.list(status);
-    }
+	@GetMapping
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public List<FormModels.FormSummary> list(@RequestParam(defaultValue = "ACTIVE") String status) {
+		return service.list(status);
+	}
 
-    @GetMapping("/{publicId}")
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public FormModels.FormDetail get(@PathVariable String publicId) {
-        return service.get(publicId);
-    }
+	@GetMapping("/{publicId}")
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public FormModels.FormDetail get(@PathVariable String publicId) {
+		return service.get(publicId);
+	}
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('FORM_CREATE')")
-    public FormModels.FormDetail create(@RequestBody FormModels.FormCommand command) {
-        return service.create(command);
-    }
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	@PreAuthorize("hasAuthority('FORM_CREATE')")
+	public FormModels.FormDetail create(@RequestBody FormModels.FormCommand command) {
+		return service.create(command);
+	}
 
-    @PutMapping("/{publicId}")
-    @PreAuthorize("hasAuthority('FORM_UPDATE')")
-    public FormModels.FormDetail update(@PathVariable String publicId,
-                                        @RequestBody FormModels.FormCommand command) {
-        return service.update(publicId, command);
-    }
+	@PutMapping("/{publicId}")
+	@PreAuthorize("hasAuthority('FORM_UPDATE')")
+	public FormModels.FormDetail update(@PathVariable String publicId, @RequestBody FormModels.FormCommand command) {
+		return service.update(publicId, command);
+	}
 
-    @PostMapping("/{publicId}/status/{status}")
-    @PreAuthorize("hasAuthority('FORM_STATUS_CHANGE')")
-    public FormModels.FormDetail status(@PathVariable String publicId, @PathVariable String status) {
-        return service.changeStatus(publicId, status);
-    }
+	@PostMapping("/{publicId}/status/{status}")
+	@PreAuthorize("hasAuthority('FORM_STATUS_CHANGE')")
+	public FormModels.FormDetail status(@PathVariable String publicId, @PathVariable String status) {
+		return service.changeStatus(publicId, status);
+	}
 }

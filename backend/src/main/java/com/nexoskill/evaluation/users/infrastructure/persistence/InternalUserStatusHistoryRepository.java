@@ -4,5 +4,5 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface InternalUserStatusHistoryRepository extends JpaRepository<InternalUserStatusHistoryJpaEntity, Long> {
-    List<InternalUserStatusHistoryJpaEntity> findByUserIdOrderByOccurredAtDesc(Long userId);
+	List<InternalUserStatusHistoryJpaEntity> findByUserIdOrderByOccurredAtDesc(Long userId);
 }

@@ -66,15 +66,15 @@ public class AuthenticationController {
 	public ResponseEntity<Void> changePassword(@AuthenticationPrincipal AuthenticatedUser principal,
 			@Valid @RequestBody ChangePasswordRequest body, HttpServletRequest request, HttpServletResponse response) {
 
-        String rawSessionToken = cookieSupport.readToken(request);
-        if (principal == null || rawSessionToken == null || rawSessionToken.isBlank()) {
-            throw com.nexoskill.evaluation.authentication.domain.AuthenticationException.unauthorized();
-        }
-        changeOwnPasswordService.change(new ChangePasswordCommand(principal.internalId(), body.currentPassword(),
-                body.newPassword(), body.confirmPassword(), tokenHasher.hash(rawSessionToken),
-                ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
-        response.addHeader(HttpHeaders.SET_COOKIE, cookieSupport.clear().toString());
-        return ResponseEntity.noContent().build();
+		String rawSessionToken = cookieSupport.readToken(request);
+		if (principal == null || rawSessionToken == null || rawSessionToken.isBlank()) {
+			throw com.nexoskill.evaluation.authentication.domain.AuthenticationException.unauthorized();
+		}
+		changeOwnPasswordService.change(new ChangePasswordCommand(principal.internalId(), body.currentPassword(),
+				body.newPassword(), body.confirmPassword(), tokenHasher.hash(rawSessionToken),
+				ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
+		response.addHeader(HttpHeaders.SET_COOKIE, cookieSupport.clear().toString());
+		return ResponseEntity.noContent().build();
 	}
 
 	@PostMapping("/logout")

@@ -10,14 +10,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/tenant-context")
 public class TenantContextController {
-    private final TenantContextResolver resolver;
+	private final TenantContextResolver resolver;
 
-    public TenantContextController(TenantContextResolver resolver) {
-        this.resolver = resolver;
-    }
+	public TenantContextController(TenantContextResolver resolver) {
+		this.resolver = resolver;
+	}
 
-    @GetMapping
-    public TenantContext current(HttpServletRequest request) {
-        return resolver.resolve(request);
-    }
+	@GetMapping
+	public TenantContext current(HttpServletRequest request) {
+		return resolver.resolve(request);
+	}
 }

@@ -1,10 +1,5 @@
 package com.nexoskill.evaluation.questionbank.application.model;
 
-public record QuestionOptionCommand(
-        String text,
-        String mediaPublicId,
-        String matchText,
-        String matchMediaPublicId,
-        boolean correct,
-        String feedback) {
+public record QuestionOptionCommand(String text, String mediaPublicId, String matchText, String matchMediaPublicId,
+		boolean correct, String feedback) {
 }

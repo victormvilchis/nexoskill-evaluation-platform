@@ -60,15 +60,15 @@ public class AuthSessionJpaEntity {
 	}
 
 	public static AuthSessionJpaEntity create(String publicId, Long userId, String tokenHash, SessionStatus status,
-            AuthSessionScope scope, String ipAddress, String userAgent, Instant createdAt, Instant lastActivityAt,
-            Instant expiresAt, Instant revokedAt) {
+			AuthSessionScope scope, String ipAddress, String userAgent, Instant createdAt, Instant lastActivityAt,
+			Instant expiresAt, Instant revokedAt) {
 
 		AuthSessionJpaEntity entity = new AuthSessionJpaEntity();
 		entity.publicId = publicId;
 		entity.userId = userId;
 		entity.tokenHash = tokenHash;
 		entity.status = status;
-        entity.scope = scope;
+		entity.scope = scope;
 		entity.ipAddress = ipAddress;
 		entity.userAgent = userAgent;
 		entity.createdAt = createdAt;
@@ -99,8 +99,8 @@ public class AuthSessionJpaEntity {
 	}
 
 	public AuthSessionScope getScope() {
-        return scope;
-    }
+		return scope;
+	}
 
 	public String getIpAddress() {
 		return ipAddress;

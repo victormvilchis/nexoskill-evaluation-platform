@@ -20,47 +20,45 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class DeleteUserServiceTest {
-    private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
+	private static final Instant NOW = Instant.parse("2026-07-24T20:00:00Z");
 
-    @Test
-    void rejectsDeletingOwnAccount() {
-        UserManagementPort users = mock(UserManagementPort.class);
-        UserSessionPort sessions = mock(UserSessionPort.class);
-        InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
-        AuditLogPort audit = mock(AuditLogPort.class);
-        DeleteUserService service = new DeleteUserService(users, sessions, new InternalUserTransitionPolicy(),
-                history, audit, Clock.fixed(NOW, ZoneOffset.UTC));
-        when(users.getByPublicId("self")).thenReturn(new UserManagementPort.ManagedUser(10L, summary("self")));
+	@Test
+	void rejectsDeletingOwnAccount() {
+		UserManagementPort users = mock(UserManagementPort.class);
+		UserSessionPort sessions = mock(UserSessionPort.class);
+		InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
+		AuditLogPort audit = mock(AuditLogPort.class);
+		DeleteUserService service = new DeleteUserService(users, sessions, new InternalUserTransitionPolicy(), history,
+				audit, Clock.fixed(NOW, ZoneOffset.UTC));
+		when(users.getByPublicId("self")).thenReturn(new UserManagementPort.ManagedUser(10L, summary("self")));
 
-        assertThatThrownBy(() -> service.delete(
-                new DeleteUserCommand("self", "Baja administrativa", 10L, "127.0.0.1", "JUnit")))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("No puedes eliminar tu propia cuenta.");
-        verifyNoInteractions(sessions, history, audit);
-    }
+		assertThatThrownBy(
+				() -> service.delete(new DeleteUserCommand("self", "Baja administrativa", 10L, "127.0.0.1", "JUnit")))
+				.isInstanceOf(BusinessException.class).hasMessage("No puedes eliminar tu propia cuenta.");
+		verifyNoInteractions(sessions, history, audit);
+	}
 
-    @Test
-    void rejectsDeletingLastEffectiveAdministrator() {
-        UserManagementPort users = mock(UserManagementPort.class);
-        UserSessionPort sessions = mock(UserSessionPort.class);
-        InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
-        AuditLogPort audit = mock(AuditLogPort.class);
-        DeleteUserService service = new DeleteUserService(users, sessions, new InternalUserTransitionPolicy(),
-                history, audit, Clock.fixed(NOW, ZoneOffset.UTC));
-        when(users.getByPublicId("admin")).thenReturn(new UserManagementPort.ManagedUser(20L, summary("admin")));
-        when(users.countEffectiveAdministrators(NOW)).thenReturn(1L);
+	@Test
+	void rejectsDeletingLastEffectiveAdministrator() {
+		UserManagementPort users = mock(UserManagementPort.class);
+		UserSessionPort sessions = mock(UserSessionPort.class);
+		InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
+		AuditLogPort audit = mock(AuditLogPort.class);
+		DeleteUserService service = new DeleteUserService(users, sessions, new InternalUserTransitionPolicy(), history,
+				audit, Clock.fixed(NOW, ZoneOffset.UTC));
+		when(users.getByPublicId("admin")).thenReturn(new UserManagementPort.ManagedUser(20L, summary("admin")));
+		when(users.countEffectiveAdministrators(NOW)).thenReturn(1L);
 
-        assertThatThrownBy(() -> service.delete(
-                new DeleteUserCommand("admin", "Baja administrativa", 10L, "127.0.0.1", "JUnit")))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("No puedes eliminar al último administrador activo de la plataforma.");
-        verifyNoInteractions(sessions, history, audit);
-    }
+		assertThatThrownBy(
+				() -> service.delete(new DeleteUserCommand("admin", "Baja administrativa", 10L, "127.0.0.1", "JUnit")))
+				.isInstanceOf(BusinessException.class)
+				.hasMessage("No puedes eliminar al último administrador activo de la plataforma.");
+		verifyNoInteractions(sessions, history, audit);
+	}
 
-    private AdminUserSummary summary(String id) {
-        return new AdminUserSummary(id, id + "@nexoskill.local", "Admin", "NexoSkill", "Admin NexoSkill",
-                UserStatus.ACTIVE, Set.of("ADMINISTRATOR"), null, null, UserAccessStatus.ACTIVE,
-                NOW.minusSeconds(60), null, null, NOW.minusSeconds(3600), NOW.minusSeconds(300), "Sistema",
-                "Creación de usuario");
-    }
+	private AdminUserSummary summary(String id) {
+		return new AdminUserSummary(id, id + "@nexoskill.local", "Admin", "NexoSkill", "Admin NexoSkill",
+				UserStatus.ACTIVE, Set.of("ADMINISTRATOR"), null, null, UserAccessStatus.ACTIVE, NOW.minusSeconds(60),
+				null, null, NOW.minusSeconds(3600), NOW.minusSeconds(300), "Sistema", "Creación de usuario");
+	}
 }

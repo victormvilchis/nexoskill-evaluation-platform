@@ -19,8 +19,9 @@ public class OracleAuthSessionRepositoryAdapter implements AuthSessionRepository
 		AuthSessionJpaEntity entity;
 		if (session.getId() == null) {
 			entity = AuthSessionJpaEntity.create(session.getPublicId(), session.getUserId(), session.getTokenHash(),
-					session.getStatus(), session.getScope(), session.getIpAddress(), session.getUserAgent(), session.getCreatedAt(),
-					session.getLastActivityAt(), session.getExpiresAt(), session.getRevokedAt());
+					session.getStatus(), session.getScope(), session.getIpAddress(), session.getUserAgent(),
+					session.getCreatedAt(), session.getLastActivityAt(), session.getExpiresAt(),
+					session.getRevokedAt());
 		} else {
 			entity = repository.findById(session.getId())
 					.orElseThrow(() -> new IllegalStateException("Sesión no encontrada"));
@@ -36,7 +37,7 @@ public class OracleAuthSessionRepositoryAdapter implements AuthSessionRepository
 
 	private AuthSession toDomain(AuthSessionJpaEntity entity) {
 		return new AuthSession(entity.getId(), entity.getPublicId(), entity.getUserId(), entity.getTokenHash(),
-				entity.getStatus(), entity.getScope(), entity.getIpAddress(), entity.getUserAgent(), entity.getCreatedAt(),
-				entity.getLastActivityAt(), entity.getExpiresAt(), entity.getRevokedAt());
+				entity.getStatus(), entity.getScope(), entity.getIpAddress(), entity.getUserAgent(),
+				entity.getCreatedAt(), entity.getLastActivityAt(), entity.getExpiresAt(), entity.getRevokedAt());
 	}
 }

@@ -10,11 +10,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/student")
 public class StudentSelfController {
-    @GetMapping("/me")
-    @PreAuthorize("hasAuthority('STUDENT_PORTAL')")
-    public StudentResponse me(@AuthenticationPrincipal AuthenticatedStudent student) {
-        return new StudentResponse(StudentIdentityResponse.from(student));
-    }
+	@GetMapping("/me")
+	@PreAuthorize("hasAuthority('STUDENT_PORTAL')")
+	public StudentResponse me(@AuthenticationPrincipal AuthenticatedStudent student) {
+		return new StudentResponse(StudentIdentityResponse.from(student));
+	}
 
-    public record StudentResponse(StudentIdentityResponse student) {}
+	public record StudentResponse(StudentIdentityResponse student) {
+	}
 }

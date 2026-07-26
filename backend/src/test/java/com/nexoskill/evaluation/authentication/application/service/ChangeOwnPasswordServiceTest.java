@@ -26,41 +26,41 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ChangeOwnPasswordServiceTest {
-    private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
+	private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
 
-    @Test
-    void completesMandatoryPasswordChangeAndRevokesEveryPreviousSession() {
-        UserRepository users = mock(UserRepository.class);
-        PasswordHasher hasher = mock(PasswordHasher.class);
-        PasswordHistoryPort history = mock(PasswordHistoryPort.class);
-        UserSessionPort sessions = mock(UserSessionPort.class);
-        AuditLogPort audit = mock(AuditLogPort.class);
-        AppProperties properties = new AppProperties();
-        UserAccount user = temporaryUser();
+	@Test
+	void completesMandatoryPasswordChangeAndRevokesEveryPreviousSession() {
+		UserRepository users = mock(UserRepository.class);
+		PasswordHasher hasher = mock(PasswordHasher.class);
+		PasswordHistoryPort history = mock(PasswordHistoryPort.class);
+		UserSessionPort sessions = mock(UserSessionPort.class);
+		AuditLogPort audit = mock(AuditLogPort.class);
+		AppProperties properties = new AppProperties();
+		UserAccount user = temporaryUser();
 
-        when(users.findById(10L)).thenReturn(java.util.Optional.of(user));
-        when(hasher.matches("Temp#12345", "old-hash")).thenReturn(true);
-        when(hasher.matches("Final#67890", "old-hash")).thenReturn(false);
-        when(history.recentHashes(10L, properties.getSecurity().getPasswordHistorySize())).thenReturn(List.of());
-        when(hasher.encode("Final#67890")).thenReturn("new-hash");
-        when(users.save(user)).thenReturn(user);
-        when(sessions.revokeActiveSessions(10L, NOW)).thenReturn(1);
+		when(users.findById(10L)).thenReturn(java.util.Optional.of(user));
+		when(hasher.matches("Temp#12345", "old-hash")).thenReturn(true);
+		when(hasher.matches("Final#67890", "old-hash")).thenReturn(false);
+		when(history.recentHashes(10L, properties.getSecurity().getPasswordHistorySize())).thenReturn(List.of());
+		when(hasher.encode("Final#67890")).thenReturn("new-hash");
+		when(users.save(user)).thenReturn(user);
+		when(sessions.revokeActiveSessions(10L, NOW)).thenReturn(1);
 
-        ChangeOwnPasswordService service = new ChangeOwnPasswordService(users, hasher, new PasswordPolicy(), history,
-                sessions, audit, properties, Clock.fixed(NOW, ZoneOffset.UTC));
-        service.change(new ChangePasswordCommand(10L, "Temp#12345", "Final#67890", "Final#67890",
-                "restricted-session", "127.0.0.1", "JUnit"));
+		ChangeOwnPasswordService service = new ChangeOwnPasswordService(users, hasher, new PasswordPolicy(), history,
+				sessions, audit, properties, Clock.fixed(NOW, ZoneOffset.UTC));
+		service.change(new ChangePasswordCommand(10L, "Temp#12345", "Final#67890", "Final#67890", "restricted-session",
+				"127.0.0.1", "JUnit"));
 
-        assertThat(user.isPasswordChangeRequired()).isFalse();
-        assertThat(user.getPasswordHash()).isEqualTo("new-hash");
-        assertThat(user.getTemporaryPasswordExpiresAt()).isNull();
-        verify(sessions).revokeActiveSessions(10L, NOW);
-    }
+		assertThat(user.isPasswordChangeRequired()).isFalse();
+		assertThat(user.getPasswordHash()).isEqualTo("new-hash");
+		assertThat(user.getTemporaryPasswordExpiresAt()).isNull();
+		verify(sessions).revokeActiveSessions(10L, NOW);
+	}
 
-    private UserAccount temporaryUser() {
-        return new UserAccount(10L, "user-public", "manager@nexoskill.local", "manager@nexoskill.local",
-                "old-hash", "Gestor", "Prueba", "Gestor Prueba", UserStatus.ACTIVE, 0, null, null, true, null,
-                NOW.plusSeconds(3600), Set.of(new RoleGrant("MANAGER", Set.of("PASSWORD_CHANGE"))),
-                new UserAccess(NOW.minusSeconds(60), null, UserAccessStatus.ACTIVE));
-    }
+	private UserAccount temporaryUser() {
+		return new UserAccount(10L, "user-public", "manager@nexoskill.local", "manager@nexoskill.local", "old-hash",
+				"Gestor", "Prueba", "Gestor Prueba", UserStatus.ACTIVE, 0, null, null, true, null,
+				NOW.plusSeconds(3600), Set.of(new RoleGrant("MANAGER", Set.of("PASSWORD_CHANGE"))),
+				new UserAccess(NOW.minusSeconds(60), null, UserAccessStatus.ACTIVE));
+	}
 }

@@ -15,22 +15,22 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 class StudentLifecycleSchedulerTest {
-    @Test
-    void shouldExpireElapsedSessionsAndRevokeSessionsOfExpiredStudents() {
-        Instant now = Instant.parse("2026-07-26T18:00:00Z");
-        StudentRepository students = Mockito.mock(StudentRepository.class);
-        StudentSessionRepository sessions = Mockito.mock(StudentSessionRepository.class);
-        when(students.findExpiredActiveStudentIds(now)).thenReturn(List.of(11L, 12L));
-        StudentLifecycleScheduler scheduler = new StudentLifecycleScheduler(students, sessions,
-                Clock.fixed(now, ZoneOffset.UTC));
+	@Test
+	void shouldExpireElapsedSessionsAndRevokeSessionsOfExpiredStudents() {
+		Instant now = Instant.parse("2026-07-26T18:00:00Z");
+		StudentRepository students = Mockito.mock(StudentRepository.class);
+		StudentSessionRepository sessions = Mockito.mock(StudentSessionRepository.class);
+		when(students.findExpiredActiveStudentIds(now)).thenReturn(List.of(11L, 12L));
+		StudentLifecycleScheduler scheduler = new StudentLifecycleScheduler(students, sessions,
+				Clock.fixed(now, ZoneOffset.UTC));
 
-        scheduler.revokeInvalidSessions();
+		scheduler.revokeInvalidSessions();
 
-        verify(sessions).expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
-                StudentSessionRevocationReason.EXPIRED, now);
-        verify(sessions).revokeActive(11L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
-                StudentSessionRevocationReason.EXPIRED, now);
-        verify(sessions).revokeActive(12L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
-                StudentSessionRevocationReason.EXPIRED, now);
-    }
+		verify(sessions).expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
+				StudentSessionRevocationReason.EXPIRED, now);
+		verify(sessions).revokeActive(11L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
+				StudentSessionRevocationReason.EXPIRED, now);
+		verify(sessions).revokeActive(12L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
+				StudentSessionRevocationReason.EXPIRED, now);
+	}
 }

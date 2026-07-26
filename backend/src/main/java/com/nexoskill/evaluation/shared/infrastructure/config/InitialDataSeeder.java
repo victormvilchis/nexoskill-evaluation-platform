@@ -65,16 +65,16 @@ public class InitialDataSeeder implements ApplicationRunner {
 				.orElseThrow(() -> new IllegalStateException("No existe la organización GLOBAL inicial"));
 
 		Instant now = Instant.now();
-		UserJpaEntity user = userRepository.findByNormalizedEmail(normalizedEmail).orElseGet(() ->
-				userRepository.saveAndFlush(UserJpaEntity.create(UUID.randomUUID().toString(), email.trim(),
-						normalizedEmail, passwordHasher.encode(password), firstName, lastName, displayName, role, now,
-						null, com.nexoskill.evaluation.users.domain.model.UserStatus.ACTIVE, false, now, null, null, now)));
+		UserJpaEntity user = userRepository.findByNormalizedEmail(normalizedEmail)
+				.orElseGet(() -> userRepository.saveAndFlush(UserJpaEntity.create(UUID.randomUUID().toString(),
+						email.trim(), normalizedEmail, passwordHasher.encode(password), firstName, lastName,
+						displayName, role, now, null, com.nexoskill.evaluation.users.domain.model.UserStatus.ACTIVE,
+						false, now, null, null, now)));
 
 		if ("ADMINISTRATOR".equals(roleCode)) {
 			membershipRepository.findById(user.getId()).ifPresentOrElse(
-					membership -> membership.reassign(global.getId(), null, now),
-					() -> membershipRepository.save(UserOrganizationMembershipJpaEntity.active(
-							user.getId(), global.getId(), null, now)));
+					membership -> membership.reassign(global.getId(), null, now), () -> membershipRepository
+							.save(UserOrganizationMembershipJpaEntity.active(user.getId(), global.getId(), null, now)));
 		}
 	}
 }

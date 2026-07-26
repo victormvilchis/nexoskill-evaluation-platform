@@ -7,15 +7,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 
-public interface LearningCollectionRepository
-        extends JpaRepository<LearningCollectionJpaEntity, Long> {
+public interface LearningCollectionRepository extends JpaRepository<LearningCollectionJpaEntity, Long> {
 
-    Optional<LearningCollectionJpaEntity> findByPublicId(String publicId);
+	Optional<LearningCollectionJpaEntity> findByPublicId(String publicId);
 
-    boolean existsByCode(String code);
+	boolean existsByCode(String code);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select collection from LearningCollectionJpaEntity collection where collection.publicId = :publicId")
-    Optional<LearningCollectionJpaEntity> findByPublicIdForUpdate(
-            @Param("publicId") String publicId);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select collection from LearningCollectionJpaEntity collection where collection.publicId = :publicId")
+	Optional<LearningCollectionJpaEntity> findByPublicIdForUpdate(@Param("publicId") String publicId);
 }
