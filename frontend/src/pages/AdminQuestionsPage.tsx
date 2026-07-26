@@ -61,7 +61,7 @@ export function AdminQuestionsPage() {
   const [data, setData] = useState<QuestionPage>()
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState<QuestionStatus | ''>('')
+  const [status, setStatus] = useState<QuestionStatus | ''>('ACTIVE')
   const [typeCode, setTypeCode] = useState<QuestionTypeCode | ''>('')
   const [categoryPublicId, setCategoryPublicId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -110,7 +110,7 @@ export function AdminQuestionsPage() {
   }, [query, status, typeCode, categoryPublicId, reloadKey])
 
   const questions = data?.content ?? []
-  const hasFilters = Boolean(query || status || typeCode || categoryPublicId)
+  const hasFilters = Boolean(query || status !== 'ACTIVE' || typeCode || categoryPublicId)
 
   async function duplicate(question: QuestionSummary) {
     setBusyId(question.publicId)
@@ -199,7 +199,7 @@ export function AdminQuestionsPage() {
         hasActiveFilters={hasFilters}
         onClear={() => {
           setQuery('')
-          setStatus('')
+          setStatus('ACTIVE')
           setTypeCode('')
           setCategoryPublicId('')
         }}
@@ -220,8 +220,8 @@ export function AdminQuestionsPage() {
           ))}
         </ResourceSelectField>
         <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as QuestionStatus | '')}>
-          <option value="">Disponibles</option>
           <option value="ACTIVE">Activas</option>
+          <option value="">Todas</option>
           <option value="ARCHIVED">Archivadas</option>
           <option value="DELETED">Eliminadas</option>
         </ResourceSelectField>

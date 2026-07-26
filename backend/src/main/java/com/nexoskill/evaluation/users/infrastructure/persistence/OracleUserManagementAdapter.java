@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.users.infrastructure.persistence;
 
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.InternalUserOrganizationMembershipRepository;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.UserOrganizationMembershipJpaEntity;
@@ -13,6 +14,7 @@ import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import com.nexoskill.evaluation.users.domain.model.UserStatus;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -58,7 +60,8 @@ public class OracleUserManagementAdapter implements UserManagementPort {
                 data.initialStatus(), true, null, data.temporaryPasswordExpiresAt(), data.actorUserId(),
                 data.createdAt());
         entity = userRepository.saveAndFlush(entity);
-        assignOrganization(entity.getId(), data.organizationPublicId(), data.actorUserId(), data.createdAt());
+        assignOrganization(entity.getId(), data.roleCode(), data.organizationPublicId(),
+                data.actorUserId(), data.createdAt());
         return toSummary(entity);
     }
 
@@ -104,7 +107,7 @@ public class OracleUserManagementAdapter implements UserManagementPort {
         var entity = mutableUser(publicId);
         String roleCode = entity.getRoles().stream().findFirst().map(RoleJpaEntity::getCode).orElse("");
         validateOrganizationRequirement(roleCode, organizationPublicId);
-        assignOrganization(entity.getId(), organizationPublicId, actorUserId, changedAt);
+        assignOrganization(entity.getId(), roleCode, organizationPublicId, actorUserId, changedAt);
         return toSummary(entity);
     }
 
@@ -189,23 +192,51 @@ public class OracleUserManagementAdapter implements UserManagementPort {
         if (("MANAGER".equals(roleCode) || "SUPERVISOR".equals(roleCode))
                 && (organizationPublicId == null || organizationPublicId.isBlank())) {
             throw new BusinessException("USER_ORGANIZATION_REQUIRED",
-                    "Los Gestores y Supervisores deben pertenecer a una organización.");
+                    "Los Gestores y Supervisores deben pertenecer a una organización comercial.");
         }
     }
 
-    private void assignOrganization(Long userId, String organizationPublicId, Long actorUserId, Instant changedAt) {
-        if (organizationPublicId == null || organizationPublicId.isBlank()) {
-            membershipRepository.findById(userId).ifPresent(membershipRepository::delete);
-            return;
-        }
-        var organization = organizationRepository.findByPublicId(organizationPublicId.trim())
-                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND",
-                        "La organización seleccionada no existe."));
+    private void assignOrganization(Long userId, String roleCode, String organizationPublicId,
+            Long actorUserId, Instant changedAt) {
+        var organization = resolveOrganization(roleCode, organizationPublicId);
         var membership = membershipRepository.findById(userId)
                 .orElseGet(() -> UserOrganizationMembershipJpaEntity.active(userId, organization.getId(),
                         actorUserId, changedAt));
         membership.reassign(organization.getId(), actorUserId, changedAt);
-        membershipRepository.save(membership);
+        membershipRepository.saveAndFlush(membership);
+    }
+
+    private com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity
+            resolveOrganization(String roleCode, String organizationPublicId) {
+        if ("ADMINISTRATOR".equals(roleCode)) {
+            var global = organizationRepository.findByCode(
+                    com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity.GLOBAL_CODE)
+                    .orElseThrow(() -> new BusinessException("GLOBAL_ORGANIZATION_NOT_FOUND",
+                            "La organización GLOBAL no se encuentra configurada."));
+            if (organizationPublicId != null && !organizationPublicId.isBlank()
+                    && !global.getPublicId().equals(organizationPublicId.trim())) {
+                throw new BusinessException("ADMIN_GLOBAL_ORGANIZATION_REQUIRED",
+                        "Los Administradores globales deben pertenecer a la organización GLOBAL.");
+            }
+            return global;
+        }
+
+        if (organizationPublicId == null || organizationPublicId.isBlank()) {
+            throw new BusinessException("USER_ORGANIZATION_REQUIRED",
+                    "Selecciona una organización comercial activa y vigente.");
+        }
+        var organization = organizationRepository.findByPublicId(organizationPublicId.trim())
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND",
+                        "La organización seleccionada no existe."));
+        if (organization.getOrganizationType() != OrganizationType.CUSTOMER) {
+            throw new BusinessException("CUSTOMER_ORGANIZATION_REQUIRED",
+                    "Gestores y Supervisores no pueden pertenecer a la organización GLOBAL.");
+        }
+        if (!organization.isOperational(LocalDate.now(clock))) {
+            throw new BusinessException("ORGANIZATION_NOT_OPERATIONAL",
+                    "La organización seleccionada está inactiva o fuera de vigencia.");
+        }
+        return organization;
     }
 
     private AdminUserSummary toSummary(UserJpaEntity entity) {

@@ -16,6 +16,7 @@ import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,11 +44,11 @@ public class AdminStudentController {
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public StudentService.PageResult search(HttpServletRequest request,
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) StudentEffectiveStatus status,
+            @RequestParam(defaultValue = "ACTIVE") String status,
             @RequestParam(defaultValue = "false") boolean includeDeleted,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return service.search(tenant(request), query, status, includeDeleted, page, size);
+        return service.search(tenant(request), query, parseStatus(status), includeDeleted, page, size);
     }
 
     @GetMapping("/{publicId}")
@@ -176,4 +177,19 @@ public class AdminStudentController {
             @NotNull Long version) {}
     public record DeleteRequest(@NotBlank @Size(max = 500) String reason) {}
     public record ResetPasswordRequest(@NotBlank @Size(min = 10, max = 128) String temporaryPassword) {}
+    private StudentEffectiveStatus parseStatus(String value) {
+        if (value == null || value.isBlank() || "ACTIVE".equalsIgnoreCase(value)) {
+            return StudentEffectiveStatus.ACTIVE;
+        }
+        if ("ALL".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            return StudentEffectiveStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new com.nexoskill.evaluation.shared.domain.BusinessException(
+                    "STUDENT_STATUS_INVALID", "El estado indicado no es válido.");
+        }
+    }
+
 }

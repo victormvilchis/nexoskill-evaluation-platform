@@ -27,17 +27,18 @@ function formatDate(value?: string) {
 export function AdminFormsPage() {
   const [items, setItems] = useState<FormSummary[]>([])
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('ACTIVE')
   const [mode, setMode] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const debouncedQuery = useDebouncedValue(query, 250)
 
-  async function load() {
+  async function load(selectedStatus = status) {
     setLoading(true)
     setError('')
     try {
-      setItems(await apiClient.get<FormSummary[]>('/api/v1/admin/forms'))
+      const backendStatus = selectedStatus || 'ALL'
+      setItems(await apiClient.get<FormSummary[]>(`/api/v1/admin/forms?status=${encodeURIComponent(backendStatus)}`))
     } catch {
       setError('No fue posible consultar los formularios.')
     } finally {
@@ -46,8 +47,8 @@ export function AdminFormsPage() {
   }
 
   useEffect(() => {
-    void load()
-  }, [])
+    void load(status)
+  }, [status])
 
   const filtered = useMemo(() => items.filter((item) => {
     const term = debouncedQuery.trim().toLocaleLowerCase('es-MX')
@@ -57,7 +58,7 @@ export function AdminFormsPage() {
     return matchesText && (!status || item.status === status) && (!mode || item.modeCode === mode)
   }), [items, debouncedQuery, status, mode])
 
-  const hasFilters = Boolean(query || status || mode)
+  const hasFilters = Boolean(query || status !== 'ACTIVE' || mode)
 
   return (
     <main className="content-page resource-page ns-list-page">
@@ -77,7 +78,7 @@ export function AdminFormsPage() {
         hasActiveFilters={hasFilters}
         onClear={() => {
           setQuery('')
-          setStatus('')
+          setStatus('ACTIVE')
           setMode('')
         }}
       >
@@ -92,9 +93,9 @@ export function AdminFormsPage() {
           <option value="PRACTICE">Práctica</option>
         </ResourceSelectField>
         <ResourceSelectField label="Estado" value={status} onChange={setStatus}>
+          <option value="ACTIVE">Activo</option>
           <option value="">Todos</option>
           <option value="DRAFT">Borrador</option>
-          <option value="ACTIVE">Activo</option>
           <option value="DISABLED">Deshabilitado</option>
           <option value="CLOSED">Cerrado</option>
           <option value="ARCHIVED">Archivado</option>

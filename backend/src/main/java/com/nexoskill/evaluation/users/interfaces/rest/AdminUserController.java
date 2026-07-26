@@ -56,7 +56,7 @@ public class AdminUserController {
     @GetMapping("/users")
     @PreAuthorize("hasAuthority('USER_VIEW')")
     public AdminUserPage search(@RequestParam(required = false) String query,
-            @RequestParam(required = false) String status, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return searchUsersService.search(query, status, page, size);
     }

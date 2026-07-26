@@ -15,7 +15,7 @@ export async function searchOrganizations(params: {
 }): Promise<OrganizationPage> {
   const search = new URLSearchParams()
   if (params.query?.trim()) search.set('query', params.query.trim())
-  if (params.status && params.status !== 'ALL') search.set('status', params.status)
+  if (params.status) search.set('status', params.status)
   search.set('page', String(params.page ?? 0))
   search.set('size', String(params.size ?? 20))
   return apiRequest<OrganizationPage>(`/admin/organizations?${search.toString()}`, {

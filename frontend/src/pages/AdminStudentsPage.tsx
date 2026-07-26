@@ -21,9 +21,9 @@ import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { StudentEffectiveStatus, StudentPage, StudentSummary } from '../shared/types/students'
 
-const statuses: Array<{ value: StudentEffectiveStatus | ''; label: string }> = [
-  { value: '', label: 'Todos los estados' },
+const statuses: Array<{ value: StudentEffectiveStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activo' },
+  { value: 'ALL', label: 'Todos los estados' },
   { value: 'PENDING', label: 'Pendiente' },
   { value: 'EXPIRED', label: 'Vencido' },
   { value: 'INACTIVE', label: 'Inactivo' },
@@ -41,10 +41,11 @@ const validStatuses = new Set<StudentEffectiveStatus>([
   'ACTIVE', 'PENDING', 'EXPIRED', 'INACTIVE', 'SUSPENDED', 'ARCHIVED', 'DELETED'
 ])
 
-function statusFromQuery(value: string | null): StudentEffectiveStatus | '' {
+function statusFromQuery(value: string | null): StudentEffectiveStatus | 'ALL' {
+  if (value === 'ALL') return 'ALL'
   return value && validStatuses.has(value as StudentEffectiveStatus)
     ? value as StudentEffectiveStatus
-    : ''
+    : 'ACTIVE'
 }
 
 type Action = 'ACTIVATE' | 'DEACTIVATE' | 'SUSPEND' | 'ARCHIVE' | 'RESTORE'
@@ -66,7 +67,7 @@ export function AdminStudentsPage() {
   )
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
-  const [status, setStatus] = useState<StudentEffectiveStatus | ''>(statusFromQuery(searchParams.get('status')))
+  const [status, setStatus] = useState<StudentEffectiveStatus | 'ALL'>(statusFromQuery(searchParams.get('status')))
   const [includeDeleted, setIncludeDeleted] = useState(searchParams.get('deleted') === '1')
   const [data, setData] = useState<StudentPage | null>(null)
   const [loading, setLoading] = useState(false)
@@ -81,8 +82,9 @@ export function AdminStudentsPage() {
     if (!administrator) return
     searchOrganizations({ status: 'ACTIVE', page: 0, size: 100 })
       .then((response) => {
-        setOrganizations(response.content)
-        if (selectedOrganization && !response.content.some((organization) => organization.publicId === selectedOrganization)) {
+        const customerOrganizations = response.content.filter((organization) => organization.organizationType === 'CUSTOMER')
+        setOrganizations(customerOrganizations)
+        if (selectedOrganization && !customerOrganizations.some((organization) => organization.publicId === selectedOrganization)) {
           setSelectedOrganization('')
         }
       })
@@ -101,7 +103,7 @@ export function AdminStudentsPage() {
     if (currentQuery === debouncedQuery.trim() && currentStatus === status && currentDeleted === includeDeleted) return
     const next = new URLSearchParams()
     if (debouncedQuery.trim()) next.set('query', debouncedQuery.trim())
-    if (status) next.set('status', status)
+    next.set('status', status)
     if (includeDeleted) next.set('deleted', '1')
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, includeDeleted, searchParams, setSearchParams, status])
@@ -150,7 +152,7 @@ export function AdminStudentsPage() {
 
   function clearFilters() {
     setQuery('')
-    setStatus('')
+    setStatus('ACTIVE')
     setIncludeDeleted(false)
   }
 
@@ -200,12 +202,12 @@ export function AdminStudentsPage() {
         <>
           <FilterToolbar
             resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'estudiante' : 'estudiantes'}`}
-            hasActiveFilters={Boolean(query || status || includeDeleted)}
+            hasActiveFilters={Boolean(query || status !== 'ACTIVE' || includeDeleted)}
             onClear={clearFilters}
           >
             <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo o código" />
             <ResourceSelectField label="Estado" value={status} onChange={(value) => {
-                const nextStatus = value as StudentEffectiveStatus | ''
+                const nextStatus = value as StudentEffectiveStatus | 'ALL'
                 setStatus(nextStatus)
                 if (nextStatus === 'DELETED') setIncludeDeleted(true)
               }}>
@@ -218,7 +220,7 @@ export function AdminStudentsPage() {
                 onChange={(event) => {
                   const checked = event.target.checked
                   setIncludeDeleted(checked)
-                  if (!checked && status === 'DELETED') setStatus('')
+                  if (!checked && status === 'DELETED') setStatus('ACTIVE')
                 }}
               />
               Mostrar eliminados

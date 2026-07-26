@@ -4,9 +4,12 @@ import type {
   CollectionPage,
   CollectionPayload,
   CollectionStatus,
+  CatalogStatus,
   CreateQuestionCategoryPayload,
   QuestionCatalogs,
   QuestionCategory,
+  QuestionCategoryDependencies,
+  QuestionCategoryStatusHistory,
   QuestionDetail,
   QuestionMedia,
   QuestionPage,
@@ -21,8 +24,30 @@ export function getQuestionCatalogs(signal?: AbortSignal) {
   return apiRequest<QuestionCatalogs>('/admin/question-catalogs', { signal })
 }
 
-export function getQuestionCategories(signal?: AbortSignal) {
-  return apiRequest<QuestionCategory[]>('/admin/question-catalogs/categories', { signal })
+export function getQuestionCategories(
+  signal?: AbortSignal,
+  status: CatalogStatus | 'ALL' = 'ACTIVE'
+) {
+  const query = new URLSearchParams({ status })
+  return apiRequest<QuestionCategory[]>(`/admin/question-catalogs/categories?${query}`, { signal })
+}
+
+export function getQuestionCategory(id: string, signal?: AbortSignal) {
+  return apiRequest<QuestionCategory>(`/admin/question-catalogs/categories/${id}`, { signal })
+}
+
+export function getQuestionCategoryDependencies(id: string, signal?: AbortSignal) {
+  return apiRequest<QuestionCategoryDependencies>(
+    `/admin/question-catalogs/categories/${id}/dependencies`,
+    { signal }
+  )
+}
+
+export function getQuestionCategoryStatusHistory(id: string, signal?: AbortSignal) {
+  return apiRequest<QuestionCategoryStatusHistory[]>(
+    `/admin/question-catalogs/categories/${id}/status-history`,
+    { signal }
+  )
 }
 
 export function createQuestionCategory(payload: CreateQuestionCategoryPayload) {
@@ -45,15 +70,27 @@ export function updateQuestionCategory(
 export function changeQuestionCategoryStatus(
   id: string,
   status: 'ACTIVE' | 'INACTIVE',
-  expectedEntityVersion: number
+  expectedEntityVersion: number,
+  reason?: string
 ) {
   return apiRequest<QuestionCategory>(
     `/admin/question-catalogs/categories/${id}/${status === 'ACTIVE' ? 'activate' : 'deactivate'}`,
     {
       method: 'POST',
-      body: JSON.stringify({ expectedEntityVersion })
+      body: JSON.stringify({ expectedEntityVersion, reason })
     }
   )
+}
+
+export function deleteQuestionCategory(
+  id: string,
+  expectedEntityVersion: number,
+  reason?: string
+) {
+  return apiRequest<QuestionCategory>(`/admin/question-catalogs/categories/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ expectedEntityVersion, reason })
+  })
 }
 
 export interface QuestionSearchParams {
@@ -72,7 +109,8 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
     size: String(params.size ?? 20)
   })
   if (params.query) query.set('query', params.query)
-  if (params.status) query.set('status', params.status)
+  if (params.status === '') query.set('status', 'ALL')
+  else if (params.status) query.set('status', params.status)
   if (params.typeCode) query.set('typeCode', params.typeCode)
   if (params.categoryPublicId) {
     query.set('categoryPublicId', params.categoryPublicId)
@@ -163,7 +201,8 @@ export function searchCollections(params: CollectionSearchParams = {}) {
     size: String(params.size ?? 20)
   })
   if (params.query) query.set('query', params.query)
-  if (params.status) query.set('status', params.status)
+  if (params.status === '') query.set('status', 'ALL')
+  else if (params.status) query.set('status', params.status)
 
   return apiRequest<CollectionPage>(`/admin/question-collections?${query}`, {
     signal: params.signal

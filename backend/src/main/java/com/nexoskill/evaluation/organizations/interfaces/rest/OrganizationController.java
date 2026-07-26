@@ -3,8 +3,10 @@ package com.nexoskill.evaluation.organizations.interfaces.rest;
 import com.nexoskill.evaluation.organizations.application.OrganizationService;
 import com.nexoskill.evaluation.organizations.domain.model.ContentMode;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyJpaEntity;
+import com.nexoskill.evaluation.shared.domain.BusinessException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +14,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -37,10 +40,11 @@ public class OrganizationController {
     @GetMapping
     @PreAuthorize("hasAuthority('ORGANIZATION_VIEW')")
     public PageResponse list(@RequestParam(required = false) String query,
-                             @RequestParam(required = false) OrganizationStatus status,
+                             @RequestParam(defaultValue = "ACTIVE") String status,
                              @RequestParam(defaultValue = "0") int page,
                              @RequestParam(defaultValue = "20") int size) {
-        Page<OrganizationJpaEntity> result = service.search(query, status, page, size);
+        OrganizationStatus parsedStatus = parseStatus(status);
+        Page<OrganizationJpaEntity> result = service.search(query, parsedStatus, page, size);
         return new PageResponse(result.getContent().stream().map(this::summary).toList(),
                 result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
@@ -56,7 +60,7 @@ public class OrganizationController {
     @PreAuthorize("hasAuthority('ORGANIZATION_CREATE')")
     public OrganizationResponse create(@Valid @RequestBody CreateRequest request) {
         return response(service.create(new OrganizationService.CreateCommand(
-                request.name(), request.code(), request.contentMode(), request.validFrom(), request.expiresOn(),
+                request.name(), request.code(), request.contentMode(), request.expiresOn(),
                 request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
                 request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
                 request.cycleEndsOn())));
@@ -66,7 +70,7 @@ public class OrganizationController {
     @PreAuthorize("hasAuthority('ORGANIZATION_UPDATE')")
     public OrganizationResponse update(@PathVariable String publicId, @Valid @RequestBody UpdateRequest request) {
         return response(service.update(publicId, new OrganizationService.UpdateCommand(
-                request.name(), request.contentMode(), request.validFrom(), request.expiresOn(),
+                request.name(), request.contentMode(), request.expiresOn(),
                 request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
                 request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
                 request.cycleEndsOn(), request.version())));
@@ -79,20 +83,36 @@ public class OrganizationController {
         return response(service.changeStatus(publicId, status));
     }
 
+    private OrganizationStatus parseStatus(String value) {
+        if (value == null || value.isBlank() || "ACTIVE".equalsIgnoreCase(value)) return OrganizationStatus.ACTIVE;
+        if ("ALL".equalsIgnoreCase(value)) return null;
+        try {
+            return OrganizationStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("ORGANIZATION_STATUS_INVALID", "El estado indicado no es válido.");
+        }
+    }
+
     private OrganizationSummary summary(OrganizationJpaEntity entity) {
-        return new OrganizationSummary(entity.getPublicId(), entity.getCode(), entity.getName(), entity.getStatus(),
-                entity.getContentMode(), entity.getExpiresOn(), entity.getUpdatedAt());
+        return new OrganizationSummary(entity.getPublicId(), entity.getCode(), entity.getName(),
+                entity.getOrganizationType(), entity.getStatus(), entity.getContentMode(),
+                entity.getExpiresOn(), entity.getUpdatedAt());
     }
 
     private OrganizationResponse response(OrganizationService.OrganizationAggregate aggregate) {
         OrganizationJpaEntity organization = aggregate.organization();
         OrganizationLicensePolicyJpaEntity policy = aggregate.policy();
         return new OrganizationResponse(organization.getPublicId(), organization.getCode(), organization.getName(),
-                organization.getStatus(), organization.getContentMode(), organization.getValidFrom(),
-                organization.getExpiresOn(), policy.getContractedSeats(), policy.getIncludedReplacements(),
-                policy.getAdditionalReplacements(), policy.getStandardReleaseHours(), policy.getExhaustedReleaseDays(),
-                policy.getCycleStartsOn(), policy.getCycleEndsOn(), organization.getCreatedAt(),
-                organization.getUpdatedAt(), organization.getVersion());
+                organization.getOrganizationType(), organization.getStatus(), organization.getContentMode(),
+                organization.getValidFrom(), organization.getExpiresOn(),
+                policy == null ? null : policy.getContractedSeats(),
+                policy == null ? null : policy.getIncludedReplacements(),
+                policy == null ? null : policy.getAdditionalReplacements(),
+                policy == null ? null : policy.getStandardReleaseHours(),
+                policy == null ? null : policy.getExhaustedReleaseDays(),
+                policy == null ? null : policy.getCycleStartsOn(),
+                policy == null ? null : policy.getCycleEndsOn(),
+                organization.getCreatedAt(), organization.getUpdatedAt(), organization.getVersion());
     }
 
     public record CreateRequest(
@@ -104,7 +124,6 @@ public class OrganizationController {
             String code,
             @NotNull(message = "Selecciona una modalidad de contenido.")
             ContentMode contentMode,
-            LocalDate validFrom,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
             @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
@@ -117,9 +136,7 @@ public class OrganizationController {
             Integer standardReleaseHours,
             @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.")
             Integer exhaustedReleaseDays,
-            @NotNull(message = "El inicio de ciclo es obligatorio.")
             LocalDate cycleStartsOn,
-            @NotNull(message = "El fin de ciclo es obligatorio.")
             LocalDate cycleEndsOn) {}
 
     public record UpdateRequest(
@@ -128,7 +145,6 @@ public class OrganizationController {
             String name,
             @NotNull(message = "Selecciona una modalidad de contenido.")
             ContentMode contentMode,
-            LocalDate validFrom,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
             @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
@@ -152,14 +168,15 @@ public class OrganizationController {
             @NotNull(message = "La versión de la organización es obligatoria.")
             Long version) {}
 
-    public record OrganizationSummary(String publicId, String code, String name, OrganizationStatus status,
-                                      ContentMode contentMode, LocalDate expiresOn, java.time.Instant updatedAt) {}
+    public record OrganizationSummary(String publicId, String code, String name, OrganizationType organizationType,
+                                      OrganizationStatus status, ContentMode contentMode, LocalDate expiresOn,
+                                      java.time.Instant updatedAt) {}
 
-    public record OrganizationResponse(String publicId, String code, String name, OrganizationStatus status,
-                                       ContentMode contentMode, LocalDate validFrom, LocalDate expiresOn,
-                                       int contractedSeats, int includedReplacements, int additionalReplacements,
-                                       int standardReleaseHours, int exhaustedReleaseDays,
-                                       LocalDate cycleStartsOn, LocalDate cycleEndsOn,
+    public record OrganizationResponse(String publicId, String code, String name, OrganizationType organizationType,
+                                       OrganizationStatus status, ContentMode contentMode, LocalDate validFrom,
+                                       LocalDate expiresOn, Integer contractedSeats, Integer includedReplacements,
+                                       Integer additionalReplacements, Integer standardReleaseHours,
+                                       Integer exhaustedReleaseDays, LocalDate cycleStartsOn, LocalDate cycleEndsOn,
                                        java.time.Instant createdAt, java.time.Instant updatedAt, Long version) {}
 
     public record PageResponse(List<OrganizationSummary> content, int page, int size, long totalElements,

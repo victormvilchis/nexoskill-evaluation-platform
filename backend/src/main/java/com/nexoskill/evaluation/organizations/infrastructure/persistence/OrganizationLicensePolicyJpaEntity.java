@@ -73,7 +73,7 @@ public class OrganizationLicensePolicyJpaEntity {
         entity.status = "ACTIVE";
         entity.createdAt = now;
         entity.updatedAt = now;
-        entity.version = 0L;
+        // La versión debe permanecer nula en entidades nuevas para que Spring Data use persist, no merge.
         return entity;
     }
 

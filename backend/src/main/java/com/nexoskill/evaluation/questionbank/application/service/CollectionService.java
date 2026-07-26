@@ -34,7 +34,7 @@ public class CollectionService {
 	@Transactional(readOnly = true)
 	public CollectionPage search(String q, String s, int p, int z) {
 		String status = null;
-		if (s != null && !s.isBlank()) {
+		if (s != null && !s.isBlank() && !"ALL".equalsIgnoreCase(s.trim())) {
 			try {
 				status = com.nexoskill.evaluation.questionbank.domain.model.CollectionStatus
 						.valueOf(s.trim().toUpperCase()).name();

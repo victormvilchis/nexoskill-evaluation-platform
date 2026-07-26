@@ -29,7 +29,7 @@ public class AdminLearningCollectionController {
     @PreAuthorize("hasAuthority('COLLECTION_VIEW')")
     public List<LearningCollectionModels.CollectionSummary> list(
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) String status) {
+            @RequestParam(defaultValue = "ACTIVE") String status) {
         return service.list(query, status);
     }
 
@@ -37,7 +37,7 @@ public class AdminLearningCollectionController {
     @PreAuthorize("hasAuthority('COLLECTION_VIEW')")
     public List<LearningCollectionModels.FormOption> formOptions(
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) String status) {
+            @RequestParam(defaultValue = "ACTIVE") String status) {
         return service.formOptions(query, status);
     }
 

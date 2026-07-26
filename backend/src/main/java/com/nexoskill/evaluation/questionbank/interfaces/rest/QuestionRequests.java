@@ -66,4 +66,7 @@ public final class QuestionRequests {
 
     public record Status(@PositiveOrZero long expectedEntityVersion) {
     }
+
+    public record CategoryStatus(@PositiveOrZero long expectedEntityVersion, @Size(max = 500) String reason) {
+    }
 }

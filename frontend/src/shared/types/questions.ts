@@ -1,4 +1,5 @@
-export type CatalogStatus = 'ACTIVE' | 'INACTIVE'
+export type CatalogStatus = 'ACTIVE' | 'INACTIVE' | 'DELETED'
+export type ContentScope = 'GLOBAL' | 'ORGANIZATION'
 export type QuestionStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED'
 export type QuestionTypeCode =
   | 'SINGLE_CHOICE'
@@ -22,10 +23,30 @@ export interface QuestionCategoryRef {
 
 export interface QuestionCategory extends QuestionCategoryRef {
   description?: string
+  contentScope: ContentScope
+  ownerOrganizationPublicId?: string
+  ownerOrganizationName?: string
   entityVersion: number
   questionCount: number
+  createdBy?: number
   createdAt: string
   updatedAt?: string
+}
+
+export interface QuestionCategoryDependencies {
+  publicId: string
+  questionCount: number
+  canDelete: boolean
+  message: string
+}
+
+export interface QuestionCategoryStatusHistory {
+  id: number
+  previousStatus?: CatalogStatus
+  newStatus: CatalogStatus
+  reason?: string
+  actorUserId?: number
+  occurredAt: string
 }
 
 export interface QuestionMedia {

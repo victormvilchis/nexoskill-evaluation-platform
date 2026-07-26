@@ -38,17 +38,33 @@ public class TenantContextResolver {
 
         if (administrator) {
             String selected = request.getHeader(CONTEXT_HEADER);
-            if (selected == null || selected.isBlank()) return TenantContext.global();
+            if (selected == null || selected.isBlank()) {
+                OrganizationJpaEntity global = globalOrganization();
+                return TenantContext.global(global.getId(), global.getPublicId(), global.getCode());
+            }
             OrganizationJpaEntity organization = organizationRepository.findByPublicId(selected.trim())
                     .orElseThrow(() -> new AccessDeniedException("El contexto de organización no existe."));
             validateOperational(organization);
-            return TenantContext.organization(organization.getId(), organization.getPublicId(), organization.getCode(), true);
+            if (organization.isGlobal()) {
+                return TenantContext.global(organization.getId(), organization.getPublicId(), organization.getCode());
+            }
+            return TenantContext.organization(organization.getId(), organization.getPublicId(),
+                    organization.getCode(), true);
         }
 
         OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.internalId())
                 .orElseThrow(() -> new AccessDeniedException("El usuario no tiene una organización activa asignada."));
+        if (organization.isGlobal()) {
+            throw new AccessDeniedException("El rol actual no puede operar en la organización global.");
+        }
         validateOperational(organization);
         return TenantContext.organization(organization.getId(), organization.getPublicId(), organization.getCode(), false);
+    }
+
+    private OrganizationJpaEntity globalOrganization() {
+        return organizationRepository.findByCode(OrganizationJpaEntity.GLOBAL_CODE)
+                .orElseThrow(() -> new AccessDeniedException(
+                        "La organización global no se encuentra configurada. Ejecuta las migraciones pendientes."));
     }
 
     private void validateOperational(OrganizationJpaEntity organization) {

@@ -31,7 +31,7 @@ function formatDate(value: string) {
 
 export function AdminCollectionsPage() {
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('ALL')
+  const [status, setStatus] = useState('ACTIVE')
   const [collections, setCollections] = useState<CollectionSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
@@ -65,7 +65,7 @@ export function AdminCollectionsPage() {
   }, [debouncedQuery, status, reloadKey])
 
   const activeFilters = useMemo(
-    () => Boolean(query.trim()) || status !== 'ALL',
+    () => Boolean(query.trim()) || status !== 'ACTIVE',
     [query, status]
   )
 
@@ -87,7 +87,7 @@ export function AdminCollectionsPage() {
         hasActiveFilters={activeFilters}
         onClear={() => {
           setQuery('')
-          setStatus('ALL')
+          setStatus('ACTIVE')
         }}
       >
         <ResourceSearchField
@@ -96,9 +96,9 @@ export function AdminCollectionsPage() {
           placeholder="Buscar por nombre, código o descripción"
         />
         <ResourceSelectField label="Estado" value={status} onChange={setStatus}>
+          <option value="ACTIVE">Activa</option>
           <option value="ALL">Todos</option>
           <option value="DRAFT">Borrador</option>
-          <option value="ACTIVE">Activa</option>
           <option value="INACTIVE">Inactiva</option>
           <option value="ARCHIVED">Archivada</option>
         </ResourceSelectField>

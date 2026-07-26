@@ -1,7 +1,11 @@
 package com.nexoskill.evaluation.forms.infrastructure;
-import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
 import java.util.Optional;
-public interface FormRepository extends JpaRepository<FormJpaEntity,Long> {
- Optional<FormJpaEntity> findByPublicId(String publicId);
- boolean existsByCode(String code);
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface FormRepository extends JpaRepository<FormJpaEntity, Long> {
+    Optional<FormJpaEntity> findByPublicId(String publicId);
+    boolean existsByCode(String code);
+    List<FormJpaEntity> findAllByStatus(String status);
 }

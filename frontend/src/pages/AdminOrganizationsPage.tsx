@@ -45,9 +45,10 @@ const CONTENT_MODE_LABELS = {
 } as const
 
 function statusFromQuery(value: string | null): OrganizationStatus | 'ALL' {
+  if (value === 'ALL') return 'ALL'
   return value && VALID_STATUSES.has(value as OrganizationStatus)
     ? value as OrganizationStatus
-    : 'ALL'
+    : 'ACTIVE'
 }
 
 function pageFromQuery(value: string | null) {
@@ -113,7 +114,7 @@ export function AdminOrganizationsPage() {
     next.delete('created')
     next.delete('page')
     normalizedQuery ? next.set('query', normalizedQuery) : next.delete('query')
-    status !== 'ALL' ? next.set('status', status) : next.delete('status')
+    status === 'ACTIVE' ? next.delete('status') : next.set('status', status)
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, searchParams, setSearchParams, status])
 
@@ -144,11 +145,11 @@ export function AdminOrganizationsPage() {
     return () => controller.abort()
   }, [page, reloadKey, searchParams])
 
-  const activeFilters = Boolean(query.trim()) || status !== 'ALL'
+  const activeFilters = Boolean(query.trim()) || status !== 'ACTIVE'
 
   function clearFilters() {
     setQuery('')
-    setStatus('ALL')
+    setStatus('ACTIVE')
   }
 
   function goToPage(nextPage: number) {
@@ -246,7 +247,7 @@ export function AdminOrganizationsPage() {
                 <tr className={item.status === 'DELETED' ? 'ns-row-muted' : ''} key={item.publicId}>
                   <td className="ns-primary-cell">
                     <strong>{item.name}</strong>
-                    <small><code className="ns-code-label">{item.code}</code></small>
+                    <small><code className="ns-code-label">{item.code}</code> · {item.organizationType === 'GLOBAL' ? 'Sistema global' : 'Comercial'}</small>
                   </td>
                   <td>
                     <span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>
@@ -267,7 +268,7 @@ export function AdminOrganizationsPage() {
                         label="Ver"
                         icon="eye"
                       />
-                      {permissions.has('ORGANIZATION_UPDATE') && item.status !== 'DELETED' && (
+                      {permissions.has('ORGANIZATION_UPDATE') && item.status !== 'DELETED' && item.organizationType !== 'GLOBAL' && (
                         <TableActionLink
                           to={`/admin/organizations/${item.publicId}/edit`}
                           label="Editar"

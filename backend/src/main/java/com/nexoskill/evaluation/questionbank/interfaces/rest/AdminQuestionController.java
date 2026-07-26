@@ -39,7 +39,7 @@ public class AdminQuestionController {
     @GetMapping
     @PreAuthorize("hasAuthority('QUESTION_VIEW')")
     public QuestionPage search(@RequestParam(required = false) String query,
-            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "ACTIVE") String status,
             @RequestParam(required = false) String typeCode,
             @RequestParam(required = false) String categoryPublicId,
             @RequestParam(defaultValue = "0") int page,

@@ -70,9 +70,9 @@ public final class QuestionServices {
         public QuestionPage execute(String query, String statusValue, String type, String category,
                 int page, int size) {
             QuestionStatus status = null;
-            if (statusValue != null && !statusValue.isBlank()) {
+            if (statusValue != null && !statusValue.isBlank() && !"ALL".equalsIgnoreCase(statusValue.trim())) {
                 try {
-                    status = QuestionStatus.valueOf(statusValue.toUpperCase(Locale.ROOT));
+                    status = QuestionStatus.valueOf(statusValue.trim().toUpperCase(Locale.ROOT));
                 } catch (Exception exception) {
                     throw new BusinessException("QUESTION_STATUS_INVALID", "El estado indicado no es válido.");
                 }

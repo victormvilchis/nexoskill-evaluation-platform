@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { createUser, getRoles } from '../features/users/api/userApi'
@@ -60,7 +60,29 @@ export function CreateUserPage() {
       })
   }, [])
 
-  const organizationRequired = roleCode === 'MANAGER' || roleCode === 'SUPERVISOR'
+  const globalOrganization = useMemo(
+    () => organizations.find((organization) => organization.organizationType === 'GLOBAL'),
+    [organizations]
+  )
+  const customerOrganizations = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return organizations.filter((organization) =>
+      organization.organizationType === 'CUSTOMER'
+      && (!organization.expiresOn || organization.expiresOn >= today)
+    )
+  }, [organizations])
+
+  useEffect(() => {
+    if (roleCode === 'ADMINISTRATOR') {
+      setOrganizationPublicId(globalOrganization?.publicId ?? '')
+      return
+    }
+    if (!customerOrganizations.some((organization) => organization.publicId === organizationPublicId)) {
+      setOrganizationPublicId('')
+    }
+  }, [roleCode, globalOrganization, customerOrganizations, organizationPublicId])
+
+  const organizationRequired = true
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -91,7 +113,7 @@ export function CreateUserPage() {
         lastName: lastName.trim(),
         displayName: displayName.trim() || undefined,
         roleCode,
-        organizationPublicId: organizationRequired ? organizationPublicId : null,
+        organizationPublicId,
         initialStatus,
         startsAt: toInstant(startsAt),
         expiresAt: withoutExpiration ? null : toInstant(expiresAt)
@@ -180,7 +202,7 @@ export function CreateUserPage() {
           <div className="form-section-heading"><span className="form-section-number">2</span><div><h2>Rol y organización</h2><p>Solo existen Administrador, Gestor y Supervisor.</p></div></div>
           <div className="form-grid-three">
             <label className="form-field"><span>Rol</span><select value={roleCode} onChange={(event) => setRoleCode(event.target.value as InternalRoleCode)}>{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</select></label>
-            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={!organizationRequired} required={organizationRequired} onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">{organizationRequired ? 'Seleccionar organización' : 'Acceso global'}</option>{organizations.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
+            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={roleCode === 'ADMINISTRATOR'} required onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">Seleccionar organización</option>{roleCode === 'ADMINISTRATOR' ? (globalOrganization && <option value={globalOrganization.publicId}>GLOBAL · Contexto del sistema</option>) : customerOrganizations.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select><small>{roleCode === 'ADMINISTRATOR' ? 'Los Administradores pertenecen obligatoriamente a GLOBAL.' : 'Solo se muestran organizaciones comerciales activas y vigentes.'}</small>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
             <label className="form-field"><span>Estado inicial</span><select value={initialStatus} onChange={(event) => setInitialStatus(event.target.value as 'ACTIVE' | 'INACTIVE')}><option value="ACTIVE">Activo</option><option value="INACTIVE">Inactivo</option></select></label>
           </div>
         </section>

@@ -4,6 +4,7 @@ import com.nexoskill.evaluation.authentication.infrastructure.security.Authentic
 import com.nexoskill.evaluation.organizations.domain.model.ContentMode;
 import com.nexoskill.evaluation.organizations.domain.model.LicensePolicy;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyRepository;
@@ -53,42 +54,65 @@ public class OrganizationService {
         OrganizationJpaEntity organization = organizationRepository.findByPublicId(normalizedPublicId)
                 .orElseThrow(() -> error("ORGANIZATION_NOT_FOUND", "La organización solicitada no existe."));
         OrganizationLicensePolicyJpaEntity policy = licenseRepository.findByOrganizationId(organization.getId())
-                .orElseThrow(() -> error("ORGANIZATION_LICENSE_NOT_FOUND",
-                        "La organización no tiene una política de licenciamiento configurada."));
+                .orElse(null);
+        if (organization.getOrganizationType() == OrganizationType.CUSTOMER && policy == null) {
+            throw error("ORGANIZATION_LICENSE_NOT_FOUND",
+                    "La organización comercial no tiene una política de licenciamiento configurada.");
+        }
+        if (organization.getOrganizationType() == OrganizationType.GLOBAL && policy != null) {
+            throw error("GLOBAL_ORGANIZATION_LICENSE_INVALID",
+                    "La organización global no utiliza políticas de licenciamiento.");
+        }
         return new OrganizationAggregate(organization, policy);
     }
 
     @Transactional
     public OrganizationAggregate create(CreateCommand command) {
         String code = normalizeCode(command.code());
+        if (OrganizationJpaEntity.GLOBAL_CODE.equals(code)) {
+            throw error("GLOBAL_ORGANIZATION_RESERVED", "El código GLOBAL está reservado por el sistema.");
+        }
         if (organizationRepository.existsByCode(code)) {
             throw error("ORGANIZATION_CODE_EXISTS", "Ya existe una organización con ese código.");
         }
 
         String name = required(command.name(), "nombre");
         ContentMode contentMode = requiredContentMode(command.contentMode());
-        validateValidity(command.validFrom(), command.expiresOn());
-        LicensePolicy policy = createPolicy(command);
+        LocalDate validFrom = LocalDate.now(clock);
+        validateExpiration(validFrom, command.expiresOn());
+        LicensePolicy policy = createPolicy(command, validFrom);
 
         Instant now = clock.instant();
         Long actorId = actorId();
-        OrganizationJpaEntity organization = OrganizationJpaEntity.create(
+        OrganizationJpaEntity organizationToCreate = OrganizationJpaEntity.createCustomer(
                 UUID.randomUUID().toString(), code, name, contentMode,
-                command.validFrom(), command.expiresOn(), actorId, now);
-        organizationRepository.saveAndFlush(organization);
+                validFrom, command.expiresOn(), actorId, now);
 
-        OrganizationLicensePolicyJpaEntity license = OrganizationLicensePolicyJpaEntity.create(
+        // saveAndFlush puede devolver una instancia administrada distinta cuando JPA usa merge.
+        // Siempre se debe continuar con la instancia retornada por el repositorio.
+        OrganizationJpaEntity organization = organizationRepository.saveAndFlush(organizationToCreate);
+        if (organization == null || organization.getId() == null) {
+            throw error("ORGANIZATION_PERSISTENCE_INVALID",
+                    "No fue posible obtener el identificador de la organización antes de crear su licencia.");
+        }
+
+        OrganizationLicensePolicyJpaEntity licenseToCreate = OrganizationLicensePolicyJpaEntity.create(
                 organization.getId(), policy.contractedSeats(), policy.includedReplacements(),
                 policy.additionalReplacements(), policy.standardReleaseHours(),
                 policy.exhaustedReplacementReleaseDays(), policy.cycleStartsOn(),
                 policy.cycleEndsOn(), now);
-        licenseRepository.saveAndFlush(license);
+        OrganizationLicensePolicyJpaEntity license = licenseRepository.saveAndFlush(licenseToCreate);
+        if (license == null || !Objects.equals(organization.getId(), license.getOrganizationId())) {
+            throw error("ORGANIZATION_LICENSE_PERSISTENCE_INVALID",
+                    "No fue posible asociar correctamente la licencia con la organización creada.");
+        }
         return new OrganizationAggregate(organization, license);
     }
 
     @Transactional
     public OrganizationAggregate update(String publicId, UpdateCommand command) {
         OrganizationAggregate aggregate = get(publicId);
+        ensureCustomer(aggregate.organization());
         if (command.version() == null || !Objects.equals(aggregate.organization().getVersion(), command.version())) {
             throw error("ORGANIZATION_CONCURRENT_MODIFICATION",
                     "La organización fue modificada por otra sesión. Actualiza la página e intenta nuevamente.");
@@ -96,12 +120,11 @@ public class OrganizationService {
 
         String name = required(command.name(), "nombre");
         ContentMode contentMode = requiredContentMode(command.contentMode());
-        validateValidity(command.validFrom(), command.expiresOn());
+        validateExpiration(aggregate.organization().getValidFrom(), command.expiresOn());
         LicensePolicy policy = updatePolicy(command);
         Instant now = clock.instant();
 
-        aggregate.organization().update(name, contentMode,
-                command.validFrom(), command.expiresOn(), actorId(), now);
+        aggregate.organization().updateCustomer(name, contentMode, command.expiresOn(), actorId(), now);
         aggregate.policy().update(policy.contractedSeats(), policy.includedReplacements(),
                 policy.additionalReplacements(), policy.standardReleaseHours(),
                 policy.exhaustedReplacementReleaseDays(), policy.cycleStartsOn(),
@@ -117,12 +140,20 @@ public class OrganizationService {
             throw error("ORGANIZATION_STATUS_REQUIRED", "Selecciona un estado válido para la organización.");
         }
         OrganizationAggregate aggregate = get(publicId);
+        ensureCustomer(aggregate.organization());
         aggregate.organization().changeStatus(status, actorId(), clock.instant());
         organizationRepository.flush();
         return aggregate;
     }
 
-    private LicensePolicy createPolicy(CreateCommand command) {
+    private void ensureCustomer(OrganizationJpaEntity organization) {
+        if (organization.getOrganizationType() == OrganizationType.GLOBAL) {
+            throw error("GLOBAL_ORGANIZATION_IMMUTABLE",
+                    "La organización global no puede editarse, desactivarse ni eliminarse.");
+        }
+    }
+
+    private LicensePolicy createPolicy(CreateCommand command, LocalDate organizationStart) {
         int seats = requiredNonNegative(command.contractedSeats(), "Los asientos contratados");
         int included = command.includedReplacements() == null
                 ? LicensePolicy.recommendedIncludedReplacements(seats)
@@ -136,13 +167,8 @@ public class OrganizationService {
         int exhaustedDays = command.exhaustedReleaseDays() == null
                 ? 7
                 : nonNegative(command.exhaustedReleaseDays(), "El bloqueo antifraude");
-        LocalDate cycleStart = command.cycleStartsOn() == null
-                ? LocalDate.now(clock)
-                : command.cycleStartsOn();
-        LocalDate cycleEnd = command.cycleEndsOn() == null
-                ? cycleStart.plusMonths(1)
-                : command.cycleEndsOn();
-
+        LocalDate cycleStart = command.cycleStartsOn() == null ? organizationStart : command.cycleStartsOn();
+        LocalDate cycleEnd = command.cycleEndsOn() == null ? cycleStart.plusMonths(1) : command.cycleEndsOn();
         return buildPolicy(seats, included, additional, releaseHours, exhaustedDays, cycleStart, cycleEnd);
     }
 
@@ -163,8 +189,7 @@ public class OrganizationService {
     private LicensePolicy buildPolicy(int seats, int included, int additional, int releaseHours,
                                       int exhaustedDays, LocalDate cycleStart, LocalDate cycleEnd) {
         try {
-            return new LicensePolicy(seats, included, additional, releaseHours, exhaustedDays,
-                    cycleStart, cycleEnd);
+            return new LicensePolicy(seats, included, additional, releaseHours, exhaustedDays, cycleStart, cycleEnd);
         } catch (IllegalArgumentException exception) {
             throw error("ORGANIZATION_LICENSE_POLICY_INVALID", exception.getMessage());
         }
@@ -177,10 +202,10 @@ public class OrganizationService {
         return principal instanceof AuthenticatedUser user ? user.internalId() : null;
     }
 
-    private static void validateValidity(LocalDate validFrom, LocalDate expiresOn) {
-        if (validFrom != null && expiresOn != null && expiresOn.isBefore(validFrom)) {
+    private static void validateExpiration(LocalDate validFrom, LocalDate expiresOn) {
+        if (expiresOn != null && expiresOn.isBefore(validFrom)) {
             throw error("ORGANIZATION_VALIDITY_INVALID",
-                    "La fecha de vencimiento no puede ser anterior al inicio de vigencia.");
+                    "La fecha de vencimiento no puede ser anterior a la fecha de creación.");
         }
     }
 
@@ -214,9 +239,7 @@ public class OrganizationService {
         return atLeast(value, minimum, field);
     }
 
-    private static int nonNegative(int value, String field) {
-        return atLeast(value, 0, field);
-    }
+    private static int nonNegative(int value, String field) { return atLeast(value, 0, field); }
 
     private static int atLeast(int value, int minimum, String field) {
         if (value < minimum) {
@@ -232,8 +255,7 @@ public class OrganizationService {
                 .replaceAll("[^A-Z0-9_]+", "_")
                 .replaceAll("^_+|_+$", "");
         if (normalized.isBlank()) {
-            throw error("ORGANIZATION_CODE_INVALID",
-                    "El código debe contener al menos una letra o un número.");
+            throw error("ORGANIZATION_CODE_INVALID", "El código debe contener al menos una letra o un número.");
         }
         if (normalized.length() > 80) {
             throw error("ORGANIZATION_CODE_INVALID", "El código no puede superar 80 caracteres.");
@@ -248,15 +270,34 @@ public class OrganizationService {
     public record OrganizationAggregate(OrganizationJpaEntity organization,
                                         OrganizationLicensePolicyJpaEntity policy) {}
 
-    public record CreateCommand(String name, String code, ContentMode contentMode, LocalDate validFrom,
-                                LocalDate expiresOn, Integer contractedSeats, Integer includedReplacements,
-                                Integer additionalReplacements, Integer standardReleaseHours,
-                                Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
-                                LocalDate cycleEndsOn) {}
-
-    public record UpdateCommand(String name, ContentMode contentMode, LocalDate validFrom, LocalDate expiresOn,
+    public record CreateCommand(String name, String code, ContentMode contentMode, LocalDate expiresOn,
                                 Integer contractedSeats, Integer includedReplacements,
                                 Integer additionalReplacements, Integer standardReleaseHours,
                                 Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
-                                LocalDate cycleEndsOn, Long version) {}
+                                LocalDate cycleEndsOn) {
+        public CreateCommand(String name, String code, ContentMode contentMode, LocalDate ignoredValidFrom,
+                             LocalDate expiresOn, Integer contractedSeats, Integer includedReplacements,
+                             Integer additionalReplacements, Integer standardReleaseHours,
+                             Integer exhaustedReleaseDays, LocalDate cycleStartsOn, LocalDate cycleEndsOn) {
+            this(name, code, contentMode, expiresOn, contractedSeats, includedReplacements,
+                    additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
+                    cycleStartsOn, cycleEndsOn);
+        }
+    }
+
+    public record UpdateCommand(String name, ContentMode contentMode, LocalDate expiresOn,
+                                Integer contractedSeats, Integer includedReplacements,
+                                Integer additionalReplacements, Integer standardReleaseHours,
+                                Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
+                                LocalDate cycleEndsOn, Long version) {
+        public UpdateCommand(String name, ContentMode contentMode, LocalDate ignoredValidFrom, LocalDate expiresOn,
+                             Integer contractedSeats, Integer includedReplacements,
+                             Integer additionalReplacements, Integer standardReleaseHours,
+                             Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
+                             LocalDate cycleEndsOn, Long version) {
+            this(name, contentMode, expiresOn, contractedSeats, includedReplacements,
+                    additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
+                    cycleStartsOn, cycleEndsOn, version);
+        }
+    }
 }

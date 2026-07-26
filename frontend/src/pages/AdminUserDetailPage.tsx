@@ -106,20 +106,32 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
     return () => { active = false }
   }, [editing, publicId])
 
-  const organizationRequired = roleCode === 'MANAGER' || roleCode === 'SUPERVISOR'
-  const organizationOptions = useMemo(() => {
-    if (!user?.organizationPublicId || organizations.some((item) => item.publicId === user.organizationPublicId)) {
-      return organizations
+  const globalOrganization = useMemo(
+    () => organizations.find((organization) => organization.organizationType === 'GLOBAL'),
+    [organizations]
+  )
+  const customerOrganizations = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return organizations.filter((organization) =>
+      organization.organizationType === 'CUSTOMER'
+      && (!organization.expiresOn || organization.expiresOn >= today)
+    )
+  }, [organizations])
+
+  useEffect(() => {
+    if (!editing) return
+    if (roleCode === 'ADMINISTRATOR') {
+      setOrganizationPublicId(globalOrganization?.publicId ?? '')
+      return
     }
-    return [{
-      publicId: user.organizationPublicId,
-      code: 'ACTUAL',
-      name: `${user.organizationName ?? 'Organización actual'} (no activa)`,
-      status: 'INACTIVE' as const,
-      contentMode: 'CUSTOM' as const,
-      updatedAt: user.statusChangedAt ?? user.createdAt
-    }, ...organizations]
-  }, [organizations, user])
+    if (!customerOrganizations.some((organization) => organization.publicId === organizationPublicId)) {
+      setOrganizationPublicId('')
+    }
+  }, [editing, roleCode, globalOrganization, customerOrganizations, organizationPublicId])
+
+  const organizationOptions = roleCode === 'ADMINISTRATOR'
+    ? (globalOrganization ? [globalOrganization] : [])
+    : customerOrganizations
   const roleName = useMemo(
     () => roleLabels[user?.roles[0] ?? ''] ?? user?.roles[0] ?? 'Sin rol',
     [user]
@@ -131,7 +143,7 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
     setError(null)
     setFieldErrors({})
 
-    if (organizationRequired && !organizationPublicId) {
+    if (!organizationPublicId) {
       setFieldErrors({ organizationPublicId: 'Selecciona una organización.' })
       return
     }
@@ -156,7 +168,7 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
         lastName: lastName.trim(),
         displayName: displayName.trim() || undefined,
         roleCode,
-        organizationPublicId: organizationRequired ? organizationPublicId : null,
+        organizationPublicId,
         startsAt: toInstant(startsAt),
         expiresAt: withoutExpiration ? null : toInstant(expiresAt)
       })
@@ -248,11 +260,11 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
         <section className="form-section form-wide">
           <div className="form-section-heading">
             <span className="form-section-number">2</span>
-            <div><h2>Rol y organización</h2><p>La organización es obligatoria para Gestores y Supervisores.</p></div>
+            <div><h2>Rol y organización</h2><p>Todos los usuarios internos pertenecen obligatoriamente a una organización.</p></div>
           </div>
           <div className="form-grid-three">
             <label className="form-field"><span>Rol</span><select value={roleCode} onChange={(event) => setRoleCode(event.target.value as InternalRoleCode)}>{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</select></label>
-            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={!organizationRequired} required={organizationRequired} onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">{organizationRequired ? 'Seleccionar organización' : 'Acceso global'}</option>{organizationOptions.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
+            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={roleCode === 'ADMINISTRATOR'} required onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">Seleccionar organización</option>{organizationOptions.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select><small>{roleCode === 'ADMINISTRATOR' ? 'Los Administradores pertenecen obligatoriamente a GLOBAL.' : 'Solo se muestran organizaciones comerciales activas y vigentes.'}</small>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
           </div>
         </section>
 

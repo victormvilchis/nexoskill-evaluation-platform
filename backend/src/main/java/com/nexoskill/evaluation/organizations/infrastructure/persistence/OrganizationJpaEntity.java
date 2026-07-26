@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.organizations.infrastructure.persistence;
 
 import com.nexoskill.evaluation.organizations.domain.model.ContentMode;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -9,6 +10,9 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "ORGANIZATION")
 public class OrganizationJpaEntity {
+    public static final String GLOBAL_CODE = "GLOBAL";
+    public static final String GLOBAL_PUBLIC_ID = "00000000-0000-0000-0000-000000000001";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ORGANIZATION_ID")
@@ -24,6 +28,10 @@ public class OrganizationJpaEntity {
     private String name;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "ORGANIZATION_TYPE", nullable = false, length = 20)
+    private OrganizationType organizationType;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", nullable = false, length = 20)
     private OrganizationStatus status;
 
@@ -31,7 +39,7 @@ public class OrganizationJpaEntity {
     @Column(name = "CONTENT_MODE", nullable = false, length = 30)
     private ContentMode contentMode;
 
-    @Column(name = "VALID_FROM")
+    @Column(name = "VALID_FROM", nullable = false)
     private LocalDate validFrom;
 
     @Column(name = "EXPIRES_ON")
@@ -55,12 +63,20 @@ public class OrganizationJpaEntity {
 
     protected OrganizationJpaEntity() {}
 
+    /** Compatibilidad de construcción para pruebas y adaptadores previos. */
     public static OrganizationJpaEntity create(String publicId, String code, String name, ContentMode mode,
                                                 LocalDate validFrom, LocalDate expiresOn, Long actorId, Instant now) {
+        return createCustomer(publicId, code, name, mode, validFrom, expiresOn, actorId, now);
+    }
+
+    public static OrganizationJpaEntity createCustomer(String publicId, String code, String name, ContentMode mode,
+                                                        LocalDate validFrom, LocalDate expiresOn, Long actorId,
+                                                        Instant now) {
         OrganizationJpaEntity entity = new OrganizationJpaEntity();
         entity.publicId = publicId;
         entity.code = code;
         entity.name = name;
+        entity.organizationType = OrganizationType.CUSTOMER;
         entity.status = OrganizationStatus.ACTIVE;
         entity.contentMode = mode;
         entity.validFrom = validFrom;
@@ -69,36 +85,55 @@ public class OrganizationJpaEntity {
         entity.updatedBy = actorId;
         entity.createdAt = now;
         entity.updatedAt = now;
-        entity.version = 0L;
+        // La versión debe permanecer nula en entidades nuevas para que Spring Data use persist, no merge.
         return entity;
     }
 
-    public void update(String name, ContentMode mode, LocalDate validFrom, LocalDate expiresOn,
+    /** Compatibilidad temporal; validFrom es inmutable después del alta. */
+    public void update(String name, ContentMode mode, LocalDate ignoredValidFrom, LocalDate expiresOn,
                        Long actorId, Instant now) {
+        updateCustomer(name, mode, expiresOn, actorId, now);
+    }
+
+    public void updateCustomer(String name, ContentMode mode, LocalDate expiresOn,
+                               Long actorId, Instant now) {
+        ensureCustomerMutable();
         this.name = name;
         this.contentMode = mode;
-        this.validFrom = validFrom;
         this.expiresOn = expiresOn;
         this.updatedBy = actorId;
         this.updatedAt = now;
     }
 
     public void changeStatus(OrganizationStatus status, Long actorId, Instant now) {
+        ensureCustomerMutable();
         this.status = status;
         this.updatedBy = actorId;
         this.updatedAt = now;
     }
 
+    private void ensureCustomerMutable() {
+        if (organizationType == OrganizationType.GLOBAL) {
+            throw new IllegalStateException("La organización global no puede modificarse desde el flujo comercial.");
+        }
+    }
+
     public boolean isOperational(LocalDate today) {
+        if (organizationType == OrganizationType.GLOBAL) return true;
         return status == OrganizationStatus.ACTIVE
-                && (validFrom == null || !today.isBefore(validFrom))
+                && !today.isBefore(validFrom)
                 && (expiresOn == null || !today.isAfter(expiresOn));
+    }
+
+    public boolean isGlobal() {
+        return organizationType == OrganizationType.GLOBAL;
     }
 
     public Long getId() { return id; }
     public String getPublicId() { return publicId; }
     public String getCode() { return code; }
     public String getName() { return name; }
+    public OrganizationType getOrganizationType() { return organizationType; }
     public OrganizationStatus getStatus() { return status; }
     public ContentMode getContentMode() { return contentMode; }
     public LocalDate getValidFrom() { return validFrom; }

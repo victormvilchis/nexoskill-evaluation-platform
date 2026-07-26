@@ -2,10 +2,13 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
+import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.port.out.*;
 import com.nexoskill.evaluation.questionbank.domain.model.*;
 import com.nexoskill.evaluation.shared.domain.*;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.*;
 import org.springframework.data.domain.*;
@@ -23,6 +26,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final QuestionUsageChecker usage;
     private final ObjectMapper json;
     private final Clock clock;
+    private final TenantContextResolver tenantContextResolver;
+    private final HttpServletRequest request;
 
     public OracleQuestionBankAdapter(
             SpringDataQuestionRepository questions,
@@ -32,7 +37,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             SpringDataQuestionMediaRepository media,
             QuestionUsageChecker usage,
             ObjectMapper json,
-            Clock clock) {
+            Clock clock,
+            TenantContextResolver tenantContextResolver,
+            HttpServletRequest request) {
         this.questions = questions;
         this.types = types;
         this.difficulties = difficulties;
@@ -41,6 +48,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.usage = usage;
         this.json = json;
         this.clock = clock;
+        this.tenantContextResolver = tenantContextResolver;
+        this.request = request;
     }
 
     @Override
@@ -250,14 +259,23 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (ids == null || ids.isEmpty()) {
             throw error("QUESTION_CATEGORY_REQUIRED", "Selecciona al menos una categoría.");
         }
+        var tenant = tenantContextResolver.resolve(request);
         LinkedHashSet<QuestionCategoryJpaEntity> selectedCategories = new LinkedHashSet<>();
         for (String rawId : ids) {
             String id = PublicIdNormalizer.requiredUuid(rawId, "QUESTION_CATEGORY_INVALID",
                     "Una categoría seleccionada no es válida.");
             var category = categories.findByPublicId(id)
                     .orElseThrow(() -> error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe."));
+            if (category.getContentScope() == ContentScope.ORGANIZATION
+                    && !Objects.equals(category.getOwnerOrganizationId(), tenant.organizationId())) {
+                throw error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe.");
+            }
+            if (category.getStatus() == CatalogStatus.DELETED) {
+                throw error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe.");
+            }
             if (category.getStatus() != CatalogStatus.ACTIVE && !existing.contains(id)) {
-                throw error("CATEGORY_INACTIVE", "La categoría seleccionada está inactiva.");
+                throw error("CATEGORY_INACTIVE",
+                        "La categoría se encuentra inactiva y no puede asignarse a nuevas preguntas.");
             }
             selectedCategories.add(category);
         }

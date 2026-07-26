@@ -16,7 +16,7 @@ interface SearchParams {
 function queryString(params: Omit<SearchParams, 'signal'>): string {
   const search = new URLSearchParams()
   if (params.query?.trim()) search.set('query', params.query.trim())
-  if (params.status && params.status !== 'ALL') search.set('status', params.status)
+  if (params.status) search.set('status', params.status)
   const value = search.toString()
   return value ? `?${value}` : ''
 }

@@ -205,4 +205,11 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                AND q.STATUS = 'ACTIVE'
             """, nativeQuery = true)
     long countActiveByCategory(@Param("id") Long id);
+
+    @Query(value = """
+            SELECT COUNT(*)
+              FROM QUESTION_CATEGORY_RELATION qr
+             WHERE qr.CATEGORY_ID = :id
+            """, nativeQuery = true)
+    long countAllByCategory(@Param("id") Long id);
 }

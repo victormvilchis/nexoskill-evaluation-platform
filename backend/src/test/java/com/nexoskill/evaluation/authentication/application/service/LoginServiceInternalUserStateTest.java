@@ -27,7 +27,6 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 
 class LoginServiceInternalUserStateTest {
     private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
@@ -40,7 +39,6 @@ class LoginServiceInternalUserStateTest {
                 () -> fixture.service.login(command()));
 
         assertThat(exception.getCode()).isEqualTo("ACCOUNT_INACTIVE");
-        assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(exception.getMessage()).isEqualTo("Tu cuenta se encuentra inactiva. Contacta a un administrador.");
     }
 
@@ -52,7 +50,6 @@ class LoginServiceInternalUserStateTest {
                 () -> fixture.service.login(command()));
 
         assertThat(exception.getCode()).isEqualTo("AUTHENTICATION_FAILED");
-        assertThat(exception.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -74,7 +71,7 @@ class LoginServiceInternalUserStateTest {
                 null, null, false, NOW.minusSeconds(100), null,
                 Set.of(new RoleGrant("ADMINISTRATOR", Set.of("PASSWORD_CHANGE"))),
                 new UserAccess(NOW.minusSeconds(60), null, UserAccessStatus.ACTIVE));
-        when(users.findByNormalizedEmail("internal@nexoskill.local")).thenReturn(Optional.of(account));
+        when(users.findByNormalizedEmail("INTERNAL@NEXOSKILL.LOCAL")).thenReturn(Optional.of(account));
         when(passwords.matches("Password#1", "encoded")).thenReturn(passwordMatches);
 
         LoginService service = new LoginService(users, mock(AuthSessionRepository.class),

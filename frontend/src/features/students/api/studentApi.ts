@@ -11,7 +11,7 @@ import type {
 
 export function searchStudents(params: {
   query?: string
-  status?: StudentEffectiveStatus | ''
+  status?: StudentEffectiveStatus | 'ALL'
   includeDeleted?: boolean
   page?: number
   size?: number
