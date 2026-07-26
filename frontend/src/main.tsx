@@ -10,6 +10,7 @@ import './styles/ui-foundation-r1.css'
 import './styles/question-bank-java-r3.css'
 import './styles/layout-wide-r4.css'
 import './styles/resource-management-r5.css'
+import './styles/multitenancy-core-r1.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(

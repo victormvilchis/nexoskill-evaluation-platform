@@ -1,0 +1,49 @@
+export type OrganizationStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'DELETED'
+export type ContentMode = 'GLOBAL_CATALOG' | 'CLEAN' | 'CUSTOM'
+
+export interface OrganizationSummary {
+  publicId: string
+  code: string
+  name: string
+  status: OrganizationStatus
+  contentMode: ContentMode
+  expiresOn?: string
+  updatedAt: string
+}
+
+export interface OrganizationDetail extends OrganizationSummary {
+  validFrom?: string
+  contractedSeats: number
+  includedReplacements: number
+  additionalReplacements: number
+  standardReleaseHours: number
+  exhaustedReleaseDays: number
+  cycleStartsOn: string
+  cycleEndsOn: string
+  createdAt: string
+  version: number
+}
+
+export interface OrganizationPayload {
+  name: string
+  code?: string
+  contentMode: ContentMode
+  validFrom?: string
+  expiresOn?: string
+  contractedSeats: number
+  includedReplacements: number
+  additionalReplacements?: number
+  standardReleaseHours?: number
+  exhaustedReleaseDays?: number
+  cycleStartsOn: string
+  cycleEndsOn: string
+  version?: number
+}
+
+export interface OrganizationPage {
+  content: OrganizationSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}

@@ -17,6 +17,8 @@ import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
+import { AdminOrganizationsPage } from './pages/AdminOrganizationsPage'
+import { OrganizationEditorPage } from './pages/OrganizationEditorPage'
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
 
@@ -35,7 +37,15 @@ export default function App() {
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
-          <Route element={<PermissionRoute permission="USER_VIEW" />}>
+          <Route element={<PermissionRoute permission="ORGANIZATION_VIEW" />}>
+<Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
+<Route path="/admin/organizations/:publicId" element={<OrganizationEditorPage />} />
+<Route path="/admin/organizations/:publicId/edit" element={<OrganizationEditorPage />} />
+</Route>
+<Route element={<PermissionRoute permission="ORGANIZATION_CREATE" />}>
+<Route path="/admin/organizations/new" element={<OrganizationEditorPage />} />
+</Route>
+<Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/users/:publicId" element={<AdminUserDetailPage />} />
           </Route>

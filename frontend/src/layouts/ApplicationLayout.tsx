@@ -46,7 +46,8 @@ export function ApplicationLayout() {
         label: 'Administración',
         icon: 'users',
         items: [
-          { label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' }
+          { label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
+{ label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' }
         ]
       },
       {
