@@ -4,6 +4,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import {
   changeLearningCollectionStatus,
   getLearningCollection,
@@ -30,6 +31,7 @@ export function CollectionDetailPage() {
   const { publicId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/collections')
   const [collection, setCollection] = useState<CollectionDetail>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,12 +55,14 @@ export function CollectionDetailPage() {
   }, [publicId])
 
   async function save(payload: CollectionPayload) {
-    if (!publicId) return
+    if (!publicId || saving) return
     setSaving(true)
     try {
-      const updated = await updateLearningCollection(publicId, payload)
-      setCollection(updated)
-      toast.success('Colección actualizada', 'El orden de los niveles fue guardado.')
+      await updateLearningCollection(publicId, payload)
+      completeSave({
+        title: 'Colección actualizada correctamente.',
+        message: 'El orden de los niveles fue guardado.'
+      })
     } catch (requestError) {
       toast.error(
         'No fue posible guardar la colección',

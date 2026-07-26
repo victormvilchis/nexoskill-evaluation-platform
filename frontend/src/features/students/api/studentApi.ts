@@ -24,6 +24,14 @@ export function searchStudents(params: {
   if (params.query?.trim()) search.set('query', params.query.trim())
   if (params.status) search.set('status', params.status)
   return apiRequest<StudentPage>(`/admin/students?${search.toString()}`)
+    .then((response) => ({
+      ...response,
+      content: Array.isArray(response.content) ? response.content : [],
+      page: Number.isFinite(response.page) ? Math.max(response.page, 0) : 0,
+      size: Number.isFinite(response.size) ? Math.max(response.size, 1) : (params.size ?? 20),
+      totalElements: Number.isFinite(response.totalElements) ? Math.max(response.totalElements, 0) : 0,
+      totalPages: Number.isFinite(response.totalPages) ? Math.max(response.totalPages, 0) : 0
+    }))
 }
 
 export function getStudent(publicId: string) {

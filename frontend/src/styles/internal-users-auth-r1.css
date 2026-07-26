@@ -174,3 +174,36 @@
     width: 100%;
   }
 }
+
+.internal-user-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: .85rem;
+}
+
+.internal-user-role-grid .form-field {
+  min-width: 0;
+  align-content: start;
+}
+
+.internal-user-role-grid select {
+  min-height: 40px;
+  height: 40px;
+}
+
+.temporary-credential-dialog-grid {
+  width: min(640px, 100%);
+}
+
+.temporary-credential-dialog-grid code {
+  display: block;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .internal-user-role-grid {
+    grid-template-columns: 1fr;
+  }
+}

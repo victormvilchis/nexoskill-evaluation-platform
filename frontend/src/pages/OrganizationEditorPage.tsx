@@ -1,6 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useAuth } from '../features/authentication/context/AuthContext'
 import {
   createOrganization,
   getOrganization,
@@ -14,7 +13,7 @@ import type {
 } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
-import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 
 const CONTENT_MODE_HELP: Record<ContentMode, string> = {
   GLOBAL_CATALOG: 'La organización podrá consumir el catálogo global habilitado por NexoSkill.',
@@ -123,9 +122,7 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
   const editing = mode !== 'create'
   const readOnly = mode === 'view'
   const navigate = useNavigate()
-  const toast = useToast()
-  const { user } = useAuth()
-  const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
+  const completeSave = useSaveNavigation('/admin/organizations')
   const [model, setModel] = useState<OrganizationPayload>(() => initialModel())
   const [organizationType, setOrganizationType] = useState<OrganizationType>('CUSTOMER')
   const [validFrom, setValidFrom] = useState<string>()
@@ -191,17 +188,19 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
       expiresOn: model.expiresOn || undefined
     }
     try {
-      const saved = editing && publicId
-        ? await updateOrganization(publicId, payload)
-        : await createOrganization(payload)
-      if (!editing) {
-        navigate('/admin/organizations?created=1', { replace: true })
-        return
+      if (editing && publicId) {
+        await updateOrganization(publicId, payload)
+        completeSave({
+          title: 'Organización actualizada correctamente.',
+          message: 'Los cambios quedaron guardados.'
+        })
+      } else {
+        await createOrganization(payload)
+        completeSave({
+          title: 'Organización creada correctamente.',
+          message: 'La nueva organización ya aparece en el listado de activas.'
+        })
       }
-      setModel(detailToPayload(saved))
-      setStatus(saved.status)
-      setValidFrom(saved.validFrom)
-      toast.success('Organización actualizada', 'Los cambios quedaron guardados.')
     } catch (requestError: unknown) {
       if (requestError instanceof ApiRequestError) {
         setError(requestError.message)
@@ -312,19 +311,17 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
             )}
           </fieldset>
 
-          <footer className="org-editor-actions">
-            <button type="button" className="secondary-button" disabled={saving}
-              onClick={() => navigate('/admin/organizations')}>{readOnly || global ? 'Volver' : 'Cancelar'}</button>
-            {readOnly && !global && publicId && permissions.has('ORGANIZATION_UPDATE') && status !== 'DELETED' && (
-              <button type="button" className="primary-button"
-                onClick={() => navigate(`/admin/organizations/${publicId}/edit`)}>Editar organización</button>
-            )}
-            {!formLocked && (
-              <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar organización'}
-              </button>
-            )}
-          </footer>
+          {!readOnly && (
+            <footer className="org-editor-actions">
+              <button type="button" className="secondary-button" disabled={saving}
+                onClick={() => navigate('/admin/organizations')}>Cancelar</button>
+              {!formLocked && (
+                <button type="submit" className="primary-button" disabled={saving}>
+                  {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar organización'}
+                </button>
+              )}
+            </footer>
+          )}
         </form>
       )}
     </main>

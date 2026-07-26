@@ -162,6 +162,7 @@ export function QuestionCategoriesPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (busy) return
     setBusy(true)
 
     try {

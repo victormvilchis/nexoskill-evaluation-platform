@@ -1,18 +1,15 @@
-import { useNavigate } from 'react-router-dom'
 import { createQuestion } from '../features/questions/api/questionApi'
 import { QuestionEditor } from '../features/questions/components/QuestionEditor'
 import { BackButton } from '../shared/components/BackButton'
-import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { QuestionPayload } from '../shared/types/questions'
 
 export function CreateQuestionPage() {
-  const navigate = useNavigate()
-  const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/questions')
 
   async function save(payload: QuestionPayload) {
-    const question = await createQuestion(payload)
-    toast.success('Pregunta creada')
-    navigate(`/admin/questions/${question.publicId}`)
+    await createQuestion(payload)
+    completeSave({ title: 'Pregunta creada correctamente.' })
   }
 
   return (

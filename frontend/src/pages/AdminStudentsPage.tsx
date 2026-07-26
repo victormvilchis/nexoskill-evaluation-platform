@@ -123,7 +123,9 @@ export function AdminStudentsPage() {
       status: statusFromQuery(searchParams.get('status')),
       includeDeleted: searchParams.get('deleted') === '1',
       page
-    }).then((response) => { if (active) setData(response) })
+    }).then((response) => {
+      if (active) setData({ ...response, content: response.content ?? [] })
+    })
       .catch((requestError) => {
         if (active) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar estudiantes.')
       }).finally(() => { if (active) setLoading(false) })
@@ -234,7 +236,9 @@ export function AdminStudentsPage() {
                 <thead><tr><th>Estudiante</th><th>Código</th><th>Estado</th><th>Vigencia</th><th>Último acceso</th><th className="ns-actions-column">Acciones</th></tr></thead>
                 <tbody>
                   {loading && <tr><td colSpan={6} className="ns-table-empty">Cargando estudiantes…</td></tr>}
-                  {!loading && data?.content.length === 0 && <tr><td colSpan={6} className="ns-table-empty">No se encontraron estudiantes.</td></tr>}
+                  {!loading && !error && data && data.content.length === 0 && (
+                    <tr><td colSpan={6} className="ns-table-empty">Esta organización todavía no tiene estudiantes registrados.</td></tr>
+                  )}
                   {!loading && data?.content.map((student) => (
                     <tr className={student.status === 'DELETED' ? 'ns-row-muted' : ''} key={student.publicId}>
                       <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>

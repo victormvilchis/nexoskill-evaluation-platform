@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { apiClient } from '../shared/api/apiClient'
+import { ApiRequestError, apiClient } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { FormDetail, FormMode, FormPayload } from '../shared/types/forms'
 
 const initial: FormPayload = {
@@ -24,11 +25,11 @@ export function FormBuilderPage() {
   const { id } = useParams()
   const editing = Boolean(id)
   const navigate = useNavigate()
+  const completeSave = useSaveNavigation('/admin/forms')
   const [model, setModel] = useState<FormPayload>(initial)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(editing)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -48,28 +49,36 @@ export function FormBuilderPage() {
   }, [model])
 
   function set<K extends keyof FormPayload>(key: K, value: FormPayload[K]) {
-    setSaved(false)
     setModel(current => ({ ...current, [key]: value }))
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     const firstReadinessError = readiness[0]
 
     if (firstReadinessError) {
-    setError(firstReadinessError)
-    return
+      setError(firstReadinessError)
+      return
     }
-    
-    setSaving(true); setError('')
+
+    setSaving(true)
+    setError('')
     try {
-      const result = editing
-        ? await apiClient.put<FormDetail>(`/api/v1/admin/forms/${id}`, model)
-        : await apiClient.post<FormDetail>('/api/v1/admin/forms', model)
-      setSaved(true)
-      if (!editing) navigate(`/admin/forms/${result.publicId}/edit`, { replace: true })
-    } catch { setError('No fue posible guardar el formulario. Revisa la configuración e intenta nuevamente.') }
-    finally { setSaving(false) }
+      if (editing) {
+        await apiClient.put<FormDetail>(`/api/v1/admin/forms/${id}`, model)
+        completeSave({ title: 'Formulario actualizado correctamente.' })
+      } else {
+        await apiClient.post<FormDetail>('/api/v1/admin/forms', model)
+        completeSave({ title: 'Formulario creado correctamente.' })
+      }
+    } catch (requestError) {
+      setError(requestError instanceof ApiRequestError
+        ? requestError.message
+        : 'No fue posible guardar el formulario. Revisa la configuración e intenta nuevamente.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return <main className="content-page"><div className="ns-loading-card">Cargando formulario…</div></main>
@@ -79,7 +88,6 @@ export function FormBuilderPage() {
     <header className="ns-page-header">
       <div><p className="eyebrow">Constructor de formularios</p><h1>{editing ? 'Editar formulario' : 'Nuevo formulario'}</h1><p className="muted">Configura la experiencia, reglas de aprobación y disponibilidad.</p></div>
       <div className="ns-header-actions">
-        {saved && <span className="ns-saved-indicator">✓ Cambios guardados</span>}
         <button className="secondary-button" type="button" onClick={() => navigate('/admin/forms')}>Cancelar</button>
         <button className="primary-button" disabled={saving || readiness.length > 0} form="form-builder" type="submit">{saving ? 'Guardando…' : 'Guardar formulario'}</button>
       </div>

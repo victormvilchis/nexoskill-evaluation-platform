@@ -21,6 +21,7 @@ import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { StudentDetail, StudentSession, StudentStatus } from '../shared/types/students'
 
 interface Props { mode: 'create' | 'edit' | 'view' }
@@ -42,6 +43,7 @@ export function StudentEditorPage({ mode }: Props) {
   const { publicId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/students')
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
@@ -92,28 +94,28 @@ export function StudentEditorPage({ mode }: Props) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (readOnly || !hasContext) return
+    if (readOnly || !hasContext || saving) return
     setSaving(true)
     setError(null)
     setFieldErrors({})
     try {
       if (mode === 'create') {
-        const created = await createStudent({
+        await createStudent({
           studentCode: studentCode.trim(), email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
           displayName: displayName.trim() || undefined, temporaryPassword, status,
           validFrom: toIso(validFrom)!, expiresAt: toIso(expiresAt)
         })
-        toast.success('Estudiante creado', 'La cuenta quedó registrada en la organización seleccionada.')
-        navigate(`/admin/students/${created.publicId}`, { replace: true })
+        completeSave({
+          title: 'Estudiante creado correctamente.',
+          message: 'La cuenta quedó registrada en la organización seleccionada.'
+        })
       } else if (student && publicId) {
-        const updated = await updateStudent(publicId, {
+        await updateStudent(publicId, {
           email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
           displayName: displayName.trim() || undefined, validFrom: toIso(validFrom)!, expiresAt: toIso(expiresAt),
           version: student.version
         })
-        setStudent(updated)
-        toast.success('Estudiante actualizado')
-        navigate(`/admin/students/${updated.publicId}`, { replace: true })
+        completeSave({ title: 'Estudiante actualizado correctamente.' })
       }
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
@@ -124,7 +126,7 @@ export function StudentEditorPage({ mode }: Props) {
   }
 
   async function executeLifecycle() {
-    if (!pendingAction || !publicId) return
+    if (!pendingAction || !publicId || saving) return
     setSaving(true)
     try {
       if (pendingAction === 'REVOKE_ALL') {

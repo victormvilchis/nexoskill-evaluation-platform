@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { getRoles, getUser, updateUser } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
-import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { AdminUser, InternalRoleCode, RoleOption } from '../shared/types/users'
 
@@ -47,8 +47,7 @@ const statusLabels: Record<string, string> = {
 
 export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps) {
   const { publicId } = useParams()
-  const navigate = useNavigate()
-  const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/users')
   const editing = mode === 'edit'
   const [user, setUser] = useState<AdminUser | null>(null)
   const [roles, setRoles] = useState<RoleOption[]>([])
@@ -81,7 +80,7 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
       .then(([response, roleOptions, organizationPage]) => {
         if (!active) return
         setUser(response)
-        setRoles(roleOptions)
+        setRoles(roleOptions.filter((role) => role.code === 'ADMINISTRATOR' || role.code === 'MANAGER' || role.code === 'SUPERVISOR'))
         setOrganizations(organizationPage?.content ?? [])
         setEmail(response.email)
         setFirstName(response.firstName)
@@ -139,7 +138,7 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!editing || !publicId) return
+    if (!editing || !publicId || submitting) return
     setError(null)
     setFieldErrors({})
 
@@ -173,8 +172,10 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
         expiresAt: withoutExpiration ? null : toInstant(expiresAt)
       })
       setUser(updated)
-      toast.success('Usuario actualizado', 'Los cambios se guardaron correctamente.')
-      navigate(`/admin/users/${publicId}`, { replace: true })
+      completeSave({
+        title: 'Usuario actualizado correctamente.',
+        message: 'Los cambios se guardaron correctamente.'
+      })
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
         setError(requestError.message)
@@ -262,7 +263,7 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
             <span className="form-section-number">2</span>
             <div><h2>Rol y organización</h2><p>Todos los usuarios internos pertenecen obligatoriamente a una organización.</p></div>
           </div>
-          <div className="form-grid-three">
+          <div className="internal-user-role-grid">
             <label className="form-field"><span>Rol</span><select value={roleCode} onChange={(event) => setRoleCode(event.target.value as InternalRoleCode)}>{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</select></label>
             <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={roleCode === 'ADMINISTRATOR'} required onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">Seleccionar organización</option>{organizationOptions.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select><small>{roleCode === 'ADMINISTRATOR' ? 'Los Administradores pertenecen obligatoriamente a GLOBAL.' : 'Solo se muestran organizaciones comerciales activas y vigentes.'}</small>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
           </div>

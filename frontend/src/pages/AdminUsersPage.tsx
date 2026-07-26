@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchUsers } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionLink, TableActions } from '../shared/components/TableActions'
+import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { AdminUserPage, UserStatus } from '../shared/types/users'
 
@@ -37,6 +39,13 @@ function validStatus(value: string | null): UserStatus | 'ALL' {
     : 'ACTIVE'
 }
 
+interface UsersNavigationState {
+  temporaryCredentials?: {
+    email: string
+    password: string
+  }
+}
+
 function formatDate(value: string | null, fallback = 'Sin registro') {
   if (!value) return fallback
   return new Intl.DateTimeFormat('es-MX', {
@@ -47,6 +56,11 @@ function formatDate(value: string | null, fallback = 'Sin registro') {
 
 export function AdminUsersPage() {
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const navigationState = location.state as UsersNavigationState | null
+  const temporaryCredentials = navigationState?.temporaryCredentials
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
@@ -104,6 +118,15 @@ export function AdminUsersPage() {
     const next = new URLSearchParams(searchParams)
     next.set('page', String(nextPage))
     setSearchParams(next)
+  }
+
+  async function copyCredential(value: string, label: string) {
+    await navigator.clipboard.writeText(value)
+    toast.success(`${label} copiado`, 'Compártelo mediante un canal seguro.')
+  }
+
+  function closeTemporaryCredentials() {
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
   }
 
   return (
@@ -214,6 +237,36 @@ export function AdminUsersPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={Boolean(temporaryCredentials)}
+        title="Credenciales temporales"
+        description="La contraseña se muestra una sola vez. Cópiala antes de cerrar esta ventana."
+        confirmLabel="Copiar ambas"
+        cancelLabel="Cerrar"
+        onCancel={closeTemporaryCredentials}
+        onConfirm={() => temporaryCredentials && void copyCredential(
+          `Usuario: ${temporaryCredentials.email}\nContraseña temporal: ${temporaryCredentials.password}`,
+          'Credenciales'
+        )}
+      >
+        {temporaryCredentials && (
+          <div className="temporary-credential-grid temporary-credential-dialog-grid">
+            <div>
+              <span>Usuario</span>
+              <code>{temporaryCredentials.email}</code>
+              <button className="secondary-button" type="button"
+                onClick={() => void copyCredential(temporaryCredentials.email, 'Usuario')}>Copiar usuario</button>
+            </div>
+            <div>
+              <span>Contraseña temporal</span>
+              <code>{temporaryCredentials.password}</code>
+              <button className="secondary-button" type="button"
+                onClick={() => void copyCredential(temporaryCredentials.password, 'Contraseña')}>Copiar contraseña</button>
+            </div>
+          </div>
+        )}
+      </ConfirmDialog>
     </main>
   )
 }

@@ -184,6 +184,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (busy) return
     setBusy(true)
     try {
       const payload: QuestionPayload = {

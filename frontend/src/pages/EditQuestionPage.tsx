@@ -1,18 +1,17 @@
 import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { getQuestion, updateQuestion } from '../features/questions/api/questionApi'
 import { QuestionEditor } from '../features/questions/components/QuestionEditor'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
-import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { QuestionDetail, QuestionPayload } from '../shared/types/questions'
 
 export function EditQuestionPage() {
   const { publicId = '' } = useParams()
-  const navigate = useNavigate()
-  const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/questions')
   const [question, setQuestion] = useState<QuestionDetail>()
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
@@ -56,12 +55,11 @@ export function EditQuestionPage() {
   if (!question) return <LoadingScreen />
 
   async function save(payload: QuestionPayload) {
-    const updated = await updateQuestion(publicId, {
+    await updateQuestion(publicId, {
       ...payload,
       expectedEntityVersion: question!.entityVersion
     })
-    toast.success('Pregunta actualizada')
-    navigate(`/admin/questions/${updated.publicId}`)
+    completeSave({ title: 'Pregunta actualizada correctamente.' })
   }
 
   return (

@@ -225,6 +225,7 @@ export function CollectionBuilder({
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (saving) return
     const normalizedName = name.trim()
 
     if (normalizedName.length < 3) {

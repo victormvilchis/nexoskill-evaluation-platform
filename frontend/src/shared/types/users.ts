@@ -51,7 +51,6 @@ export interface CreateUserPayload {
   displayName?: string
   roleCode: InternalRoleCode
   organizationPublicId: string | null
-  initialStatus: 'ACTIVE' | 'INACTIVE'
   startsAt: string
   expiresAt: string | null
 }

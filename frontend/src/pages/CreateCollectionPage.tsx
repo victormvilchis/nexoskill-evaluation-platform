@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { useToast } from '../shared/components/ToastProvider'
+import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import { CollectionBuilder } from '../features/collections/components/CollectionBuilder'
 import { createLearningCollection } from '../features/collections/api/collectionApi'
 import type { CollectionPayload } from '../shared/types/collections'
@@ -10,17 +11,18 @@ import type { CollectionPayload } from '../shared/types/collections'
 export function CreateCollectionPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const completeSave = useSaveNavigation('/admin/collections')
   const [saving, setSaving] = useState(false)
 
   async function save(payload: CollectionPayload) {
+    if (saving) return
     setSaving(true)
     try {
-      const collection = await createLearningCollection(payload)
-      toast.success(
-        'Colección creada',
-        'Los formularios quedaron organizados por nivel.'
-      )
-      navigate(`/admin/collections/${collection.publicId}`, { replace: true })
+      await createLearningCollection(payload)
+      completeSave({
+        title: 'Colección creada correctamente.',
+        message: 'Los formularios quedaron organizados por nivel.'
+      })
     } catch (error) {
       toast.error(
         'No fue posible crear la colección',
