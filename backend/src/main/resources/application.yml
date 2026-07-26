@@ -56,8 +56,11 @@ management:
       show-details: never
 
 app:
+  students:
+    lifecycle-check-delay: ${APP_STUDENT_LIFECYCLE_CHECK_DELAY:PT5M}
   security:
     cookie-name: ${APP_SESSION_COOKIE:EVSESSION}
+    student-cookie-name: ${APP_STUDENT_SESSION_COOKIE:EVSTUDENT}
     session-duration: ${APP_SESSION_DURATION:PT8H}
     cookie-secure: ${APP_COOKIE_SECURE:false}
     allowed-origins:

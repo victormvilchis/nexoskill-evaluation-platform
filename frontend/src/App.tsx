@@ -19,6 +19,12 @@ import { ProfilePage } from './pages/ProfilePage'
 import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
 import { AdminOrganizationsPage } from './pages/AdminOrganizationsPage'
 import { OrganizationEditorPage } from './pages/OrganizationEditorPage'
+import { AdminStudentsPage } from './pages/AdminStudentsPage'
+import { StudentEditorPage } from './pages/StudentEditorPage'
+import { StudentLoginPage } from './pages/StudentLoginPage'
+import { StudentPortalPage } from './pages/StudentPortalPage'
+import { StudentChangePasswordPage } from './pages/StudentChangePasswordPage'
+import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute'
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
 
@@ -26,6 +32,12 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/student-login" element={<StudentLoginPage />} />
+
+      <Route element={<StudentProtectedRoute />}>
+        <Route path="/student" element={<StudentPortalPage />} />
+        <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
+      </Route>
 
       <Route element={<ProtectedRoute />}>
         <Route path="/change-password" element={<ChangePasswordPage />} />
@@ -62,6 +74,17 @@ export default function App() {
           <Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/users/:publicId" element={<AdminUserDetailPage />} />
+          </Route>
+
+          <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
+            <Route path="/admin/students" element={<AdminStudentsPage />} />
+            <Route path="/admin/students/:publicId" element={<StudentEditorPage mode="view" />} />
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_CREATE" />}>
+            <Route path="/admin/students/new" element={<StudentEditorPage mode="create" />} />
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
+            <Route path="/admin/students/:publicId/edit" element={<StudentEditorPage mode="edit" />} />
           </Route>
 
           <Route element={<PermissionRoute permission="USER_CREATE" />}>

@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.authentication.infrastructure.security;
 
 import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
+import com.nexoskill.evaluation.students.infrastructure.security.StudentSessionAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Clock;
 import java.util.List;
@@ -27,15 +28,16 @@ public class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter,
-			OriginProtectionFilter originFilter) throws Exception {
+			StudentSessionAuthenticationFilter studentSessionFilter, OriginProtectionFilter originFilter) throws Exception {
 
 		return http.csrf(csrf -> csrf.disable()).cors(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.httpBasic(httpBasic -> httpBasic.disable()).formLogin(formLogin -> formLogin.disable())
 				.logout(logout -> logout.disable())
 				.authorizeHttpRequests(authorize -> authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-						.requestMatchers("/api/v1/auth/login", "/actuator/health", "/error").permitAll().anyRequest()
-						.authenticated())
+						.requestMatchers("/api/v1/auth/login", "/api/v1/student-auth/login", "/actuator/health",
+								"/error")
+						.permitAll().anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
 					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -47,7 +49,8 @@ public class SecurityConfig {
 					response.getWriter().write("{\"code\":\"ACCESS_DENIED\","
 							+ "\"message\":\"No tienes permisos para esta operación.\"}");
 				})).addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class)
-				.addFilterAfter(sessionFilter, OriginProtectionFilter.class).build();
+				.addFilterAfter(sessionFilter, OriginProtectionFilter.class)
+				.addFilterAfter(studentSessionFilter, SessionAuthenticationFilter.class).build();
 	}
 
 	@Bean
@@ -55,7 +58,7 @@ public class SecurityConfig {
 		CorsConfiguration configuration = new CorsConfiguration();
 		configuration.setAllowedOrigins(properties.getSecurity().getAllowedOrigins());
 		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-		configuration.setAllowedHeaders(List.of("Content-Type", "Accept", "X-Requested-With"));
+		configuration.setAllowedHeaders(List.of("Content-Type", "Accept", "X-Requested-With", "X-Organization-Context"));
 		configuration.setAllowCredentials(true);
 		configuration.setMaxAge(3600L);
 
@@ -74,6 +77,14 @@ public class SecurityConfig {
 	@Bean
 	FilterRegistrationBean<SessionAuthenticationFilter> sessionFilterRegistration(SessionAuthenticationFilter filter) {
 		FilterRegistrationBean<SessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
+
+	@Bean
+	FilterRegistrationBean<StudentSessionAuthenticationFilter> studentSessionFilterRegistration(
+			StudentSessionAuthenticationFilter filter) {
+		FilterRegistrationBean<StudentSessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
 		registration.setEnabled(false);
 		return registration;
 	}

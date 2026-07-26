@@ -1,0 +1,109 @@
+.student-context-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dfe4ea);
+  border-radius: 14px;
+}
+.student-context-card p { margin: 4px 0 0; }
+.student-context-card select { min-width: min(420px, 100%); }
+.student-context-empty {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 24px;
+}
+.student-context-empty h2,
+.student-context-empty p { margin: 0; }
+.student-context-empty p { max-width: 560px; color: var(--text-muted, #64748b); }
+.student-deleted-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.student-editor-grid { display: grid; gap: 18px; }
+.student-form-card { margin: 0; }
+.student-editor-header { align-items: center; }
+.student-action-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.student-actions-card,
+.student-sessions-card { margin-top: 18px; }
+.student-metadata,
+.student-portal-metadata {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0 0;
+}
+.student-metadata > div,
+.student-portal-metadata > div {
+  padding: 14px;
+  border: 1px solid var(--border, #dfe4ea);
+  border-radius: 10px;
+  background: var(--surface-subtle, #f8fafc);
+}
+.student-metadata dt,
+.student-portal-metadata dt { color: var(--text-muted, #64748b); font-size: .78rem; }
+.student-metadata dd,
+.student-portal-metadata dd { margin: 5px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.student-user-agent { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compact-button { padding: 7px 10px; min-height: auto; }
+.status-inactive { background: #eef2f6; color: #475569; }
+.status-suspended { background: #fff7ed; color: #9a3412; }
+.status-archived { background: #f1f5f9; color: #475569; }
+.status-deleted { background: #fef2f2; color: #991b1b; }
+.status-pending { background: #eff6ff; color: #1d4ed8; }
+.status-expired { background: #fff1f2; color: #9f1239; }
+.status-revoked { background: #fef2f2; color: #991b1b; }
+
+.student-internal-login-link {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--text-muted, #64748b);
+  font-size: .9rem;
+}
+.student-portal-page { min-height: 100vh; background: #f4f7fb; }
+.student-portal-header {
+  min-height: 72px;
+  padding: 0 clamp(20px, 5vw, 72px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+}
+.student-portal-header > div { display: grid; gap: 2px; }
+.student-portal-header strong { font-size: 1.2rem; }
+.student-portal-header span { color: #64748b; font-size: .85rem; }
+.student-welcome-card {
+  width: min(920px, calc(100% - 32px));
+  margin: 48px auto;
+  padding: clamp(26px, 5vw, 48px);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, .07);
+}
+.student-welcome-card h1 { margin: 6px 0 10px; }
+.student-welcome-card > p:not(.eyebrow) { color: #64748b; max-width: 650px; }
+
+@media (max-width: 800px) {
+  .student-context-card { align-items: stretch; flex-direction: column; }
+  .student-context-card select { min-width: 0; width: 100%; }
+  .student-metadata,
+  .student-portal-metadata { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .student-metadata,
+  .student-portal-metadata { grid-template-columns: 1fr; }
+  .student-action-row > * { width: 100%; justify-content: center; }
+}

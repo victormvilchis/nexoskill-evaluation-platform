@@ -1,8 +1,10 @@
 import type { ApiError } from '../types/auth'
 
 const API_ROOT = '/api/v1'
+export const ORGANIZATION_CONTEXT_KEY = 'nexoskill:organization-context'
 export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
 export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
+export const STUDENT_AUTH_INVALID_EVENT = 'nexoskill:student-auth-invalid'
 
 export interface AuthInvalidEventDetail {
   code: string
@@ -49,6 +51,20 @@ function publishAuthenticationFailure(code: string, message: string) {
       })
     )
   }
+
+  if (
+    code === 'STUDENT_SESSION_EXPIRED' ||
+    code === 'STUDENT_ACCESS_EXPIRED' ||
+    code === 'STUDENT_ACCOUNT_UNAVAILABLE' ||
+    code === 'STUDENT_TEMP_PASSWORD_EXPIRED' ||
+    code === 'STUDENT_UNAUTHORIZED'
+  ) {
+    window.dispatchEvent(
+      new CustomEvent<AuthInvalidEventDetail>(STUDENT_AUTH_INVALID_EVENT, {
+        detail: { code, message }
+      })
+    )
+  }
 }
 
 export async function apiRequest<T>(
@@ -62,6 +78,9 @@ export async function apiRequest<T>(
     headers: {
       Accept: 'application/json',
       ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...(window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)
+        ? { 'X-Organization-Context': window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)! }
+        : {}),
       ...options.headers
     }
   })

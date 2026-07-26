@@ -21,6 +21,7 @@ public class AppProperties {
 
 	public static class Security {
 		private String cookieName = "EVSESSION";
+		private String studentCookieName = "EVSTUDENT";
 		private Duration sessionDuration = Duration.ofHours(8);
 		private boolean cookieSecure;
 		private List<String> allowedOrigins = new ArrayList<>();
@@ -31,6 +32,14 @@ public class AppProperties {
 
 		public String getCookieName() {
 			return cookieName;
+		}
+
+		public String getStudentCookieName() {
+			return studentCookieName;
+		}
+
+		public void setStudentCookieName(String studentCookieName) {
+			this.studentCookieName = studentCookieName;
 		}
 
 		public void setCookieName(String cookieName) {

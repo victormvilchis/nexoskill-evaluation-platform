@@ -1,4 +1,4 @@
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { LoginForm } from '../features/authentication/components/LoginForm'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
@@ -56,6 +56,7 @@ export function LoginPage() {
           </div>
         )}
         <LoginForm />
+        <Link className="student-internal-login-link" to="/student-login">Acceso para estudiantes</Link>
       </section>
     </main>
   )

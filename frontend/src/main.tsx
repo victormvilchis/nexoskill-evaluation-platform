@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './features/authentication/context/AuthContext'
+import { StudentAuthProvider } from './features/students/context/StudentAuthContext'
 import { ToastProvider } from './shared/components/ToastProvider'
 import './styles/global.css'
 import './styles/r3-logical-deletion.css'
@@ -11,6 +12,7 @@ import './styles/question-bank-java-r3.css'
 import './styles/layout-wide-r4.css'
 import './styles/resource-management-r5.css'
 import './styles/multitenancy-core-r1.css'
+import './styles/students-part2-r1.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(
@@ -18,7 +20,9 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter basename={basename}>
       <ToastProvider>
         <AuthProvider>
-          <App />
+          <StudentAuthProvider>
+            <App />
+          </StudentAuthProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

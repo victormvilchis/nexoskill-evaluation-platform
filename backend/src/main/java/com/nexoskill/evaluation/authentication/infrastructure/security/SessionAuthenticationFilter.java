@@ -27,7 +27,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
-	private static final Set<String> PUBLIC_PATHS = Set.of("/api/v1/auth/login", "/actuator/health", "/error");
+	private static final Set<String> PUBLIC_PATHS = Set.of("/api/v1/auth/login", "/api/v1/student-auth/login",
+			"/actuator/health", "/error");
 
 	private static final Set<String> PASSWORD_CHANGE_ALLOWED_PATHS = Set.of("/api/v1/auth/login", "/api/v1/auth/logout",
 			"/api/v1/auth/change-password", "/api/v1/users/me", "/actuator/health", "/error");
@@ -45,6 +46,12 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 		this.sessionRepository = sessionRepository;
 		this.userRepository = userRepository;
 		this.clock = clock;
+	}
+
+	@Override
+	protected boolean shouldNotFilter(HttpServletRequest request) {
+		String path = request.getRequestURI();
+		return path.startsWith("/api/v1/student-auth") || path.startsWith("/api/v1/student/");
 	}
 
 	@Override

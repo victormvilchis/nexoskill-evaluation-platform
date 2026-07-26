@@ -29,6 +29,7 @@ public class UserController {
 	}
 
 	@GetMapping("/me")
+	@PreAuthorize("hasAuthority('DASHBOARD_VIEW')")
 	public ResponseEntity<CurrentUserResponse> me(@AuthenticationPrincipal AuthenticatedUser principal) {
 		return ResponseEntity.ok(new CurrentUserResponse(principal.toCurrentUser()));
 	}
