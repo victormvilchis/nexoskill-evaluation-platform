@@ -1,6 +1,12 @@
 package com.nexoskill.evaluation.organizations.infrastructure.persistence;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -51,15 +57,17 @@ public class OrganizationLicensePolicyJpaEntity {
 
     protected OrganizationLicensePolicyJpaEntity() {}
 
-    public static OrganizationLicensePolicyJpaEntity create(Long organizationId, int seats, int replacements,
-                                                             LocalDate cycleStart, LocalDate cycleEnd, Instant now) {
+    public static OrganizationLicensePolicyJpaEntity create(Long organizationId, int seats, int included,
+                                                             int additional, int releaseHours,
+                                                             int exhaustedDays, LocalDate cycleStart,
+                                                             LocalDate cycleEnd, Instant now) {
         OrganizationLicensePolicyJpaEntity entity = new OrganizationLicensePolicyJpaEntity();
         entity.organizationId = organizationId;
         entity.contractedSeats = seats;
-        entity.includedReplacements = replacements;
-        entity.additionalReplacements = 0;
-        entity.standardReleaseHours = 24;
-        entity.exhaustedReleaseDays = 7;
+        entity.includedReplacements = included;
+        entity.additionalReplacements = additional;
+        entity.standardReleaseHours = releaseHours;
+        entity.exhaustedReleaseDays = exhaustedDays;
         entity.cycleStartsOn = cycleStart;
         entity.cycleEndsOn = cycleEnd;
         entity.status = "ACTIVE";

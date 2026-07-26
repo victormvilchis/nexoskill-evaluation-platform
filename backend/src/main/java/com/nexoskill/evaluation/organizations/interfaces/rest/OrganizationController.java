@@ -6,13 +6,24 @@ import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyJpaEntity;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/organizations")
@@ -44,23 +55,27 @@ public class OrganizationController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('ORGANIZATION_CREATE')")
     public OrganizationResponse create(@Valid @RequestBody CreateRequest request) {
-        return response(service.create(new OrganizationService.CreateCommand(request.name(), request.code(),
-                request.contentMode(), request.validFrom(), request.expiresOn(), request.contractedSeats(),
-                request.includedReplacements(), request.cycleStartsOn(), request.cycleEndsOn())));
+        return response(service.create(new OrganizationService.CreateCommand(
+                request.name(), request.code(), request.contentMode(), request.validFrom(), request.expiresOn(),
+                request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
+                request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
+                request.cycleEndsOn())));
     }
 
     @PutMapping("/{publicId}")
     @PreAuthorize("hasAuthority('ORGANIZATION_UPDATE')")
     public OrganizationResponse update(@PathVariable String publicId, @Valid @RequestBody UpdateRequest request) {
-        return response(service.update(publicId, new OrganizationService.UpdateCommand(request.name(),
-                request.contentMode(), request.validFrom(), request.expiresOn(), request.contractedSeats(),
-                request.includedReplacements(), request.additionalReplacements(), request.standardReleaseHours(),
-                request.exhaustedReleaseDays(), request.cycleStartsOn(), request.cycleEndsOn(), request.version())));
+        return response(service.update(publicId, new OrganizationService.UpdateCommand(
+                request.name(), request.contentMode(), request.validFrom(), request.expiresOn(),
+                request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
+                request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
+                request.cycleEndsOn(), request.version())));
     }
 
     @PostMapping("/{publicId}/status/{status}")
     @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
-    public OrganizationResponse changeStatus(@PathVariable String publicId, @PathVariable OrganizationStatus status) {
+    public OrganizationResponse changeStatus(@PathVariable String publicId,
+                                              @PathVariable OrganizationStatus status) {
         return response(service.changeStatus(publicId, status));
     }
 
@@ -70,45 +85,83 @@ public class OrganizationController {
     }
 
     private OrganizationResponse response(OrganizationService.OrganizationAggregate aggregate) {
-        OrganizationJpaEntity o = aggregate.organization();
-        OrganizationLicensePolicyJpaEntity p = aggregate.policy();
-        return new OrganizationResponse(o.getPublicId(), o.getCode(), o.getName(), o.getStatus(), o.getContentMode(),
-                o.getValidFrom(), o.getExpiresOn(), p.getContractedSeats(), p.getIncludedReplacements(),
-                p.getAdditionalReplacements(), p.getStandardReleaseHours(), p.getExhaustedReleaseDays(),
-                p.getCycleStartsOn(), p.getCycleEndsOn(), o.getCreatedAt(), o.getUpdatedAt(), o.getVersion());
+        OrganizationJpaEntity organization = aggregate.organization();
+        OrganizationLicensePolicyJpaEntity policy = aggregate.policy();
+        return new OrganizationResponse(organization.getPublicId(), organization.getCode(), organization.getName(),
+                organization.getStatus(), organization.getContentMode(), organization.getValidFrom(),
+                organization.getExpiresOn(), policy.getContractedSeats(), policy.getIncludedReplacements(),
+                policy.getAdditionalReplacements(), policy.getStandardReleaseHours(), policy.getExhaustedReleaseDays(),
+                policy.getCycleStartsOn(), policy.getCycleEndsOn(), organization.getCreatedAt(),
+                organization.getUpdatedAt(), organization.getVersion());
     }
 
-    public record CreateRequest(@NotBlank @Size(max = 200) String name,
-                                @NotBlank @Size(max = 80) String code,
-                                @NotNull ContentMode contentMode,
-                                LocalDate validFrom,
-                                LocalDate expiresOn,
-                                @Min(0) int contractedSeats,
-                                @Min(0) Integer includedReplacements,
-                                LocalDate cycleStartsOn,
-                                LocalDate cycleEndsOn) {}
+    public record CreateRequest(
+            @NotBlank(message = "El nombre es obligatorio.")
+            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.")
+            String name,
+            @NotBlank(message = "El código es obligatorio.")
+            @Size(max = 80, message = "El código no puede superar 80 caracteres.")
+            String code,
+            @NotNull(message = "Selecciona una modalidad de contenido.")
+            ContentMode contentMode,
+            LocalDate validFrom,
+            LocalDate expiresOn,
+            @NotNull(message = "Los asientos contratados son obligatorios.")
+            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
+            Integer contractedSeats,
+            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.")
+            Integer includedReplacements,
+            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.")
+            Integer additionalReplacements,
+            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.")
+            Integer standardReleaseHours,
+            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.")
+            Integer exhaustedReleaseDays,
+            @NotNull(message = "El inicio de ciclo es obligatorio.")
+            LocalDate cycleStartsOn,
+            @NotNull(message = "El fin de ciclo es obligatorio.")
+            LocalDate cycleEndsOn) {}
 
-    public record UpdateRequest(@NotBlank @Size(max = 200) String name,
-                                @NotNull ContentMode contentMode,
-                                LocalDate validFrom,
-                                LocalDate expiresOn,
-                                @Min(0) int contractedSeats,
-                                @Min(0) int includedReplacements,
-                                @Min(0) int additionalReplacements,
-                                @Min(1) int standardReleaseHours,
-                                @Min(0) int exhaustedReleaseDays,
-                                @NotNull LocalDate cycleStartsOn,
-                                @NotNull LocalDate cycleEndsOn,
-                                @NotNull Long version) {}
+    public record UpdateRequest(
+            @NotBlank(message = "El nombre es obligatorio.")
+            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.")
+            String name,
+            @NotNull(message = "Selecciona una modalidad de contenido.")
+            ContentMode contentMode,
+            LocalDate validFrom,
+            LocalDate expiresOn,
+            @NotNull(message = "Los asientos contratados son obligatorios.")
+            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
+            Integer contractedSeats,
+            @NotNull(message = "Las sustituciones incluidas son obligatorias.")
+            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.")
+            Integer includedReplacements,
+            @NotNull(message = "Las sustituciones adicionales son obligatorias.")
+            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.")
+            Integer additionalReplacements,
+            @NotNull(message = "La liberación estándar es obligatoria.")
+            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.")
+            Integer standardReleaseHours,
+            @NotNull(message = "El bloqueo antifraude es obligatorio.")
+            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.")
+            Integer exhaustedReleaseDays,
+            @NotNull(message = "El inicio de ciclo es obligatorio.")
+            LocalDate cycleStartsOn,
+            @NotNull(message = "El fin de ciclo es obligatorio.")
+            LocalDate cycleEndsOn,
+            @NotNull(message = "La versión de la organización es obligatoria.")
+            Long version) {}
 
     public record OrganizationSummary(String publicId, String code, String name, OrganizationStatus status,
                                       ContentMode contentMode, LocalDate expiresOn, java.time.Instant updatedAt) {}
+
     public record OrganizationResponse(String publicId, String code, String name, OrganizationStatus status,
                                        ContentMode contentMode, LocalDate validFrom, LocalDate expiresOn,
                                        int contractedSeats, int includedReplacements, int additionalReplacements,
                                        int standardReleaseHours, int exhaustedReleaseDays,
                                        LocalDate cycleStartsOn, LocalDate cycleEndsOn,
                                        java.time.Instant createdAt, java.time.Instant updatedAt, Long version) {}
+
     public record PageResponse(List<OrganizationSummary> content, int page, int size, long totalElements,
                                int totalPages) {}
 }

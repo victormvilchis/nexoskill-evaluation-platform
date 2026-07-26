@@ -1,47 +1,308 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
-import type { OrganizationStatus, OrganizationSummary } from '../features/organizations/types/organizations'
-import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
+import type {
+  OrganizationPage,
+  OrganizationStatus
+} from '../features/organizations/types/organizations'
+import { ApiRequestError } from '../shared/api/apiClient'
+import { FilterToolbar } from '../shared/components/FilterToolbar'
+import { Icon } from '../shared/components/Icon'
+import {
+  ResourceSearchField,
+  ResourceSelectField
+} from '../shared/components/ResourceFilters'
 import { TableActionLink, TableActions } from '../shared/components/TableActions'
+import { useToast } from '../shared/components/ToastProvider'
+import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 
-const statusLabel: Record<OrganizationStatus, string> = {
-  ACTIVE: 'Activa', INACTIVE: 'Inactiva', SUSPENDED: 'Suspendida', EXPIRED: 'Vencida', DELETED: 'Eliminada'
+const STATUS_OPTIONS: Array<{ value: OrganizationStatus | 'ALL'; label: string }> = [
+  { value: 'ALL', label: 'Todos los estados' },
+  { value: 'ACTIVE', label: 'Activa' },
+  { value: 'INACTIVE', label: 'Inactiva' },
+  { value: 'SUSPENDED', label: 'Suspendida' },
+  { value: 'EXPIRED', label: 'Vencida' },
+  { value: 'DELETED', label: 'Eliminada' }
+]
+
+const VALID_STATUSES = new Set<OrganizationStatus>([
+  'ACTIVE', 'INACTIVE', 'SUSPENDED', 'EXPIRED', 'DELETED'
+])
+
+const STATUS_LABELS: Record<OrganizationStatus, string> = {
+  ACTIVE: 'Activa',
+  INACTIVE: 'Inactiva',
+  SUSPENDED: 'Suspendida',
+  EXPIRED: 'Vencida',
+  DELETED: 'Eliminada'
+}
+
+const CONTENT_MODE_LABELS = {
+  GLOBAL_CATALOG: 'Catálogo global',
+  CLEAN: 'En limpio',
+  CUSTOM: 'Personalizada'
+} as const
+
+function statusFromQuery(value: string | null): OrganizationStatus | 'ALL' {
+  return value && VALID_STATUSES.has(value as OrganizationStatus)
+    ? value as OrganizationStatus
+    : 'ALL'
+}
+
+function pageFromQuery(value: string | null) {
+  const parsed = Number.parseInt(value ?? '0', 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+function formatDate(value?: string) {
+  if (!value) return 'Sin vencimiento'
+  const [yearText, monthText, dayText] = value.split('-')
+  if (!yearText || !monthText || !dayText) return value
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  if (![year, month, day].every(Number.isFinite)) return value
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(
+    new Date(year, month - 1, day)
+  )
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(new Date(value))
 }
 
 export function AdminOrganizationsPage() {
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState<OrganizationStatus | 'ALL'>('ALL')
-  const [items, setItems] = useState<OrganizationSummary[]>([])
+  const toast = useToast()
+  const { user } = useAuth()
+  const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useState(searchParams.get('query') ?? '')
+  const [status, setStatus] = useState<OrganizationStatus | 'ALL'>(
+    statusFromQuery(searchParams.get('status'))
+  )
+  const [data, setData] = useState<OrganizationPage | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string>()
+  const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query, 300)
+  const page = pageFromQuery(searchParams.get('page'))
 
   useEffect(() => {
-    let active = true
+    if (searchParams.get('created') !== '1') return
+    toast.success(
+      'Organización creada',
+      'La organización y su política de licenciamiento quedaron guardadas.'
+    )
+    const next = new URLSearchParams(searchParams)
+    next.delete('created')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, toast])
+
+  useEffect(() => {
+    const currentQuery = searchParams.get('query') ?? ''
+    const currentStatus = statusFromQuery(searchParams.get('status'))
+    const normalizedQuery = debouncedQuery.trim()
+
+    if (currentQuery === normalizedQuery && currentStatus === status) return
+
+    const next = new URLSearchParams(searchParams)
+    next.delete('created')
+    next.delete('page')
+    normalizedQuery ? next.set('query', normalizedQuery) : next.delete('query')
+    status !== 'ALL' ? next.set('status', status) : next.delete('status')
+    setSearchParams(next, { replace: true })
+  }, [debouncedQuery, searchParams, setSearchParams, status])
+
+  useEffect(() => {
+    const controller = new AbortController()
     setLoading(true)
-    setError('')
-    searchOrganizations({ query: debouncedQuery, status })
-      .then(result => { if (active) setItems(result.content) })
-      .catch(() => { if (active) setError('No fue posible consultar las organizaciones.') })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [debouncedQuery, status])
+    setError(undefined)
 
-  return <main className="ns-resource-page org-page">
-    <header className="ns-page-header">
-      <div><span className="eyebrow">ADMINISTRACIÓN</span><h1>Organizaciones</h1><p>Administra tenants, vigencia, contenido y configuración comercial.</p></div>
-      <Link className="primary-button" to="/admin/organizations/new">+ Nueva organización</Link>
-    </header>
+    searchOrganizations({
+      query: searchParams.get('query') ?? '',
+      status: statusFromQuery(searchParams.get('status')),
+      page,
+      signal: controller.signal
+    })
+      .then(setData)
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return
+        setError(
+          requestError instanceof ApiRequestError
+            ? requestError.message
+            : 'No fue posible consultar las organizaciones.'
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
 
-    <section className="ns-filter-toolbar">
-      <label className="ns-search-control"><span className="sr-only">Buscar</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Buscar por nombre o código" />{query && <button type="button" onClick={() => setQuery('')}>×</button>}</label>
-      <label className="ns-filter-control"><span>Estado</span><select value={status} onChange={e => setStatus(e.target.value as OrganizationStatus | 'ALL')}><option value="ALL">Todos</option><option value="ACTIVE">Activas</option><option value="INACTIVE">Inactivas</option><option value="SUSPENDED">Suspendidas</option><option value="EXPIRED">Vencidas</option></select></label>
-      <strong>{items.length} organizaciones</strong>
-    </section>
+    return () => controller.abort()
+  }, [page, reloadKey, searchParams])
 
-    {error && <section className="state-card error-state">{error}</section>}
-    {loading ? <section className="state-card">Consultando organizaciones…</section> :
-      <section className="ns-table-card"><div className="ns-table-scroll"><table className="ns-resource-table"><thead><tr><th>Organización</th><th>Modalidad</th><th>Estado</th><th>Vigencia</th><th>Actualización</th><th>Acciones</th></tr></thead><tbody>{items.map(item => <tr key={item.publicId}><td><strong>{item.name}</strong><small>{item.code}</small></td><td>{item.contentMode === 'GLOBAL_CATALOG' ? 'Catálogo global' : item.contentMode === 'CLEAN' ? 'En limpio' : 'Personalizada'}</td><td><span className={`status-badge status-${item.status.toLowerCase()}`}>{statusLabel[item.status]}</span></td><td>{item.expiresOn ?? 'Sin vencimiento'}</td><td>{new Date(item.updatedAt).toLocaleDateString('es-MX')}</td><td><TableActions><TableActionLink to={`/admin/organizations/${item.publicId}`} label="Ver" icon="view"/><TableActionLink to={`/admin/organizations/${item.publicId}/edit`} label="Editar" icon="edit" tone="primary"/></TableActions></td></tr>)}</tbody></table></div></section>}
-  </main>
+  const activeFilters = Boolean(query.trim()) || status !== 'ALL'
+
+  function clearFilters() {
+    setQuery('')
+    setStatus('ALL')
+  }
+
+  function goToPage(nextPage: number) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('created')
+    next.set('page', String(nextPage))
+    setSearchParams(next)
+  }
+
+  return (
+    <main className="content-page resource-page ns-list-page org-page">
+      <header className="ns-page-header">
+        <div>
+          <p className="eyebrow">Administración</p>
+          <h1>Organizaciones</h1>
+          <p className="muted">
+            Administra tenants, vigencia, contenido y configuración comercial.
+          </p>
+        </div>
+        {permissions.has('ORGANIZATION_CREATE') && (
+          <Link className="primary-button button-link" to="/admin/organizations/new">
+            <Icon name="plus" size={17} /> Nueva organización
+          </Link>
+        )}
+      </header>
+
+      <FilterToolbar
+        resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'organización' : 'organizaciones'}`}
+        hasActiveFilters={activeFilters}
+        onClear={clearFilters}
+      >
+        <ResourceSearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar por nombre o código"
+        />
+        <ResourceSelectField
+          label="Estado"
+          value={status}
+          onChange={(value) => setStatus(value as OrganizationStatus | 'ALL')}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </ResourceSelectField>
+      </FilterToolbar>
+
+      {error && (
+        <section className="inline-error-panel" role="alert">
+          <div className="inline-error-icon"><Icon name="error" size={20} /></div>
+          <div>
+            <strong>No fue posible cargar las organizaciones</strong>
+            <p>{error}</p>
+          </div>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setReloadKey((value) => value + 1)}
+          >
+            Reintentar
+          </button>
+        </section>
+      )}
+
+      <section className="ns-data-panel org-data-panel" aria-busy={loading}>
+        <div className="ns-data-table-wrap">
+          <table className="ns-data-table org-data-table">
+            <thead>
+              <tr>
+                <th>Organización</th>
+                <th>Modalidad</th>
+                <th>Estado</th>
+                <th>Vigencia</th>
+                <th>Última actualización</th>
+                <th className="ns-actions-column">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan={6} className="ns-table-empty">Cargando organizaciones…</td></tr>
+              )}
+              {!loading && !error && data?.content.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="ns-table-empty">
+                    <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones'}</strong>
+                    <span>
+                      {activeFilters
+                        ? 'Ajusta o limpia los filtros para ampliar la búsqueda.'
+                        : 'Crea la primera organización para comenzar a operar el modelo multitenant.'}
+                    </span>
+                  </td>
+                </tr>
+              )}
+              {!loading && !error && data?.content.map((item) => (
+                <tr className={item.status === 'DELETED' ? 'ns-row-muted' : ''} key={item.publicId}>
+                  <td className="ns-primary-cell">
+                    <strong>{item.name}</strong>
+                    <small><code className="ns-code-label">{item.code}</code></small>
+                  </td>
+                  <td>
+                    <span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>
+                      {CONTENT_MODE_LABELS[item.contentMode]}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`status-badge status-${item.status.toLowerCase()}`}>
+                      {STATUS_LABELS[item.status]}
+                    </span>
+                  </td>
+                  <td>{formatDate(item.expiresOn)}</td>
+                  <td>{formatDateTime(item.updatedAt)}</td>
+                  <td>
+                    <TableActions>
+                      <TableActionLink
+                        to={`/admin/organizations/${item.publicId}`}
+                        label="Ver"
+                        icon="eye"
+                      />
+                      {permissions.has('ORGANIZATION_UPDATE') && item.status !== 'DELETED' && (
+                        <TableActionLink
+                          to={`/admin/organizations/${item.publicId}/edit`}
+                          label="Editar"
+                          icon="edit"
+                          tone="primary"
+                        />
+                      )}
+                    </TableActions>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pagination-controls">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!data || data.page <= 0 || loading}
+            onClick={() => goToPage(page - 1)}
+          >
+            Anterior
+          </button>
+          <span>Página {(data?.page ?? 0) + 1} de {Math.max(data?.totalPages ?? 1, 1)}</span>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!data || data.page + 1 >= data.totalPages || loading}
+            onClick={() => goToPage(page + 1)}
+          >
+            Siguiente
+          </button>
+        </div>
+      </section>
+    </main>
+  )
 }

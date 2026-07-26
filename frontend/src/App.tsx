@@ -38,14 +38,28 @@ export default function App() {
           </Route>
 
           <Route element={<PermissionRoute permission="ORGANIZATION_VIEW" />}>
-<Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
-<Route path="/admin/organizations/:publicId" element={<OrganizationEditorPage />} />
-<Route path="/admin/organizations/:publicId/edit" element={<OrganizationEditorPage />} />
-</Route>
-<Route element={<PermissionRoute permission="ORGANIZATION_CREATE" />}>
-<Route path="/admin/organizations/new" element={<OrganizationEditorPage />} />
-</Route>
-<Route element={<PermissionRoute permission="USER_VIEW" />}>
+            <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
+            <Route
+              path="/admin/organizations/:publicId"
+              element={<OrganizationEditorPage mode="view" />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute permission="ORGANIZATION_CREATE" />}>
+            <Route
+              path="/admin/organizations/new"
+              element={<OrganizationEditorPage mode="create" />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute permission="ORGANIZATION_UPDATE" />}>
+            <Route
+              path="/admin/organizations/:publicId/edit"
+              element={<OrganizationEditorPage mode="edit" />}
+            />
+          </Route>
+
+          <Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/users/:publicId" element={<AdminUserDetailPage />} />
           </Route>
