@@ -25,6 +25,7 @@ import { StudentEditorPage } from './pages/StudentEditorPage'
 import { StudentLoginPage } from './pages/StudentLoginPage'
 import { StudentPortalPage } from './pages/StudentPortalPage'
 import { StudentChangePasswordPage } from './pages/StudentChangePasswordPage'
+import { GlobalContentGovernancePage } from './pages/GlobalContentGovernancePage'
 import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute'
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
@@ -98,6 +99,11 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="USER_CREATE" />}>
             <Route path="/admin/users/new" element={<CreateUserPage />} />
+          </Route>
+
+
+          <Route element={<PermissionRoute permission="GLOBAL_CONTENT_REVIEW" />}>
+            <Route path="/admin/global-content" element={<GlobalContentGovernancePage />} />
           </Route>
 
           <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>

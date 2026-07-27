@@ -48,7 +48,8 @@ export function ApplicationLayout() {
         items: [
           { label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
           { label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-          { label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' }
+          { label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' },
+          { label: 'Gobierno global', to: '/admin/global-content', icon: 'collections', permission: 'GLOBAL_CONTENT_REVIEW' }
         ]
       },
       {
