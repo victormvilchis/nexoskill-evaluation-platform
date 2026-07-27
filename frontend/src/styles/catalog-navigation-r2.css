@@ -1,0 +1,54 @@
+/* Three-level navigation for Administration > Catalogs > Catalog type. */
+.nav-section-trigger.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.nav-group {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.nav-item-parent {
+  font-weight: 720;
+}
+
+.nav-item-parent.active {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+  color: #fff;
+}
+
+.nav-submenu-third {
+  margin-left: 0.45rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.13);
+  padding-left: 0.45rem;
+}
+
+.nav-submenu-third .nav-item {
+  min-height: 32px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.nav-submenu-third .nav-item > svg:first-child {
+  min-width: 15px;
+  opacity: 0.78;
+}
+
+.nav-submenu-third .nav-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 2px 0 0 #75a7ff;
+}
+
+.nav-section-trigger:focus-visible,
+.nav-item:focus-visible {
+  outline: 2px solid #a8c7ff;
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .sidebar-collapsed .nav-submenu-third {
+    display: grid;
+  }
+}

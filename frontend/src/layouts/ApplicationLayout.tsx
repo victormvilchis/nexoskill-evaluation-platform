@@ -5,12 +5,12 @@ import { Breadcrumbs } from '../shared/components/Breadcrumbs'
 import { Icon, type IconName } from '../shared/components/Icon'
 
 interface NavItem {
+  id: string
   label: string
   to?: string
   icon: IconName
   permission?: string
-  disabled?: boolean
-  badge?: string
+  children?: NavItem[]
 }
 
 interface NavSection {
@@ -20,9 +20,55 @@ interface NavSection {
   items: NavItem[]
 }
 
+const navigationConfig: NavSection[] = [
+  {
+    id: 'administration',
+    label: 'Administración',
+    icon: 'users',
+    items: [
+      { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
+      { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
+      { id: 'students', label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' },
+      {
+        id: 'catalogs',
+        label: 'Catálogos',
+        icon: 'categories',
+        permission: 'CATALOG_VIEW',
+        children: [
+          { id: 'catalog-categories', label: 'Categorías', to: '/admin/catalogs/CATEGORIES', icon: 'categories' },
+          { id: 'catalog-technologies', label: 'Tecnologías', to: '/admin/catalogs/TECHNOLOGIES', icon: 'code' },
+          { id: 'catalog-professional-profiles', label: 'Perfiles', to: '/admin/catalogs/PROFESSIONAL_PROFILES', icon: 'profile' },
+          { id: 'catalog-technological-profiles', label: 'Perfiles tecnológicos', to: '/admin/catalogs/TECHNOLOGICAL_PROFILES', icon: 'profile' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'content',
+    label: 'Banco de Preguntas',
+    icon: 'questions',
+    items: [
+      { id: 'questions', label: 'Preguntas', to: '/admin/questions', icon: 'questions', permission: 'QUESTION_VIEW' },
+      { id: 'forms', label: 'Formularios', to: '/admin/forms', icon: 'clipboard', permission: 'FORM_VIEW' },
+      { id: 'collections', label: 'Colecciones', to: '/admin/collections', icon: 'collections', permission: 'COLLECTION_VIEW' }
+    ]
+  },
+  {
+    id: 'evaluation',
+    label: 'Evaluaciones',
+    icon: 'clipboard',
+    items: []
+  }
+]
+
 function initials(displayName?: string) {
   const values = (displayName ?? 'NS').trim().split(/\s+/).filter(Boolean)
   return values.slice(0, 2).map((value) => value[0]?.toUpperCase() ?? '').join('') || 'NS'
+}
+
+function routeMatches(pathname: string, to?: string) {
+  if (!to) return false
+  return pathname === to || pathname.startsWith(`${to}/`)
 }
 
 export function ApplicationLayout() {
@@ -37,47 +83,52 @@ export function ApplicationLayout() {
   const [openSections, setOpenSections] = useState<Set<string>>(
     () => new Set(['administration', 'content'])
   )
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set(['catalogs'])
+  )
   const accountRef = useRef<HTMLDivElement>(null)
 
-  const sections = useMemo<NavSection[]>(
-    () => [
-      {
-        id: 'administration',
-        label: 'Administración',
-        icon: 'users',
-        items: [
-          { label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
-          { label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-          { label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' },
-          { label: 'Catálogos', to: '/admin/catalogs', icon: 'categories', permission: 'CATALOG_VIEW' }
-        ]
-      },
-      {
-        id: 'content',
-        label: 'Banco de Preguntas',
-        icon: 'questions',
-        items: [
-          { label: 'Preguntas', to: '/admin/questions', icon: 'questions', permission: 'QUESTION_VIEW' }
-        ]
-      },
-      {
-        id: 'evaluation',
-        label: 'Evaluaciones',
-        icon: 'clipboard',
-        items: [
-          { label: 'Formularios', to: '/admin/forms', icon: 'clipboard', permission: 'FORM_VIEW' },
-          { label: 'Colecciones', to: '/admin/collections', icon: 'collections', permission: 'COLLECTION_VIEW' },
-          { label: 'Resultados', icon: 'results', disabled: true, badge: 'Próximamente' }
-        ]
-      }
-    ],
-    []
+  const canShow = (item: NavItem) => !item.permission || user?.permissions.includes(item.permission)
+
+  const sections = useMemo(
+    () => navigationConfig
+      .map((section) => ({
+        ...section,
+        items: section.items
+          .filter(canShow)
+          .map((item) => ({
+            ...item,
+            children: item.children?.filter(canShow)
+          }))
+          .filter((item) => item.to || (item.children?.length ?? 0) > 0)
+      }))
+      .filter((section) => section.items.length > 0),
+    [user?.permissions]
   )
+
+  function itemIsActive(item: NavItem): boolean {
+    return routeMatches(location.pathname, item.to)
+      || Boolean(item.children?.some((child) => itemIsActive(child)))
+  }
 
   useEffect(() => {
     setMobileOpen(false)
     setAccountOpen(false)
-  }, [location.pathname])
+    setOpenSections((current) => {
+      const next = new Set(current)
+      sections.forEach((section) => {
+        if (section.items.some((item) => itemIsActive(item))) next.add(section.id)
+      })
+      return next
+    })
+    setOpenGroups((current) => {
+      const next = new Set(current)
+      sections.flatMap((section) => section.items).forEach((item) => {
+        if (item.children?.some((child) => itemIsActive(child))) next.add(item.id)
+      })
+      return next
+    })
+  }, [location.pathname, sections])
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -112,11 +163,14 @@ export function ApplicationLayout() {
     })
   }
 
+  function ensureExpandedSidebar() {
+    if (!collapsed) return
+    setCollapsed(false)
+    window.localStorage.setItem('nexoskill:sidebar-collapsed', '0')
+  }
+
   function toggleSection(id: string) {
-    if (collapsed) {
-      setCollapsed(false)
-      window.localStorage.setItem('nexoskill:sidebar-collapsed', '0')
-    }
+    ensureExpandedSidebar()
     setOpenSections((current) => {
       const next = new Set(current)
       if (next.has(id)) next.delete(id)
@@ -125,8 +179,14 @@ export function ApplicationLayout() {
     })
   }
 
-  function canShow(item: NavItem) {
-    return !item.permission || user?.permissions.includes(item.permission)
+  function toggleGroup(id: string) {
+    ensureExpandedSidebar()
+    setOpenGroups((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
@@ -139,7 +199,6 @@ export function ApplicationLayout() {
           onClick={() => setMobileOpen(false)}
         />
       )}
-
       <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
           <NavLink className="sidebar-brand" to="/dashboard" aria-label="Ir al inicio">
@@ -158,7 +217,6 @@ export function ApplicationLayout() {
             <Icon name={collapsed ? 'chevronRight' : 'menu'} size={18} />
           </button>
         </div>
-
         <nav className="sidebar-navigation" aria-label="Navegación principal">
           <NavLink
             className={({ isActive }) => `nav-item nav-item-root${isActive ? ' active' : ''}`}
@@ -168,16 +226,14 @@ export function ApplicationLayout() {
             <Icon name="home" />
             <span>Inicio</span>
           </NavLink>
-
           {sections.map((section) => {
-            const availableItems = section.items.filter(canShow)
-            if (availableItems.length === 0) return null
             const expanded = openSections.has(section.id)
+            const active = section.items.some((item) => itemIsActive(item))
             return (
               <section className="nav-section" key={section.id}>
                 <button
                   aria-expanded={expanded}
-                  className="nav-section-trigger"
+                  className={`nav-section-trigger${active ? ' active' : ''}`}
                   title={section.label}
                   type="button"
                   onClick={() => toggleSection(section.id)}
@@ -188,35 +244,63 @@ export function ApplicationLayout() {
                 </button>
                 {expanded && (
                   <div className="nav-submenu">
-                    {availableItems.map((item) => item.to ? (
-                      <NavLink
-                        className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                        key={item.label}
-                        to={item.to}
-                        title={item.label}
-                      >
-                        <Icon name={item.icon} size={17} />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    ) : (
-                      <button className="nav-item nav-item-disabled" disabled key={item.label} title={item.label} type="button">
-                        <Icon name={item.icon} size={17} />
-                        <span>{item.label}</span>
-                        {item.badge && <small>{item.badge}</small>}
-                      </button>
-                    ))}
+                    {section.items.map((item) => {
+                      const itemActive = itemIsActive(item)
+                      if (item.children?.length) {
+                        const groupExpanded = openGroups.has(item.id)
+                        return (
+                          <div className="nav-group" key={item.id}>
+                            <button
+                              aria-expanded={groupExpanded}
+                              className={`nav-item nav-item-parent${itemActive ? ' active' : ''}`}
+                              title={item.label}
+                              type="button"
+                              onClick={() => toggleGroup(item.id)}
+                            >
+                              <Icon name={item.icon} size={17} />
+                              <span>{item.label}</span>
+                              <Icon className="nav-section-chevron" name={groupExpanded ? 'chevronDown' : 'chevronRight'} size={14} />
+                            </button>
+                            {groupExpanded && (
+                              <div className="nav-submenu nav-submenu-third">
+                                {item.children.map((child) => (
+                                  <NavLink
+                                    className={({ isActive }) => `nav-item nav-item-third${isActive || routeMatches(location.pathname, child.to) ? ' active' : ''}`}
+                                    key={child.id}
+                                    to={child.to!}
+                                    title={child.label}
+                                  >
+                                    <Icon name={child.icon} size={15} />
+                                    <span>{child.label}</span>
+                                  </NavLink>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      return (
+                        <NavLink
+                          className={({ isActive }) => `nav-item${isActive || itemActive ? ' active' : ''}`}
+                          key={item.id}
+                          to={item.to!}
+                          title={item.label}
+                        >
+                          <Icon name={item.icon} size={17} />
+                          <span>{item.label}</span>
+                        </NavLink>
+                      )
+                    })}
                   </div>
                 )}
               </section>
             )
           })}
         </nav>
-
         <div className="sidebar-footer">
           <span className="sidebar-version">NexoSkill Platform</span>
         </div>
       </aside>
-
       <div className="app-content">
         <header className="topbar">
           <div className="topbar-left">
@@ -230,7 +314,6 @@ export function ApplicationLayout() {
             </button>
             <Breadcrumbs />
           </div>
-
           <div className="account-menu" ref={accountRef}>
             <button
               aria-expanded={accountOpen}
@@ -245,7 +328,6 @@ export function ApplicationLayout() {
               </span>
               <Icon name="chevronDown" size={15} />
             </button>
-
             {accountOpen && (
               <div className="account-dropdown">
                 <div className="account-dropdown-header">

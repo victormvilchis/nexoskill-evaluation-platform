@@ -16,8 +16,10 @@ import './styles/students-part2-r1.css'
 import './styles/internal-users-auth-r1.css'
 import './styles/category-lifecycle-r1.css'
 import './styles/student-certifications-r1.css'
+import './styles/catalog-navigation-r2.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename={basename}>
