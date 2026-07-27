@@ -9,6 +9,7 @@ export interface OrganizationSummary {
   organizationType: OrganizationType
   status: OrganizationStatus
   contentMode: ContentMode
+  appliesCertifications: boolean
   expiresOn?: string
   updatedAt: string
 }
@@ -30,6 +31,7 @@ export interface OrganizationPayload {
   name: string
   code?: string
   contentMode: ContentMode
+  appliesCertifications: boolean
   expiresOn?: string
   contractedSeats: number
   includedReplacements: number

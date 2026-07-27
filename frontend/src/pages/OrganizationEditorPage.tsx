@@ -40,6 +40,7 @@ function initialModel(): OrganizationPayload {
     name: '',
     code: '',
     contentMode: 'CLEAN',
+    appliesCertifications: false,
     contractedSeats: 10,
     includedReplacements: 2,
     additionalReplacements: 0,
@@ -55,6 +56,7 @@ function detailToPayload(detail: OrganizationDetail): OrganizationPayload {
     name: detail.name,
     code: detail.code,
     contentMode: detail.contentMode,
+    appliesCertifications: detail.appliesCertifications,
     expiresOn: detail.expiresOn,
     contractedSeats: detail.contractedSeats ?? 0,
     includedReplacements: detail.includedReplacements ?? 0,
@@ -277,6 +279,22 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                   <label className="ns-field">
                     <span>Vigencia desde</span>
                     <input disabled type="date" value={validFrom ?? ''} />
+                  </label>
+                )}
+                {!global && (
+                  <label className="ns-field org-certification-toggle">
+                    <span>Gestión de certificaciones</span>
+                    <span className="org-check-row">
+                      <input
+                        type="checkbox"
+                        checked={model.appliesCertifications}
+                        onChange={(event) => set('appliesCertifications', event.target.checked)}
+                      />
+                      Aplica certificaciones
+                    </span>
+                    <small className="org-field-help">
+                      Habilita el seguimiento independiente de certificaciones para Gestores y Supervisores.
+                    </small>
                   </label>
                 )}
                 {!global && (

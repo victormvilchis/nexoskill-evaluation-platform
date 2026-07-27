@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
+import { getCurrentCertificationAvailability } from '../features/certifications/api/certificationApi'
 import {
   activateStudent,
   archiveStudent,
@@ -61,6 +62,8 @@ export function AdminStudentsPage() {
   const toast = useToast()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
+  const certificationOperator = Boolean(user?.roles.some((role) => role === 'MANAGER' || role === 'SUPERVISOR'))
+  const [certificationsEnabled, setCertificationsEnabled] = useState(false)
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [selectedOrganization, setSelectedOrganization] = useState(
     () => window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY) ?? ''
@@ -107,6 +110,20 @@ export function AdminStudentsPage() {
     if (includeDeleted) next.set('deleted', '1')
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, includeDeleted, searchParams, setSearchParams, status])
+
+  useEffect(() => {
+    if (!certificationOperator || !permissions.has('STUDENT_CERTIFICATION_MANAGE')) {
+      setCertificationsEnabled(false)
+      return
+    }
+    let active = true
+    getCurrentCertificationAvailability()
+      .then((response) => {
+        if (active) setCertificationsEnabled(response.appliesCertifications && response.operatorAllowed)
+      })
+      .catch(() => { if (active) setCertificationsEnabled(false) })
+    return () => { active = false }
+  }, [certificationOperator, permissions])
 
   useEffect(() => {
     if (administrator && !selectedOrganization) {
@@ -249,6 +266,9 @@ export function AdminStudentsPage() {
                       <td className="ns-actions-column">
                         <TableActions>
                           <TableActionLink icon="eye" label="Ver detalle" to={`/admin/students/${student.publicId}`} />
+                          {certificationsEnabled && student.status !== 'DELETED' && (
+                            <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} tone="primary" />
+                          )}
                           {permissions.has('STUDENT_UPDATE') && !['ARCHIVED', 'DELETED'].includes(student.status) && (
                             <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />
                           )}
