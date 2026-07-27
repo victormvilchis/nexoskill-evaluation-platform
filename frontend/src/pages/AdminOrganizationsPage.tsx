@@ -63,12 +63,6 @@ function formatDate(value?: string) {
     .format(new Date(year, month - 1, day))
 }
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value))
-}
 
 export function AdminOrganizationsPage() {
   const toast = useToast()
@@ -131,7 +125,12 @@ export function AdminOrganizationsPage() {
       direction: searchParams.get('direction') === 'ASC' ? 'ASC' : 'DESC',
       signal: controller.signal
     })
-      .then(setData)
+      .then((response) => {
+        setData(response)
+        if (response.totalPages > 0 && page >= response.totalPages) {
+          goToPage(response.totalPages - 1)
+        }
+      })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted) return
         setError(requestError instanceof ApiRequestError
@@ -182,7 +181,6 @@ export function AdminOrganizationsPage() {
       </header>
 
       <FilterToolbar
-        resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'organización' : 'organizaciones'}`}
         hasActiveFilters={activeFilters}
         onClear={clearFilters}
       >
@@ -210,14 +208,13 @@ export function AdminOrganizationsPage() {
                 <th>Estado</th>
                 <th>Estudiantes</th>
                 <th>Vigencia</th>
-                <th>Actualización</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="ns-table-empty">Cargando organizaciones…</td></tr>}
+              {loading && <tr><td colSpan={6} className="ns-table-empty">Cargando organizaciones…</td></tr>}
               {!loading && !error && data?.content.length === 0 && (
-                <tr><td colSpan={7} className="ns-table-empty">
+                <tr><td colSpan={6} className="ns-table-empty">
                   <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones activas'}</strong>
                   <span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea la primera organización comercial para comenzar.'}</span>
                 </td></tr>
@@ -232,7 +229,6 @@ export function AdminOrganizationsPage() {
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
                   <td><strong className="org-student-count">{item.studentCount ?? 0}</strong></td>
                   <td>{formatDate(item.expiresOn)}</td>
-                  <td>{formatDateTime(item.updatedAt)}</td>
                   <td>
                     <TableActions>
                       <TableActionLink to={`/admin/organizations/${item.publicId}`} label="Ver" icon="eye" />
@@ -251,7 +247,7 @@ export function AdminOrganizationsPage() {
         </div>
 
         <TablePagination
-          currentPage={data?.page ?? page}
+          currentPage={page}
           pageSize={data?.size ?? size}
           totalElements={data?.totalElements ?? 0}
           totalPages={data?.totalPages ?? 0}

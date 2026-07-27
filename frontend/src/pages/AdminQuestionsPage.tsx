@@ -160,7 +160,12 @@ export function AdminQuestionsPage() {
       size,
       signal: controller.signal
     })
-      .then(setData)
+      .then((response) => {
+        setData(response)
+        if (response.totalPages > 0 && page >= response.totalPages) {
+          setPage(response.totalPages - 1)
+        }
+      })
       .catch((requestError: unknown) => {
         if (!controller.signal.aborted) {
           setError(requestError instanceof ApiRequestError
@@ -299,7 +304,7 @@ export function AdminQuestionsPage() {
         {permissions.has('QUESTION_CREATE') && <Link className="primary-button button-link" to="/admin/questions/new"><Icon name="plus" size={16} /> Nueva pregunta</Link>}
       </header>
 
-      <FilterToolbar resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'pregunta' : 'preguntas'}`} hasActiveFilters={hasFilters} onClear={clearFilters}>
+      <FilterToolbar hasActiveFilters={hasFilters} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={(value) => updateFilter('q', value)} placeholder="Buscar por texto de la pregunta" />
         {globalAdministrator && <ResourceSelectField label="Organización" value={organizationPublicId} onChange={(value) => updateFilter('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((organization) => <option value={organization.publicId} key={organization.publicId}>{organization.name}</option>)}</ResourceSelectField>}
         <ResourceSelectField label="Categoría" value={categoryPublicId} onChange={(value) => updateFilter('category', value)}><option value="">Todas las categorías</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}{globalAdministrator && category.organizationName ? ` · ${category.organizationName}` : ''}</option>)}</ResourceSelectField>
@@ -319,7 +324,18 @@ export function AdminQuestionsPage() {
               {!loading && !error && questions.length === 0 && <tr><td colSpan={globalAdministrator ? 8 : 7} className="ns-table-empty"><strong>No encontramos preguntas</strong><span>Ajusta los filtros o crea contenido nuevo.</span></td></tr>}
               {!loading && questions.map((question) => (
                 <tr className={question.status === 'DELETED' ? 'ns-row-muted' : ''} key={question.publicId}>
-                  <td className="ns-primary-cell question-statement-cell"><strong>{question.statement}</strong><small>{question.typeName}{question.technology?.name ? ` · ${question.technology.name}` : ''}</small></td>
+                  <td className="ns-primary-cell question-statement-cell">
+                    <strong>{question.statement}</strong>
+                    <small>{question.typeName}{question.technology?.name ? ` · ${question.technology.name}` : ''}</small>
+                    {question.tags.length > 0 && (
+                      <span className="question-tag-summary" aria-label="Etiquetas temáticas">
+                        {question.tags.slice(0, 3).map((tag) => (
+                          <span className="question-tag-chip question-tag-chip--readonly" key={tag.publicId}>#{tag.slug}</span>
+                        ))}
+                        {question.tags.length > 3 && <span className="question-tag-more">+{question.tags.length - 3}</span>}
+                      </span>
+                    )}
+                  </td>
                   {globalAdministrator && <td><strong>{question.ownership.organizationName ?? 'GLOBAL'}</strong><small>{question.ownership.scope}</small></td>}
                   <td>{question.categories.length ? question.categories.map((category) => category.name).join(', ') : 'Sin categoría'}</td>
                   <td>{question.difficultyName ?? 'Sin dificultad'}</td>
@@ -341,7 +357,7 @@ export function AdminQuestionsPage() {
             </tbody>
           </table>
         </div>
-        <TablePagination currentPage={data?.page ?? page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </section>
 
       <ConfirmDialog open={pendingAction !== null} title={dialogTitle} description={dialogDescription} confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Archivar' : 'Reactivar'} tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'} onCancel={() => setPendingAction(null)} onConfirm={() => void executePendingAction()} />

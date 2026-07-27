@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/types/questions'
 import { JavaCodeEditor } from './JavaCodePanel'
 import { MediaUploadField } from './MediaUploadField'
+import { QuestionTagInput } from './QuestionTagInput'
 
 type DraftOption = {
   id: string
@@ -99,6 +100,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
   const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
   const [levelCode, setLevelCode] = useState(initial?.levelCode ?? '')
   const [categories, setCategories] = useState<string[]>(initial?.categories.map((category) => category.publicId) ?? [])
+  const [tags, setTags] = useState<string[]>(initial?.tags.map((tag) => tag.displayName) ?? [])
   const [statement, setStatement] = useState(initial?.statement ?? '')
   const [explanation, setExplanation] = useState(initial?.explanation ?? '')
   const [promptMedia, setPromptMedia] = useState<QuestionMedia | undefined>(initial?.promptMedia)
@@ -207,6 +209,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
         technologyPublicId: technologyPublicId || undefined,
         levelCode: levelCode.trim() || undefined,
         categoryPublicIds: categories,
+        tags,
         statement: statement.trim(),
         explanation: explanation.trim() || undefined,
         promptMediaPublicId: promptMedia?.publicId,
@@ -368,6 +371,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
             <p className="empty-inline-message">No hay categorías que coincidan con la búsqueda.</p>
           )}
         </div>
+        <QuestionTagInput value={tags} onChange={setTags} disabled={busy} />
       </section>
 
       {usesOptions ? (

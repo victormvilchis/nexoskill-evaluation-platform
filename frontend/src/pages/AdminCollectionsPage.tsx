@@ -18,10 +18,6 @@ function statusLabel(status: CollectionStatus) {
   return labels[status]
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-}
-
 export function AdminCollectionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
@@ -105,20 +101,20 @@ export function AdminCollectionsPage() {
       <section className="ns-data-panel" aria-busy={loading}>
         <div className="ns-data-table-wrap">
           <table className="ns-data-table">
-            <thead><tr><th>Colección</th><th>Niveles</th><th>Formularios activos</th><th>Última actualización</th><th>Estado</th><th className="ns-actions-column">Acciones</th></tr></thead>
+            <thead><tr><th>Colección</th><th>Niveles</th><th>Formularios activos</th><th>Estado</th><th className="ns-actions-column">Acciones</th></tr></thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="ns-table-empty">Cargando colecciones…</td></tr>}
-              {!loading && !error && data.content.length === 0 && <tr><td colSpan={6} className="ns-table-empty"><strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay colecciones'}</strong><span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea una colección y agrega formularios por nivel.'}</span></td></tr>}
+              {loading && <tr><td colSpan={5} className="ns-table-empty">Cargando colecciones…</td></tr>}
+              {!loading && !error && data.content.length === 0 && <tr><td colSpan={5} className="ns-table-empty"><strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay colecciones'}</strong><span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea una colección y agrega formularios por nivel.'}</span></td></tr>}
               {!loading && !error && data.content.map((collection) => <tr key={collection.publicId}>
                 <td className="ns-primary-cell"><strong>{collection.name}</strong><small>{collection.description || 'Sin descripción'}</small><small><code className="ns-code-label">{collection.code}</code></small></td>
-                <td><strong>{collection.levelCount}</strong></td><td>{collection.activeLevelCount}</td><td>{formatDate(collection.updatedAt)}</td>
+                <td><strong>{collection.levelCount}</strong></td><td>{collection.activeLevelCount}</td>
                 <td><span className={`status-badge status-${collection.status.toLowerCase()}`}>{statusLabel(collection.status)}</span></td>
                 <td><TableActions><TableActionLink to={`/admin/collections/${collection.publicId}`} label="Editar" icon="edit" tone="primary" /></TableActions></td>
               </tr>)}
             </tbody>
           </table>
         </div>
-        <TablePagination currentPage={data.page} pageSize={data.size} totalElements={data.totalElements} totalPages={data.totalPages} isLoading={loading} onPageChange={(nextPage) => updateUrl({ page: nextPage })} onPageSizeChange={(nextSize: PageSize) => updateUrl({ size: nextSize, page: undefined })} />
+        <TablePagination currentPage={page} pageSize={data.size} totalElements={data.totalElements} totalPages={data.totalPages} isLoading={loading} onPageChange={(nextPage) => updateUrl({ page: nextPage })} onPageSizeChange={(nextSize: PageSize) => updateUrl({ size: nextSize, page: undefined })} />
       </section>
     </main>
   )

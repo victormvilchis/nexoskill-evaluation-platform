@@ -14,6 +14,7 @@ public record QuestionSummary(
         String levelCode,
         QuestionTechnologySummary technology,
         List<QuestionCategoryRef> categories,
+        List<QuestionTagView> tags,
         QuestionStatus status,
         boolean hasMedia,
         boolean hasCode,
@@ -26,7 +27,22 @@ public record QuestionSummary(
         Instant updatedAt) {
     public QuestionSummary {
         categories = List.copyOf(categories);
+        tags = tags == null ? List.of() : List.copyOf(tags);
         forms = List.copyOf(forms);
         collections = List.copyOf(collections);
+    }
+
+
+    public QuestionSummary(
+            String publicId, String statement, String typeCode, String typeName,
+            String difficultyCode, String difficultyName, String levelCode,
+            QuestionTechnologySummary technology, List<QuestionCategoryRef> categories,
+            QuestionStatus status, boolean hasMedia, boolean hasCode, boolean inUse,
+            QuestionOwnershipView ownership, List<QuestionUsageRef> forms,
+            List<QuestionUsageRef> collections, long entityVersion,
+            Instant createdAt, Instant updatedAt) {
+        this(publicId, statement, typeCode, typeName, difficultyCode, difficultyName,
+                levelCode, technology, categories, List.of(), status, hasMedia, hasCode,
+                inUse, ownership, forms, collections, entityVersion, createdAt, updatedAt);
     }
 }

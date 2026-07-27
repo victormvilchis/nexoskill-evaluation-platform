@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.questionbank.interfaces.rest;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.List;
@@ -33,12 +34,22 @@ public final class QuestionRequests {
             String technologyPublicId,
             String levelCode,
             @NotEmpty List<String> categoryPublicIds,
+            @Size(max = 10, message = "Puedes agregar un máximo de 10 etiquetas.")
+            List<@NotBlank @Size(max = 40, message = "Cada etiqueta puede tener hasta 40 caracteres.") String> tags,
             @NotBlank @Size(max = 10000) String statement,
             @Size(max = 10000) String explanation,
             String promptMediaPublicId,
             @Size(max = 30000) String codeContent,
-            AnswerSettings answerSettings,
-            List<Option> options) {
+            @Valid AnswerSettings answerSettings,
+            List<@Valid Option> options) {
+        public Create(String typeCode, String difficultyCode, String technologyPublicId,
+                String levelCode, List<String> categoryPublicIds, String statement,
+                String explanation, String promptMediaPublicId, String codeContent,
+                AnswerSettings answerSettings, List<Option> options) {
+            this(typeCode, difficultyCode, technologyPublicId, levelCode,
+                    categoryPublicIds, List.of(), statement, explanation,
+                    promptMediaPublicId, codeContent, answerSettings, options);
+        }
     }
 
     public record Update(
@@ -47,13 +58,25 @@ public final class QuestionRequests {
             String technologyPublicId,
             String levelCode,
             @NotEmpty List<String> categoryPublicIds,
+            @Size(max = 10, message = "Puedes agregar un máximo de 10 etiquetas.")
+            List<@NotBlank @Size(max = 40, message = "Cada etiqueta puede tener hasta 40 caracteres.") String> tags,
             @NotBlank @Size(max = 10000) String statement,
             @Size(max = 10000) String explanation,
             String promptMediaPublicId,
             @Size(max = 30000) String codeContent,
-            AnswerSettings answerSettings,
-            List<Option> options,
+            @Valid AnswerSettings answerSettings,
+            List<@Valid Option> options,
             @PositiveOrZero long expectedEntityVersion) {
+        public Update(String typeCode, String difficultyCode, String technologyPublicId,
+                String levelCode, List<String> categoryPublicIds, String statement,
+                String explanation, String promptMediaPublicId, String codeContent,
+                AnswerSettings answerSettings, List<Option> options,
+                long expectedEntityVersion) {
+            this(typeCode, difficultyCode, technologyPublicId, levelCode,
+                    categoryPublicIds, List.of(), statement, explanation,
+                    promptMediaPublicId, codeContent, answerSettings, options,
+                    expectedEntityVersion);
+        }
     }
 
     public record ChangeStatus(@NotBlank String status, @PositiveOrZero long expectedEntityVersion) {

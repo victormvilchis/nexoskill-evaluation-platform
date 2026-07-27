@@ -48,13 +48,6 @@ interface UsersNavigationState {
   }
 }
 
-function formatDate(value: string | null, fallback = 'Sin registro') {
-  if (!value) return fallback
-  return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(new Date(value))
-}
 
 export function AdminUsersPage() {
   const { user } = useAuth()
@@ -162,7 +155,6 @@ export function AdminUsersPage() {
       </header>
 
       <FilterToolbar
-        resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'usuario' : 'usuarios'}`}
         hasActiveFilters={Boolean(query || status !== 'ACTIVE')}
         onClear={clearFilters}
       >
@@ -193,17 +185,15 @@ export function AdminUsersPage() {
                 <th>Rol</th>
                 <th>Organización</th>
                 <th>Estado</th>
-                <th>Último acceso</th>
-                <th>Creación</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} className="ns-table-empty">Cargando usuarios…</td></tr>
+                <tr><td colSpan={5} className="ns-table-empty">Cargando usuarios…</td></tr>
               )}
               {!loading && data?.content.length === 0 && (
-                <tr><td colSpan={7} className="ns-table-empty">No se encontraron usuarios.</td></tr>
+                <tr><td colSpan={5} className="ns-table-empty">No se encontraron usuarios.</td></tr>
               )}
               {!loading && data?.content.map((item) => (
                 <tr key={item.publicId} className={item.status === 'DELETED' ? 'ns-row-muted' : ''}>
@@ -218,9 +208,8 @@ export function AdminUsersPage() {
                       {statusLabels[item.status]}
                     </span>
                   </td>
-                  <td>{formatDate(item.lastLoginAt)}</td>
-                  <td>{formatDate(item.createdAt)}</td>
-                  <td className="ns-actions-column">
+                   <td className="ns-actions-column">
+
                     <TableActions>
                       <TableActionLink icon="eye" label="Ver" to={`/admin/users/${item.publicId}`} />
                       {permissions.has('USER_UPDATE') && item.status !== 'DELETED' && (
@@ -243,7 +232,7 @@ export function AdminUsersPage() {
         </div>
 
         <TablePagination
-          currentPage={data?.page ?? page}
+          currentPage={page}
           pageSize={data?.size ?? size}
           totalElements={data?.totalElements ?? 0}
           totalPages={data?.totalPages ?? 0}

@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionSearchFilter;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionTagNormalizer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -125,6 +126,23 @@ public class QuestionGovernanceSearchRepository {
                     OR LOWER(DBMS_LOB.SUBSTR(q.CODE_CONTENT, 4000, 1)) LIKE :query
                     OR LOWER(owner_org.ORGANIZATION_NAME) LIKE :query
                     OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_CATEGORY_RELATION qcr_search
+                          JOIN QUESTION_CATEGORY qc_search
+                            ON qc_search.CATEGORY_ID = qcr_search.CATEGORY_ID
+                         WHERE qcr_search.QUESTION_ID = q.QUESTION_ID
+                           AND LOWER(qc_search.CATEGORY_NAME) LIKE :query
+                    )
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_TAG_RELATION qtr_search
+                          JOIN QUESTION_TAG qt_search
+                            ON qt_search.TAG_ID = qtr_search.TAG_ID
+                         WHERE qtr_search.QUESTION_ID = q.QUESTION_ID
+                           AND (qt_search.NORMALIZED_NAME LIKE :tagQuery
+                                OR qt_search.SLUG LIKE :tagQuery)
+                    )
+                    OR EXISTS (
                         SELECT 1 FROM QUESTION_OPTION qo
                          WHERE qo.QUESTION_ID = q.QUESTION_ID
                            AND (LOWER(DBMS_LOB.SUBSTR(qo.OPTION_TEXT, 4000, 1)) LIKE :query
@@ -133,6 +151,7 @@ public class QuestionGovernanceSearchRepository {
                 )
                 """);
             params.addValue("query", "%" + filter.query().trim().toLowerCase() + "%");
+            params.addValue("tagQuery", "%" + QuestionTagNormalizer.searchValue(filter.query()) + "%");
         }
         if (filter.status() == null) where.append(" AND q.STATUS <> 'DELETED' ");
         else {

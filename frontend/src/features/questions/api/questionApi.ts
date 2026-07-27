@@ -18,6 +18,7 @@ import type {
   QuestionPage,
   QuestionPayload,
   QuestionStatus,
+  QuestionTag,
   UpdateCollectionPayload,
   UpdateQuestionCategoryPayload,
   UpdateQuestionPayload
@@ -122,7 +123,7 @@ export interface QuestionSearchParams {
 export function searchQuestions(params: QuestionSearchParams = {}) {
   const query = new URLSearchParams({
     page: String(params.page ?? 0),
-    size: String(params.size ?? 20)
+    size: String(params.size ?? 10)
   })
   if (params.query?.trim()) query.set('query', params.query.trim())
   if (params.status === '') query.set('status', 'ALL')
@@ -150,6 +151,14 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
 
 export function getQuestionCreationYears(signal?: AbortSignal) {
   return apiRequest<number[]>('/admin/questions/filter-options/years', { signal })
+}
+
+export function suggestQuestionTags(queryValue: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({
+    query: queryValue.trim(),
+    limit: '8'
+  })
+  return apiRequest<QuestionTag[]>(`/admin/question-tags/suggestions?${query}`, { signal })
 }
 
 export function getQuestion(id: string, signal?: AbortSignal) {
@@ -240,7 +249,7 @@ export interface CollectionSearchParams {
 export function searchCollections(params: CollectionSearchParams = {}) {
   const query = new URLSearchParams({
     page: String(params.page ?? 0),
-    size: String(params.size ?? 20)
+    size: String(params.size ?? 10)
   })
   if (params.query) query.set('query', params.query)
   if (params.status === '') query.set('status', 'ALL')

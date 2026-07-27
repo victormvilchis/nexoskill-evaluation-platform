@@ -162,8 +162,15 @@ export function AdminQuestionDetailPage() {
         <div className="chip-row">
           {question.categories.map((category) => <span className="category-chip" key={category.publicId}>{category.name}</span>)}
         </div>
-
+        {question.tags.length > 0 && (
+          <div className="question-tag-summary" aria-label="Etiquetas temáticas">
+            {question.tags.map((tag) => (
+              <span className="question-tag-chip question-tag-chip--readonly" key={tag.publicId}>#{tag.slug}</span>
+            ))}
+          </div>
+        )}
         <div className="question-governance-detail-grid">
+
           <div><span>Alcance</span><strong>{question.ownership.scope}</strong></div>
           <div><span>Organización propietaria</span><strong>{question.ownership.organizationName ?? 'Sin propietario'}</strong></div>
           <div><span>Tecnología</span><strong>{question.technology?.name ?? 'Sin tecnología'}</strong></div>

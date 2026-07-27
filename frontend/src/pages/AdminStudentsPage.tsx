@@ -237,7 +237,6 @@ export function AdminStudentsPage() {
       ) : (
         <>
           <FilterToolbar
-            resultLabel={`${data?.totalElements ?? 0} ${data?.totalElements === 1 ? 'estudiante' : 'estudiantes'}`}
             hasActiveFilters={Boolean(query || status !== 'ACTIVE' || includeDeleted)}
             onClear={clearFilters}
           >
@@ -267,11 +266,11 @@ export function AdminStudentsPage() {
           <section className="ns-data-panel" aria-busy={loading}>
             <div className="ns-data-table-wrap">
               <table className="ns-data-table">
-                <thead><tr><th>Estudiante</th><th>Código</th><th>Estado</th><th>Vigencia</th><th>Último acceso</th><th className="ns-actions-column">Acciones</th></tr></thead>
+                <thead><tr><th>Estudiante</th><th>Código</th><th>Estado</th><th>Vigencia</th><th className="ns-actions-column">Acciones</th></tr></thead>
                 <tbody>
-                  {loading && <tr><td colSpan={6} className="ns-table-empty">Cargando estudiantes…</td></tr>}
+                  {loading && <tr><td colSpan={5} className="ns-table-empty">Cargando estudiantes…</td></tr>}
                   {!loading && !error && data && data.content.length === 0 && (
-                    <tr><td colSpan={6} className="ns-table-empty">Esta organización todavía no tiene estudiantes registrados.</td></tr>
+                    <tr><td colSpan={5} className="ns-table-empty">Esta organización todavía no tiene estudiantes registrados.</td></tr>
                   )}
                   {!loading && data?.content.map((student) => (
                     <tr className={student.status === 'DELETED' ? 'ns-row-muted' : ''} key={student.publicId}>
@@ -279,7 +278,6 @@ export function AdminStudentsPage() {
                       <td><code>{student.studentCode}</code></td>
                       <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
                       <td><small>{formatDate(student.validFrom)}</small><br /><small>{formatDate(student.expiresAt)}</small></td>
-                      <td>{formatDate(student.lastLoginAt, 'Sin acceso')}</td>
                       <td className="ns-actions-column">
                         <TableActions>
                           <TableActionLink icon="eye" label="Ver detalle" to={`/admin/students/${student.publicId}`} />
@@ -312,7 +310,7 @@ export function AdminStudentsPage() {
               </table>
             </div>
             <TablePagination
-              currentPage={data?.page ?? page}
+              currentPage={page}
               pageSize={data?.size ?? size}
               totalElements={data?.totalElements ?? 0}
               totalPages={data?.totalPages ?? 0}

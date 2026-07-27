@@ -105,7 +105,7 @@ public class AdminQuestionController {
     public ResponseEntity<QuestionDetail> create(@Valid @RequestBody QuestionRequests.Create body,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         var question = create.execute(new CreateQuestionCommand(body.typeCode(), body.difficultyCode(),
-                body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(),
+                body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(), body.tags(),
                 body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
                 settings(body.answerSettings()), options(body.options()), actor.internalId()));
         return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
@@ -116,7 +116,7 @@ public class AdminQuestionController {
     public QuestionDetail update(@PathVariable String id, @Valid @RequestBody QuestionRequests.Update body,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         return update.execute(new UpdateQuestionCommand(id, body.typeCode(), body.difficultyCode(),
-                body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(),
+                body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(), body.tags(),
                 body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
                 settings(body.answerSettings()), options(body.options()), body.expectedEntityVersion(),
                 actor.internalId()));

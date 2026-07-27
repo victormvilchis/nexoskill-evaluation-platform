@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.questionbank.application.port.out;
 
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
+import java.util.List;
 
 public interface QuestionBankPort {
     QuestionDetail create(CreateQuestionCommand command);
@@ -12,4 +13,8 @@ public interface QuestionBankPort {
     QuestionDetail changeStatus(String publicId, QuestionStatus status, long expectedEntityVersion, Long actorUserId);
     QuestionDetail softDelete(String publicId, long expectedEntityVersion, String reason, Long actorUserId);
     QuestionDetail restore(String publicId, long expectedEntityVersion, Long actorUserId);
+
+    default List<QuestionTagView> suggestTags(String query, int limit) {
+        return List.of();
+    }
 }

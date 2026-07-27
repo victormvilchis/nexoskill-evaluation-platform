@@ -12,16 +12,13 @@ type TablePaginationProps = {
   onPageSizeChange: (pageSize: PageSize) => void
   isLoading?: boolean
   compact?: boolean
-  itemName?: string
 }
 
 function pageTokens(currentPage: number, totalPages: number): PageToken[] {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index)
-  }
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index)
 
   const pages = new Set<number>([0, totalPages - 1])
-  for (let page = currentPage - 2; page <= currentPage + 2; page += 1) {
+  for (let page = currentPage - 1; page <= currentPage + 1; page += 1) {
     if (page > 0 && page < totalPages - 1) pages.add(page)
   }
 
@@ -37,12 +34,11 @@ function pageTokens(currentPage: number, totalPages: number): PageToken[] {
   return tokens
 }
 
-function rangeLabel(currentPage: number, pageSize: number, totalElements: number, itemName: string) {
-  if (totalElements === 0) return `Mostrando 0–0 de 0 ${itemName}`
+function visibleRange(currentPage: number, pageSize: number, totalElements: number) {
+  if (totalElements <= 0) return '0–0 de 0'
   const start = currentPage * pageSize + 1
   const end = Math.min(totalElements, start + pageSize - 1)
-  const noun = totalElements === 1 && itemName === 'registros' ? 'registro' : itemName
-  return `Mostrando ${start}–${end} de ${totalElements} ${noun}`
+  return `${start}–${end} de ${totalElements}`
 }
 
 export function TablePagination({
@@ -53,15 +49,14 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   isLoading = false,
-  compact = false,
-  itemName = 'registros'
+  compact = false
 }: TablePaginationProps) {
   const safeTotalPages = Math.max(0, totalPages)
   const safeCurrentPage = safeTotalPages === 0
     ? 0
     : Math.min(Math.max(0, currentPage), safeTotalPages - 1)
   const first = safeCurrentPage === 0
-  const last = safeTotalPages === 0 || safeCurrentPage >= safeTotalPages - 1
+  const last = safeTotalPages === 0 || safeCurrentPage === safeTotalPages - 1
   const tokens = useMemo(
     () => pageTokens(safeCurrentPage, safeTotalPages),
     [safeCurrentPage, safeTotalPages]
@@ -74,27 +69,27 @@ export function TablePagination({
       aria-busy={isLoading}
     >
       <p className="ns-table-pagination__summary" aria-live="polite">
-        {rangeLabel(safeCurrentPage, pageSize, totalElements, itemName)}
+        {visibleRange(safeCurrentPage, pageSize, totalElements)}
       </p>
 
       <div className="ns-table-pagination__controls">
         <button
           type="button"
-          className="ns-page-button ns-page-button--edge"
+          className="ns-page-button ns-page-button--first"
           onClick={() => onPageChange(0)}
           disabled={isLoading || first}
           aria-label="Ir a la primera página"
         >
-          <span aria-hidden="true">«</span><span className="ns-page-button__text">Primera</span>
+          <span aria-hidden="true">«</span>
         </button>
         <button
           type="button"
-          className="ns-page-button ns-page-button--edge"
+          className="ns-page-button"
           onClick={() => onPageChange(Math.max(0, safeCurrentPage - 1))}
           disabled={isLoading || first}
           aria-label="Ir a la página anterior"
         >
-          <span aria-hidden="true">‹</span><span className="ns-page-button__text">Anterior</span>
+          <span aria-hidden="true">‹</span>
         </button>
 
         <div className="ns-table-pagination__pages" aria-label="Páginas disponibles">
@@ -119,28 +114,31 @@ export function TablePagination({
           })}
         </div>
 
+        <span className="ns-table-pagination__mobile-page" aria-live="polite">
+          Página {safeTotalPages === 0 ? 0 : safeCurrentPage + 1} de {safeTotalPages}
+        </span>
+
         <button
           type="button"
-          className="ns-page-button ns-page-button--edge"
-          onClick={() => onPageChange(Math.min(Math.max(0, safeTotalPages - 1), safeCurrentPage + 1))}
+          className="ns-page-button"
+          onClick={() => onPageChange(Math.min(safeTotalPages - 1, safeCurrentPage + 1))}
           disabled={isLoading || last}
           aria-label="Ir a la página siguiente"
         >
-          <span className="ns-page-button__text">Siguiente</span><span aria-hidden="true">›</span>
+          <span aria-hidden="true">›</span>
         </button>
         <button
           type="button"
-          className="ns-page-button ns-page-button--edge"
+          className="ns-page-button ns-page-button--last"
           onClick={() => onPageChange(Math.max(0, safeTotalPages - 1))}
           disabled={isLoading || last}
           aria-label="Ir a la última página"
         >
-          <span className="ns-page-button__text">Última</span><span aria-hidden="true">»</span>
+          <span aria-hidden="true">»</span>
         </button>
       </div>
 
       <label className="ns-table-pagination__size">
-        <span>Registros por página</span>
         <select
           value={pageSize}
           onChange={(event) => onPageSizeChange(Number(event.target.value) as PageSize)}
@@ -151,6 +149,7 @@ export function TablePagination({
             <option key={option} value={option}>{option}</option>
           ))}
         </select>
+        <span>por página</span>
       </label>
     </nav>
   )

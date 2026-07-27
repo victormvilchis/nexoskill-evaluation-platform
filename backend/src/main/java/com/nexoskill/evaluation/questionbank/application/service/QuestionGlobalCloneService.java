@@ -8,18 +8,21 @@ import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.globalcontent.infrastructure.persistence.GlobalContentPromotionRepository;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTagStore;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class QuestionGlobalCloneService {
     private final SpringDataQuestionRepository questions;
+    private final QuestionTagStore tagStore;
     private final GlobalContentPromotionRepository promotions;
     private final ContentPromotionService promotionService;
     private final TenantContextResolver tenantContextResolver;
@@ -27,7 +30,9 @@ public class QuestionGlobalCloneService {
     private final AuditLogPort audit;
     private final Clock clock;
 
+    @Autowired
     public QuestionGlobalCloneService(SpringDataQuestionRepository questions,
+            QuestionTagStore tagStore,
             GlobalContentPromotionRepository promotions,
             ContentPromotionService promotionService,
             TenantContextResolver tenantContextResolver,
@@ -35,6 +40,7 @@ public class QuestionGlobalCloneService {
             AuditLogPort audit,
             Clock clock) {
         this.questions = questions;
+        this.tagStore = tagStore;
         this.promotions = promotions;
         this.promotionService = promotionService;
         this.tenantContextResolver = tenantContextResolver;
@@ -43,7 +49,19 @@ public class QuestionGlobalCloneService {
         this.clock = clock;
     }
 
+    public QuestionGlobalCloneService(SpringDataQuestionRepository questions,
+            GlobalContentPromotionRepository promotions,
+            ContentPromotionService promotionService,
+            TenantContextResolver tenantContextResolver,
+            HttpServletRequest request,
+            AuditLogPort audit,
+            Clock clock) {
+        this(questions, null, promotions, promotionService, tenantContextResolver,
+                request, audit, clock);
+    }
+
     @Transactional(readOnly = true)
+
     public com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.PromotionPreview preview(String questionPublicId) {
         ensureGlobalAdministrator();
         return promotionService.preview(GlobalContentType.QUESTION, questionPublicId);
@@ -77,6 +95,10 @@ public class QuestionGlobalCloneService {
         global.markClonedFromOrganization(source.getOwnerOrganizationId(), source.getId(),
                 source.getVersion(), actorUserId, clock.instant());
         questions.saveAndFlush(global);
+        if (tagStore != null) {
+            tagStore.copy(source.getId(), global.getId(), ContentScope.GLOBAL,
+                    global.getOwnerOrganizationId(), actorUserId, clock.instant());
+        }
         audit.record(actorUserId, "QUESTION_CLONED_TO_GLOBAL", "QUESTION_BANK",
                 "Se clonó una pregunta organizacional al Banco de Preguntas Global.",
                 null, null, Map.of("sourceQuestionPublicId", source.getPublicId(),

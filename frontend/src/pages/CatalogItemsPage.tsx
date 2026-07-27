@@ -208,11 +208,13 @@ export function CatalogItemsPage() {
   }, [page, pageData.page, searchParams, setSearchParams])
 
   useEffect(() => {
-    if (!searchParams.has('page')) return
-    const next = new URLSearchParams(searchParams)
-    next.delete('page')
-    setSearchParams(next, { replace: true })
-  }, [debouncedQuery, organizationPublicId, searchParams, setSearchParams, status])
+    setSearchParams((current) => {
+      if (!current.has('page')) return current
+      const next = new URLSearchParams(current)
+      next.delete('page')
+      return next
+    }, { replace: true })
+  }, [debouncedQuery, organizationPublicId, setSearchParams, status])
 
   function setPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
@@ -332,7 +334,6 @@ export function CatalogItemsPage() {
       </header>
 
       <FilterToolbar
-        resultLabel={`${filtered.length} ${filtered.length === 1 ? 'registro' : 'registros'}`}
         hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organizationPublicId)}
         onClear={() => { setQuery(''); setStatus('ACTIVE'); setOrganizationPublicId('') }}
       >
@@ -368,19 +369,17 @@ export function CatalogItemsPage() {
                 <th>Nombre</th>
                 <th>Código</th>
                 {type === 'CATEGORIES' && <th>Organización</th>}
-                <th>Usos</th>
-                <th>Actualización</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>Cargando registros…</td></tr>
+                <tr><td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 5 : 4}>Cargando registros…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>
+                  <td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 5 : 4}>
                     <strong>No hay registros</strong>
                     <span>Ajusta los filtros o crea un valor nuevo.</span>
                   </td>
@@ -391,8 +390,6 @@ export function CatalogItemsPage() {
                   <td className="ns-primary-cell"><strong>{item.name}</strong><small>{item.description || 'Sin descripción'}</small></td>
                   <td><code>{item.code}</code></td>
                   {type === 'CATEGORIES' && <td>{item.organizationName ?? 'GLOBAL'}</td>}
-                  <td>{item.dependencyCount}</td>
-                  <td>{formatDate(item.updatedAt ?? item.createdAt)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
                     <TableActions>

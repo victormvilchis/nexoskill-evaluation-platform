@@ -29,6 +29,12 @@ export interface QuestionCategoryRef {
   status: CatalogStatus
 }
 
+export interface QuestionTag {
+  publicId: string
+  displayName: string
+  slug: string
+}
+
 export interface QuestionCategory extends QuestionCategoryRef {
   description?: string
   contentScope: ContentScope
@@ -115,6 +121,7 @@ export interface QuestionSummary {
   levelCode?: string
   technology?: QuestionTechnology
   categories: QuestionCategoryRef[]
+  tags: QuestionTag[]
   status: QuestionStatus
   hasMedia: boolean
   hasCode: boolean
@@ -166,6 +173,7 @@ export interface QuestionPayload {
   technologyPublicId?: string
   levelCode?: string
   categoryPublicIds: string[]
+  tags: string[]
   statement: string
   explanation?: string
   promptMediaPublicId?: string

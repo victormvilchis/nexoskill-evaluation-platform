@@ -106,7 +106,7 @@ export function AdminFormsPage() {
             </tr>)}
           </tbody>
         </table></div>
-        <TablePagination currentPage={data.page} pageSize={data.size} totalElements={data.totalElements} totalPages={data.totalPages} isLoading={loading} onPageChange={(nextPage) => updateUrl({ page: nextPage })} onPageSizeChange={(nextSize: PageSize) => updateUrl({ size: nextSize, page: undefined })} />
+        <TablePagination currentPage={page} pageSize={data.size} totalElements={data.totalElements} totalPages={data.totalPages} isLoading={loading} onPageChange={(nextPage) => updateUrl({ page: nextPage })} onPageSizeChange={(nextSize: PageSize) => updateUrl({ size: nextSize, page: undefined })} />
       </section>
     </main>
   )

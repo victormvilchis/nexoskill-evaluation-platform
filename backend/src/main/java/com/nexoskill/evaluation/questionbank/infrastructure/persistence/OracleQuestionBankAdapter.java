@@ -28,6 +28,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final SpringDataQuestionTechnologyRepository technologies;
     private final SpringDataQuestionCategoryRepository categories;
     private final QuestionGovernanceSearchRepository governanceSearch;
+    private final QuestionTagStore tagStore;
     private final SpringDataQuestionMediaRepository media;
     private final QuestionUsageChecker usage;
     private final ObjectMapper json;
@@ -45,6 +46,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             SpringDataQuestionTechnologyRepository technologies,
             SpringDataQuestionCategoryRepository categories,
             QuestionGovernanceSearchRepository governanceSearch,
+            QuestionTagStore tagStore,
             SpringDataQuestionMediaRepository media,
             QuestionUsageChecker usage,
             ObjectMapper json,
@@ -60,6 +62,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.technologies = technologies;
         this.categories = categories;
         this.governanceSearch = governanceSearch;
+        this.tagStore = tagStore;
         this.media = media;
         this.usage = usage;
         this.json = json;
@@ -89,11 +92,13 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.assignOwnership(ownership.scope(), ownership.organizationId());
         addOptions(entity, command.options());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
+                saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
-
     @Override
     public QuestionDetail update(UpdateQuestionCommand command) {
+
         var entity = locked(command.publicId());
         var tenant = tenantContextResolver.resolve(request);
         assertEditable(entity);
@@ -125,6 +130,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         markCustomized(entity);
         addOptions(entity, command.options());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
+                saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
         if (transversalEdit) {
             HashMap<String, Object> data = new HashMap<>();
             data.put("questionPublicId", saved.getPublicId());
@@ -156,14 +163,24 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 .collect(java.util.stream.Collectors.toMap(QuestionGovernanceSearchRepository.SearchRow::questionId,
                         value -> value));
         MembershipIndex membershipIndex = memberships(ids);
+        Map<Long, List<QuestionTagView>> tagsByQuestion = tagStore.findByQuestionIds(ids);
         List<QuestionSummary> content = ids.stream().map(byId::get).filter(Objects::nonNull)
-                .map(entity -> toSummary(entity, membershipIndex, metadata.get(entity.getId()))).toList();
+                .map(entity -> toSummary(entity, membershipIndex, metadata.get(entity.getId()),
+                        tagsByQuestion.getOrDefault(entity.getId(), List.of()))).toList();
         int totalPages = size == 0 ? 0 : (int) Math.ceil((double) result.totalElements() / size);
         return new QuestionPage(content, page, size, result.totalElements(), totalPages);
     }
 
     @Override
+    public List<QuestionTagView> suggestTags(String query, int limit) {
+        var tenant = tenantContextResolver.resolve(request);
+        var ownership = accessPolicy.ownershipForCreation(tenant);
+        return tagStore.suggest(ownership.scope(), ownership.organizationId(), query, limit);
+    }
+
+    @Override
     public QuestionDetail duplicate(String id, Long actor) {
+
         var source = find(id);
         assertReadable(source);
         if (source.getStatus() == QuestionStatus.DELETED) {
@@ -212,11 +229,13 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                     clock.instant()));
         }
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        tagStore.copy(source.getId(), saved.getId(), saved.getContentScope(),
+                saved.getOwnerOrganizationId(), actor, clock.instant());
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
-
     @Override
     public QuestionDetail changeStatus(String id, QuestionStatus status, long expected, Long actor) {
+
         var entity = locked(id);
         assertEditable(entity);
         checkVersion(entity, expected);
@@ -380,6 +399,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 technologyView(entity),
                 entity.getCategories().stream().map(this::catRef)
                         .sorted(Comparator.comparing(QuestionCategoryRef::name)).toList(),
+                tagStore.findByQuestionId(entity.getId()),
                 entity.getStatus(), entity.getVersion(), mediaView(entity.getPromptMedia()),
                 entity.getCodeContent() == null ? null : "JAVA", entity.getCodeContent(),
                 new QuestionAnswerSettings(readAnswers(entity.getAcceptedAnswersJson()), entity.isCaseSensitive(),
@@ -393,7 +413,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     }
 
     private QuestionSummary toSummary(QuestionJpaEntity entity, MembershipIndex membershipIndex,
-            QuestionGovernanceSearchRepository.SearchRow metadata) {
+            QuestionGovernanceSearchRepository.SearchRow metadata,
+            List<QuestionTagView> tags) {
         List<QuestionUsageRef> forms = membershipIndex.forms(entity.getId());
         List<QuestionUsageRef> collections = membershipIndex.collections(entity.getId());
         return new QuestionSummary(entity.getPublicId(), entity.getStatement(), entity.getType().getCode(),
@@ -401,6 +422,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 entity.getLevelCode(), technologyView(entity),
                 entity.getCategories().stream().map(this::catRef)
                         .sorted(Comparator.comparing(QuestionCategoryRef::name)).toList(),
+                tags,
                 entity.getStatus(),
                 entity.getPromptMedia() != null || entity.getOptions().stream()
                         .anyMatch(option -> option.getMedia() != null || option.getMatchMedia() != null),
