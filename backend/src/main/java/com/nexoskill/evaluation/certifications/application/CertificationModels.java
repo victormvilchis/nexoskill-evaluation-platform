@@ -21,7 +21,7 @@ public final class CertificationModels {
     public record ProfileView(String publicId, String professionalProfilePublicId,
             String professionalProfileName, String certificationTechnologyPublicId,
             String certificationTechnologyName, LocalDate enrollmentDate,
-            TechnologicalProfile technologicalProfile, Long version) {}
+            String technologicalProfile, Long version) {}
 
     public record RequirementView(String publicId, CertificationType type, boolean applies,
             CertificationStatus certificationStatus, CertificationExamStatus examStatus,
@@ -43,7 +43,7 @@ public final class CertificationModels {
 
     public record SaveCommand(String professionalProfilePublicId,
             String certificationTechnologyPublicId, LocalDate enrollmentDate,
-            TechnologicalProfile technologicalProfile, Long profileVersion,
+            String technologicalProfile, Long profileVersion,
             List<RequirementCommand> requirements, List<AttemptCommand> newAttempts) {}
 
     public record RequirementCommand(CertificationType type, boolean applies,

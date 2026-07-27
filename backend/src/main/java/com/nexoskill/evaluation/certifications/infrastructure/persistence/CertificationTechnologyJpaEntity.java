@@ -13,14 +13,37 @@ public class CertificationTechnologyJpaEntity {
     @Column(name = "TECHNOLOGY_NAME", nullable = false, length = 200) private String name;
     @Column(name = "STATUS", nullable = false, length = 20) private String status;
     @Column(name = "SORT_ORDER", nullable = false) private int sortOrder;
+    @Column(name = "MASTER_TECHNOLOGY_ID") private Long masterTechnologyId;
     @Column(name = "CREATED_AT", nullable = false) private Instant createdAt;
     @Column(name = "UPDATED_AT", nullable = false) private Instant updatedAt;
     @Version @Column(name = "VERSION_NO", nullable = false) private Long version;
     protected CertificationTechnologyJpaEntity() {}
+    public static CertificationTechnologyJpaEntity createFromMaster(String publicId, String code, String name,
+            String status, int sortOrder, Long masterTechnologyId, Instant now) {
+        CertificationTechnologyJpaEntity entity = new CertificationTechnologyJpaEntity();
+        entity.publicId = publicId;
+        entity.code = code;
+        entity.name = name;
+        entity.status = status;
+        entity.sortOrder = sortOrder;
+        entity.masterTechnologyId = masterTechnologyId;
+        entity.createdAt = now;
+        entity.updatedAt = now;
+        return entity;
+    }
+    public void synchronizeWithMaster(String name, String status, int sortOrder,
+            Long masterTechnologyId, Instant now) {
+        this.name = name;
+        this.status = status;
+        this.sortOrder = sortOrder;
+        this.masterTechnologyId = masterTechnologyId;
+        this.updatedAt = now;
+    }
     public Long getId() { return id; }
     public String getPublicId() { return publicId; }
     public String getCode() { return code; }
     public String getName() { return name; }
     public String getStatus() { return status; }
     public int getSortOrder() { return sortOrder; }
+    public Long getMasterTechnologyId() { return masterTechnologyId; }
 }

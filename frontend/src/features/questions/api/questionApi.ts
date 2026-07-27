@@ -107,6 +107,7 @@ export interface QuestionSearchParams {
   difficultyCode?: string
   levelCode?: string
   creatorPublicId?: string
+  createdYear?: number
   createdFrom?: string
   createdTo?: string
   updatedFrom?: string
@@ -134,6 +135,7 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
   if (params.difficultyCode) query.set('difficultyCode', params.difficultyCode)
   if (params.levelCode) query.set('levelCode', params.levelCode)
   if (params.creatorPublicId) query.set('creatorPublicId', params.creatorPublicId)
+  if (params.createdYear) query.set('createdYear', String(params.createdYear))
   if (params.createdFrom) query.set('createdFrom', params.createdFrom)
   if (params.createdTo) query.set('createdTo', params.createdTo)
   if (params.updatedFrom) query.set('updatedFrom', params.updatedFrom)
@@ -144,6 +146,10 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
   return apiRequest<QuestionPage>(`/admin/questions?${query}`, {
     signal: params.signal
   })
+}
+
+export function getQuestionCreationYears(signal?: AbortSignal) {
+  return apiRequest<number[]>('/admin/questions/filter-options/years', { signal })
 }
 
 export function getQuestion(id: string, signal?: AbortSignal) {

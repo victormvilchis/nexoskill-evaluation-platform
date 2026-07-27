@@ -1,28 +1,30 @@
-package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
+package com.nexoskill.evaluation.certifications.infrastructure.persistence;
 
-import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
 import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "QUESTION_TYPE_CATALOG")
-public class QuestionTypeJpaEntity {
+@Table(name = "TECHNOLOGICAL_PROFILE_CATALOG")
+public class TechnologicalProfileCatalogJpaEntity {
     @Id
-    @Column(name = "TYPE_CODE", length = 40)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "TECHNOLOGICAL_PROFILE_ID")
+    private Long id;
+
+    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+    private String publicId;
+
+    @Column(name = "PROFILE_CODE", nullable = false, unique = true, length = 40)
     private String code;
 
-    @Column(name = "TYPE_NAME", nullable = false)
+    @Column(name = "PROFILE_NAME", nullable = false, length = 120)
     private String name;
 
     @Column(name = "DESCRIPTION", length = 500)
     private String description;
 
-    @Column(name = "SUPPORTS_OPTIONS", nullable = false)
-    private boolean supportsOptions;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "STATUS", nullable = false)
-    private CatalogStatus status;
+    @Column(name = "STATUS", nullable = false, length = 20)
+    private String status;
 
     @Column(name = "DISPLAY_ORDER", nullable = false)
     private int displayOrder;
@@ -43,16 +45,16 @@ public class QuestionTypeJpaEntity {
     @Column(name = "VERSION_NO", nullable = false)
     private Long version;
 
-    protected QuestionTypeJpaEntity() { }
+    protected TechnologicalProfileCatalogJpaEntity() {}
 
-    public static QuestionTypeJpaEntity create(String code, String name, String description,
-            int displayOrder, Long actorId, Instant now) {
-        QuestionTypeJpaEntity entity = new QuestionTypeJpaEntity();
+    public static TechnologicalProfileCatalogJpaEntity create(String publicId, String code, String name,
+            String description, int displayOrder, Long actorId, Instant now) {
+        TechnologicalProfileCatalogJpaEntity entity = new TechnologicalProfileCatalogJpaEntity();
+        entity.publicId = publicId;
         entity.code = code;
         entity.name = name;
         entity.description = description;
-        entity.supportsOptions = true;
-        entity.status = CatalogStatus.ACTIVE;
+        entity.status = "ACTIVE";
         entity.displayOrder = displayOrder;
         entity.createdBy = actorId;
         entity.updatedBy = actorId;
@@ -69,17 +71,18 @@ public class QuestionTypeJpaEntity {
         this.updatedAt = now;
     }
 
-    public void changeStatus(CatalogStatus status, Long actorId, Instant now) {
+    public void changeStatus(String status, Long actorId, Instant now) {
         this.status = status;
         this.updatedBy = actorId;
         this.updatedAt = now;
     }
 
+    public Long getId() { return id; }
+    public String getPublicId() { return publicId; }
     public String getCode() { return code; }
     public String getName() { return name; }
     public String getDescription() { return description; }
-    public boolean isSupportsOptions() { return supportsOptions; }
-    public CatalogStatus getStatus() { return status; }
+    public String getStatus() { return status; }
     public int getDisplayOrder() { return displayOrder; }
     public Long getCreatedBy() { return createdBy; }
     public Long getUpdatedBy() { return updatedBy; }

@@ -4,6 +4,9 @@ import com.nexoskill.evaluation.authentication.infrastructure.security.Authentic
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionServices;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
+import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionFilterOptionsService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.http.ResponseEntity;
@@ -23,11 +26,15 @@ public class AdminQuestionController {
     private final QuestionServices.Delete delete;
     private final QuestionServices.Restore restore;
     private final com.nexoskill.evaluation.questionbank.application.service.QuestionGlobalCloneService globalClone;
+    private final QuestionFilterOptionsService filterOptions;
+    private final TenantContextResolver tenantContextResolver;
 
     public AdminQuestionController(QuestionServices.Search search, QuestionServices.Get get,
             QuestionServices.Create create, QuestionServices.Update update, QuestionServices.Duplicate duplicate,
             QuestionServices.ChangeStatus status, QuestionServices.Delete delete, QuestionServices.Restore restore,
-            com.nexoskill.evaluation.questionbank.application.service.QuestionGlobalCloneService globalClone) {
+            com.nexoskill.evaluation.questionbank.application.service.QuestionGlobalCloneService globalClone,
+            QuestionFilterOptionsService filterOptions,
+            TenantContextResolver tenantContextResolver) {
         this.search = search;
         this.get = get;
         this.create = create;
@@ -37,6 +44,8 @@ public class AdminQuestionController {
         this.delete = delete;
         this.restore = restore;
         this.globalClone = globalClone;
+        this.filterOptions = filterOptions;
+        this.tenantContextResolver = tenantContextResolver;
     }
 
     @GetMapping
@@ -51,6 +60,7 @@ public class AdminQuestionController {
             @RequestParam(required = false) String difficultyCode,
             @RequestParam(required = false) String levelCode,
             @RequestParam(required = false) String creatorPublicId,
+            @RequestParam(required = false) Integer createdYear,
             @RequestParam(required = false) java.time.LocalDate createdFrom,
             @RequestParam(required = false) java.time.LocalDate createdTo,
             @RequestParam(required = false) java.time.LocalDate updatedFrom,
@@ -59,9 +69,27 @@ public class AdminQuestionController {
             @RequestParam(required = false) Boolean inUse,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        java.time.LocalDate effectiveCreatedFrom = createdFrom;
+        java.time.LocalDate effectiveCreatedTo = createdTo;
+        if (createdYear != null) {
+            int currentYear = java.time.Year.now().getValue();
+            if (createdYear < 2000 || createdYear > currentYear + 1) {
+                throw new com.nexoskill.evaluation.shared.domain.BusinessException(
+                        "QUESTION_CREATION_YEAR_INVALID", "El año de creación indicado no es válido.");
+            }
+            effectiveCreatedFrom = java.time.LocalDate.of(createdYear, 1, 1);
+            effectiveCreatedTo = java.time.LocalDate.of(createdYear, 12, 31);
+        }
         return search.execute(query, status, typeCode, categoryPublicId, scope, organizationPublicId,
-                technologyPublicId, difficultyCode, levelCode, creatorPublicId, createdFrom, createdTo,
-                updatedFrom, updatedTo, clonedToGlobal, inUse, page, size);
+                technologyPublicId, difficultyCode, levelCode, creatorPublicId,
+                effectiveCreatedFrom, effectiveCreatedTo, updatedFrom, updatedTo,
+                clonedToGlobal, inUse, page, size);
+    }
+
+    @GetMapping("/filter-options/years")
+    @PreAuthorize("hasAuthority('QUESTION_VIEW')")
+    public java.util.List<Integer> creationYears(HttpServletRequest request) {
+        return filterOptions.creationYears(tenantContextResolver.resolve(request));
     }
 
     @GetMapping("/{id}")

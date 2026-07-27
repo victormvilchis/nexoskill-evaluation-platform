@@ -66,8 +66,8 @@ public class StudentCertificationController {
             String certificationTechnologyPublicId,
             @NotNull(message = "La fecha de alta es obligatoria.")
             LocalDate enrollmentDate,
-            @NotNull(message = "Selecciona el perfil tecnológico.")
-            com.nexoskill.evaluation.certifications.domain.TechnologicalProfile technologicalProfile,
+            @NotBlank(message = "Selecciona el perfil tecnológico.")
+            String technologicalProfile,
             Long profileVersion,
             List<RequirementRequest> requirements,
             List<AttemptRequest> newAttempts) {

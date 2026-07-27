@@ -35,6 +35,13 @@ function resolveCrumbs(pathname: string): Crumb[] {
     return base
   }
 
+
+  if (pathname.startsWith('/admin/catalogs')) {
+    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Catálogos', to: '/admin/catalogs' }]
+    if (pathname !== '/admin/catalogs') base.push({ label: 'Administrar' })
+    return base
+  }
+
   if (pathname.startsWith('/admin/collections')) {
     const base: Crumb[] = [
       { label: 'Evaluaciones' },

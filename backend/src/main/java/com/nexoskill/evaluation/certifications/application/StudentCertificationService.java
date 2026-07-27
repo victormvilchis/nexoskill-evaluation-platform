@@ -10,6 +10,9 @@ import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTechnologyJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionTechnologyRepository;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepository;
@@ -31,6 +34,8 @@ public class StudentCertificationService {
     private final OrganizationRepository organizationRepository;
     private final ProfessionalCertificationProfileRepository profileCatalogRepository;
     private final CertificationTechnologyRepository technologyRepository;
+    private final SpringDataQuestionTechnologyRepository masterTechnologyRepository;
+    private final TechnologicalProfileCatalogRepository technologicalProfileCatalogRepository;
     private final OrganizationCertificationPolicyRepository policyRepository;
     private final StudentCertificationProfileRepository certificationProfileRepository;
     private final StudentCertificationRequirementRepository requirementRepository;
@@ -43,6 +48,8 @@ public class StudentCertificationService {
             OrganizationRepository organizationRepository,
             ProfessionalCertificationProfileRepository profileCatalogRepository,
             CertificationTechnologyRepository technologyRepository,
+            SpringDataQuestionTechnologyRepository masterTechnologyRepository,
+            TechnologicalProfileCatalogRepository technologicalProfileCatalogRepository,
             OrganizationCertificationPolicyRepository policyRepository,
             StudentCertificationProfileRepository certificationProfileRepository,
             StudentCertificationRequirementRepository requirementRepository,
@@ -54,6 +61,8 @@ public class StudentCertificationService {
         this.organizationRepository = organizationRepository;
         this.profileCatalogRepository = profileCatalogRepository;
         this.technologyRepository = technologyRepository;
+        this.masterTechnologyRepository = masterTechnologyRepository;
+        this.technologicalProfileCatalogRepository = technologicalProfileCatalogRepository;
         this.policyRepository = policyRepository;
         this.certificationProfileRepository = certificationProfileRepository;
         this.requirementRepository = requirementRepository;
@@ -81,16 +90,21 @@ public class StudentCertificationService {
         List<CatalogItem> profiles = profileCatalogRepository.findAllByStatusOrderBySortOrderAscNameAsc(ACTIVE)
                 .stream()
                 .map(item -> new CatalogItem(item.getPublicId(), item.getCode(), item.getName(),
-                        item.getSuggestedTechnologicalProfile() == null
-                                ? null : item.getSuggestedTechnologicalProfile().name()))
+                        item.getSuggestedTechnologicalProfile()))
                 .toList();
-        List<CatalogItem> technologies = technologyRepository.findAllByStatusOrderBySortOrderAscNameAsc(ACTIVE)
+        List<CatalogItem> technologies = masterTechnologyRepository
+                .findByStatusOrderByDisplayOrderAscNameAsc(QuestionTechnologyStatus.ACTIVE)
                 .stream()
                 .map(item -> new CatalogItem(item.getPublicId(), item.getCode(), item.getName(), null))
                 .toList();
+        List<EnumOption> technologicalProfiles = technologicalProfileCatalogRepository
+                .findAllByStatusOrderByDisplayOrderAscNameAsc(ACTIVE)
+                .stream()
+                .map(item -> new EnumOption(item.getCode(), item.getName()))
+                .toList();
 
         return new Catalogs(profiles, technologies,
-                enumOptions(TechnologicalProfile.values(), this::technologicalProfileLabel),
+                technologicalProfiles,
                 enumOptions(CertificationStatus.values(), this::certificationStatusLabel),
                 enumOptions(CertificationExamStatus.values(), this::examStatusLabel),
                 enumOptions(CertificationType.values(), this::certificationTypeLabel));
@@ -114,10 +128,20 @@ public class StudentCertificationService {
                 profileCatalogRepository.findByPublicIdAndStatus(command.professionalProfilePublicId(), ACTIVE)
                         .orElseThrow(() -> new BusinessException("CERTIFICATION_PROFILE_INVALID",
                                 "Selecciona un perfil de certificación activo."));
-        CertificationTechnologyJpaEntity technology =
-                technologyRepository.findByPublicIdAndStatus(command.certificationTechnologyPublicId(), ACTIVE)
-                        .orElseThrow(() -> new BusinessException("CERTIFICATION_TECHNOLOGY_INVALID",
-                                "Selecciona una tecnología de certificación activa."));
+        QuestionTechnologyJpaEntity masterTechnology = masterTechnologyRepository
+                .findByPublicId(command.certificationTechnologyPublicId())
+                .filter(value -> value.getStatus() == QuestionTechnologyStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException("CERTIFICATION_TECHNOLOGY_INVALID",
+                        "Selecciona una tecnología de certificación activa."));
+        CertificationTechnologyJpaEntity technology = technologyRepository
+                .findByMasterTechnologyIdAndStatus(masterTechnology.getId(), ACTIVE)
+                .orElseThrow(() -> new BusinessException("CERTIFICATION_TECHNOLOGY_BRIDGE_MISSING",
+                        "La tecnología seleccionada no está habilitada para el seguimiento de certificaciones."));
+        String technologicalProfileCode = command.technologicalProfile().trim().toUpperCase(Locale.ROOT);
+        technologicalProfileCatalogRepository.findByCode(technologicalProfileCode)
+                .filter(value -> ACTIVE.equals(value.getStatus()))
+                .orElseThrow(() -> new BusinessException("CERTIFICATION_TECH_PROFILE_INVALID",
+                        "Selecciona un perfil tecnológico activo."));
 
         Instant now = clock.instant();
         StudentCertificationProfileJpaEntity profile =
@@ -128,7 +152,7 @@ public class StudentCertificationService {
         if (created) {
             profile = StudentCertificationProfileJpaEntity.create(student.getId(), organization.getId(),
                     professionalProfile.getId(), technology.getId(), command.enrollmentDate(),
-                    command.technologicalProfile(), actor.internalId(), now);
+                    technologicalProfileCode, actor.internalId(), now);
             profile = certificationProfileRepository.saveAndFlush(profile);
         } else {
             if (command.profileVersion() == null || !Objects.equals(profile.getVersion(), command.profileVersion())) {
@@ -136,7 +160,7 @@ public class StudentCertificationService {
                         "La información de certificaciones fue modificada por otra sesión. Actualiza la página.");
             }
             profile.update(professionalProfile.getId(), technology.getId(), command.enrollmentDate(),
-                    command.technologicalProfile(), actor.internalId(), now);
+                    technologicalProfileCode, actor.internalId(), now);
         }
 
         Map<CertificationType, OrganizationCertificationPolicyJpaEntity> policies =
@@ -266,6 +290,9 @@ public class StudentCertificationService {
                 profileCatalogRepository.findById(profile.getProfessionalProfileId()).orElseThrow();
         CertificationTechnologyJpaEntity technology =
                 technologyRepository.findById(profile.getCertificationTechnologyId()).orElseThrow();
+        QuestionTechnologyJpaEntity masterTechnology = technology.getMasterTechnologyId() == null
+                ? null
+                : masterTechnologyRepository.findById(technology.getMasterTechnologyId()).orElse(null);
 
         List<StudentCertificationRequirementJpaEntity> requirements =
                 requirementRepository.findAllByProfileIdOrderByCertificationTypeAsc(profile.getId());
@@ -284,7 +311,8 @@ public class StudentCertificationService {
                 .toList();
 
         ProfileView profileView = new ProfileView(profile.getPublicId(), professional.getPublicId(),
-                professional.getName(), technology.getPublicId(), technology.getName(),
+                professional.getName(), masterTechnology == null ? technology.getPublicId() : masterTechnology.getPublicId(),
+                masterTechnology == null ? technology.getName() : masterTechnology.getName(),
                 profile.getEnrollmentDate(), profile.getTechnologicalProfile(), profile.getVersion());
         return new StudentCertificationDetail(student.getPublicId(), student.getDisplayName(),
                 organization.getPublicId(), organization.getName(), true, profileView,
@@ -403,7 +431,7 @@ public class StudentCertificationService {
             throw new BusinessException("CERTIFICATION_ENROLLMENT_DATE_REQUIRED",
                     "La fecha de alta es obligatoria.");
         }
-        if (command.technologicalProfile() == null) {
+        if (command.technologicalProfile() == null || command.technologicalProfile().isBlank()) {
             throw new BusinessException("CERTIFICATION_TECH_PROFILE_REQUIRED",
                     "Selecciona el perfil tecnológico.");
         }
@@ -445,14 +473,6 @@ public class StudentCertificationService {
 
     private <E extends Enum<E>> List<EnumOption> enumOptions(E[] values, Function<E, String> label) {
         return Arrays.stream(values).map(value -> new EnumOption(value.name(), label.apply(value))).toList();
-    }
-
-    private String technologicalProfileLabel(TechnologicalProfile value) {
-        return switch (value) {
-            case DEVELOPER -> "Desarrollador";
-            case FUNCTIONAL -> "Funcional";
-            case SPECIALIZED_PLATFORM -> "Plataforma especializada";
-        };
     }
 
     private String certificationTypeLabel(CertificationType value) {

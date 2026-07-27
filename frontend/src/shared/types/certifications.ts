@@ -25,8 +25,6 @@ export type CertificationExamStatus =
   | 'ABSENT'
   | 'CANCELLED'
 
-export type TechnologicalProfile = 'DEVELOPER' | 'FUNCTIONAL' | 'SPECIALIZED_PLATFORM'
-
 export interface CertificationAvailability {
   appliesCertifications: boolean
   operatorAllowed: boolean
@@ -62,7 +60,7 @@ export interface CertificationProfileView {
   certificationTechnologyPublicId: string
   certificationTechnologyName: string
   enrollmentDate: string
-  technologicalProfile: TechnologicalProfile
+  technologicalProfile: string
   version: number
 }
 
@@ -148,7 +146,7 @@ export interface SaveStudentCertificationPayload {
   professionalProfilePublicId: string
   certificationTechnologyPublicId: string
   enrollmentDate: string
-  technologicalProfile: TechnologicalProfile
+  technologicalProfile: string
   profileVersion: number | null
   requirements: CertificationRequirementPayload[]
   newAttempts: CertificationAttemptPayload[]

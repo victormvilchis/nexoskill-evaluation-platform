@@ -48,7 +48,8 @@ export function ApplicationLayout() {
         items: [
           { label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
           { label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-          { label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' }
+          { label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' },
+          { label: 'Catálogos', to: '/admin/catalogs', icon: 'categories', permission: 'CATALOG_VIEW' }
         ]
       },
       {
@@ -56,9 +57,7 @@ export function ApplicationLayout() {
         label: 'Banco de Preguntas',
         icon: 'questions',
         items: [
-          { label: 'Preguntas', to: '/admin/questions', icon: 'questions', permission: 'QUESTION_VIEW' },
-          { label: 'Categorías', to: '/admin/question-categories', icon: 'categories', permission: 'QUESTION_CATEGORY_MANAGE' },
-          { label: 'Tecnologías', to: '/admin/question-technologies', icon: 'code', permission: 'QUESTION_VIEW' }
+          { label: 'Preguntas', to: '/admin/questions', icon: 'questions', permission: 'QUESTION_VIEW' }
         ]
       },
       {

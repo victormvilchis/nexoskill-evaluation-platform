@@ -23,14 +23,8 @@ public class QuestionGovernanceSearchRepository {
     }
 
     public SearchPage search(QuestionSearchFilter filter, TenantContext tenant, int page, int size) {
-        boolean globalAdministrator = tenant != null && tenant.globalAdministrator() && tenant.globalScope();
+        boolean globalAdministrator = tenant != null && tenant.globalAdministrator();
         ContentScope effectiveScope = filter.scope();
-        // El Banco Global abre en el catálogo GLOBAL y solo mezcla alcances cuando
-        // el Administrador lo solicita expresamente mediante los filtros.
-        if (globalAdministrator && effectiveScope == null
-                && (filter.organizationPublicId() == null || filter.organizationPublicId().isBlank())) {
-            effectiveScope = ContentScope.GLOBAL;
-        }
 
         StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
         MapSqlParameterSource params = new MapSqlParameterSource();
@@ -68,6 +62,19 @@ public class QuestionGovernanceSearchRepository {
                 params, this::mapRow);
         Long total = jdbc.queryForObject("SELECT COUNT(*) " + from + where, params, Long.class);
         return new SearchPage(rows, total == null ? 0 : total);
+    }
+
+
+    public List<Integer> creationYears(TenantContext tenant) {
+        boolean globalAdministrator = tenant != null && tenant.globalAdministrator();
+        StringBuilder where = new StringBuilder(" WHERE q.STATUS <> 'DELETED' ");
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        addTenant(where, params, tenant, globalAdministrator);
+        return jdbc.query("""
+                SELECT DISTINCT EXTRACT(YEAR FROM q.CREATED_AT) CREATION_YEAR
+                  FROM QUESTION q
+                """ + where + " ORDER BY CREATION_YEAR DESC ", params,
+                (rs, rowNum) -> rs.getInt("CREATION_YEAR"));
     }
 
     public SearchRow metadata(Long questionId) {
@@ -112,7 +119,9 @@ public class QuestionGovernanceSearchRepository {
         if (filter.query() != null && !filter.query().isBlank()) {
             where.append("""
                 AND (
-                    LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE :query
+                    LOWER(q.PUBLIC_ID) LIKE :query
+                    OR TO_CHAR(q.QUESTION_ID) LIKE :query
+                    OR LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE :query
                     OR LOWER(DBMS_LOB.SUBSTR(q.CODE_CONTENT, 4000, 1)) LIKE :query
                     OR LOWER(owner_org.ORGANIZATION_NAME) LIKE :query
                     OR EXISTS (

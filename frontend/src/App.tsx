@@ -17,8 +17,8 @@ import { AdminFormsPage } from './pages/AdminFormsPage'
 import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
-import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
-import { QuestionTechnologiesPage } from './pages/QuestionTechnologiesPage'
+import { AdminCatalogsPage } from './pages/AdminCatalogsPage'
+import { CatalogItemsPage } from './pages/CatalogItemsPage'
 import { AdminOrganizationsPage } from './pages/AdminOrganizationsPage'
 import { OrganizationEditorPage } from './pages/OrganizationEditorPage'
 import { OrganizationManagementPage } from './pages/OrganizationManagementPage'
@@ -155,12 +155,12 @@ export default function App() {
             <Route path="/admin/forms/new" element={<FormBuilderPage />} />
           </Route>
 
-          <Route element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}>
-            <Route path="/admin/question-categories" element={<QuestionCategoriesPage />} />
+          <Route element={<PermissionRoute permission="CATALOG_VIEW" />}>
+            <Route path="/admin/catalogs" element={<AdminCatalogsPage />} />
+            <Route path="/admin/catalogs/:type" element={<CatalogItemsPage />} />
           </Route>
-          <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>
-            <Route path="/admin/question-technologies" element={<QuestionTechnologiesPage />} />
-          </Route>
+          <Route path="/admin/question-categories" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />
+          <Route path="/admin/question-technologies" element={<Navigate to="/admin/catalogs/TECHNOLOGIES" replace />} />
         </Route>
       </Route>
 

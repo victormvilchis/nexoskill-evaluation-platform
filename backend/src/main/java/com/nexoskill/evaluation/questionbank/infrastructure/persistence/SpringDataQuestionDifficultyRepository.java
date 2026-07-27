@@ -5,7 +5,9 @@ import java.util.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SpringDataQuestionDifficultyRepository extends JpaRepository<QuestionDifficultyJpaEntity, String> {
-	List<QuestionDifficultyJpaEntity> findAllByStatusOrderBySortOrderAsc(CatalogStatus status);
-
-	Optional<QuestionDifficultyJpaEntity> findByCodeAndStatus(String code, CatalogStatus status);
+    List<QuestionDifficultyJpaEntity> findAllByStatusOrderBySortOrderAsc(CatalogStatus status);
+    List<QuestionDifficultyJpaEntity> findAllByOrderBySortOrderAsc();
+    Optional<QuestionDifficultyJpaEntity> findByCodeAndStatus(String code, CatalogStatus status);
+    boolean existsByCodeIgnoreCase(String code);
+    boolean existsByNameIgnoreCase(String name);
 }

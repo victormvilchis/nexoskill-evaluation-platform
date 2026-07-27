@@ -15,8 +15,7 @@ import type {
   CertificationRequirementPayload,
   CertificationStatus,
   CertificationType,
-  StudentCertificationDetail,
-  TechnologicalProfile
+  StudentCertificationDetail
 } from '../shared/types/certifications'
 
 const TYPE_LABELS: Record<CertificationType, string> = {
@@ -31,7 +30,7 @@ interface ProfileModel {
   professionalProfilePublicId: string
   certificationTechnologyPublicId: string
   enrollmentDate: string
-  technologicalProfile: TechnologicalProfile | ''
+  technologicalProfile: string
   profileVersion: number | null
 }
 
@@ -205,7 +204,7 @@ export function StudentCertificationsPage() {
         professionalProfilePublicId: profile.professionalProfilePublicId,
         certificationTechnologyPublicId: profile.certificationTechnologyPublicId,
         enrollmentDate: profile.enrollmentDate,
-        technologicalProfile: profile.technologicalProfile as TechnologicalProfile,
+        technologicalProfile: profile.technologicalProfile,
         profileVersion: profile.profileVersion,
         requirements,
         newAttempts: Object.values(attempts)
@@ -301,7 +300,7 @@ export function StudentCertificationsPage() {
               <label className="ns-field">
                 <span>Perfil tecnológico <b>*</b></span>
                 <select value={profile.technologicalProfile}
-                  onChange={(event) => setProfile((current) => ({ ...current, technologicalProfile: event.target.value as TechnologicalProfile }))}>
+                  onChange={(event) => setProfile((current) => ({ ...current, technologicalProfile: event.target.value }))}>
                   <option value="">Seleccionar perfil tecnológico</option>
                   {catalogs?.technologicalProfiles.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>

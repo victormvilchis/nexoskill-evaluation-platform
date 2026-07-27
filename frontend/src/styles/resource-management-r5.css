@@ -786,3 +786,96 @@
     min-width: 96px;
   }
 }
+
+/* Centralized catalogs */
+.catalog-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+.catalog-type-card,
+.catalog-loading-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  min-height: 210px;
+  padding: 22px;
+  border: 1px solid var(--border-color, #dfe5ec);
+  border-radius: 16px;
+  background: var(--surface-color, #fff);
+  box-shadow: 0 8px 24px rgb(17 24 39 / 5%);
+}
+.catalog-type-card-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 12px;
+  background: #edf4ff;
+  color: #165dba;
+}
+.catalog-type-card-body { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 14px; }
+.catalog-type-card h2 { margin: 0 0 6px; font-size: 1.08rem; }
+.catalog-type-card p { margin: 0; color: var(--muted-color, #667085); line-height: 1.45; }
+.catalog-type-card dl { display: flex; gap: 24px; margin: auto 0 0; }
+.catalog-type-card dl div { display: grid; gap: 2px; }
+.catalog-type-card dt { color: var(--muted-color, #667085); font-size: .78rem; }
+.catalog-type-card dd { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.catalog-type-card small { color: var(--muted-color, #667085); }
+.catalog-type-card > .button-link { align-self: flex-end; white-space: nowrap; }
+.catalog-header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.catalog-dialog { width: min(760px, 100%); }
+.catalog-form-grid,
+.catalog-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.catalog-description-field,
+.catalog-readonly-wide { grid-column: 1 / -1; }
+.catalog-readonly-grid { padding: 20px 0; }
+.catalog-readonly-grid > div,
+.catalog-management-summary > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border-color, #dfe5ec);
+  border-radius: 12px;
+  background: #fafbfd;
+}
+.catalog-readonly-grid span,
+.catalog-management-summary span { color: var(--muted-color, #667085); font-size: .78rem; }
+.catalog-management-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 18px 0; }
+.catalog-action-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-color, #dfe5ec);
+  border-radius: 12px;
+  background: #fafbfd;
+}
+.catalog-action-panel h3 { margin: 0 0 6px; font-size: .98rem; }
+.catalog-action-panel p { margin: 0 0 14px; color: var(--muted-color, #667085); line-height: 1.5; }
+.catalog-danger-panel { border-color: #f4c7c7; background: #fff8f8; }
+.catalog-dependency-detail { margin: 4px 0; color: var(--muted-color, #667085); }
+.catalog-items-page .ns-filter-fields,
+.question-bank-page .ns-filter-fields {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(170px, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+@media (max-width: 820px) {
+  .catalog-type-card { flex-wrap: wrap; }
+  .catalog-type-card > .button-link { width: 100%; justify-content: center; }
+  .catalog-form-grid,
+  .catalog-readonly-grid,
+  .catalog-management-summary,
+  .catalog-items-page .ns-filter-fields,
+  .question-bank-page .ns-filter-fields { grid-template-columns: 1fr; }
+  .catalog-description-field,
+  .catalog-readonly-wide { grid-column: auto; }
+  .catalog-header-actions { width: 100%; justify-content: stretch; }
+  .catalog-header-actions > * { flex: 1; justify-content: center; }
+}

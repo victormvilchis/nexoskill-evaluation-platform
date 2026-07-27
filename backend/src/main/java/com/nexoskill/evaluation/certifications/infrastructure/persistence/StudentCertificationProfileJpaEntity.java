@@ -1,6 +1,5 @@
 package com.nexoskill.evaluation.certifications.infrastructure.persistence;
 
-import com.nexoskill.evaluation.certifications.domain.TechnologicalProfile;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,8 +15,7 @@ public class StudentCertificationProfileJpaEntity {
     @Column(name = "PROFESSIONAL_PROFILE_ID", nullable = false) private Long professionalProfileId;
     @Column(name = "CERTIFICATION_TECHNOLOGY_ID", nullable = false) private Long certificationTechnologyId;
     @Column(name = "ENROLLMENT_DATE", nullable = false) private LocalDate enrollmentDate;
-    @Enumerated(EnumType.STRING)
-    @Column(name = "TECHNOLOGICAL_PROFILE", nullable = false, length = 40) private TechnologicalProfile technologicalProfile;
+    @Column(name = "TECHNOLOGICAL_PROFILE", nullable = false, length = 40) private String technologicalProfile;
     @Column(name = "STATUS", nullable = false, length = 20) private String status;
     @Column(name = "CREATED_BY", nullable = false) private Long createdBy;
     @Column(name = "UPDATED_BY", nullable = false) private Long updatedBy;
@@ -27,7 +25,7 @@ public class StudentCertificationProfileJpaEntity {
     protected StudentCertificationProfileJpaEntity() {}
     public static StudentCertificationProfileJpaEntity create(Long studentId, Long organizationId,
             Long professionalProfileId, Long technologyId, LocalDate enrollmentDate,
-            TechnologicalProfile technologicalProfile, Long actorId, Instant now) {
+            String technologicalProfile, Long actorId, Instant now) {
         StudentCertificationProfileJpaEntity entity = new StudentCertificationProfileJpaEntity();
         entity.publicId = java.util.UUID.randomUUID().toString();
         entity.studentId = studentId;
@@ -44,7 +42,7 @@ public class StudentCertificationProfileJpaEntity {
         return entity;
     }
     public void update(Long professionalProfileId, Long technologyId, LocalDate enrollmentDate,
-            TechnologicalProfile technologicalProfile, Long actorId, Instant now) {
+            String technologicalProfile, Long actorId, Instant now) {
         this.professionalProfileId = professionalProfileId;
         this.certificationTechnologyId = technologyId;
         this.enrollmentDate = enrollmentDate;
@@ -59,7 +57,7 @@ public class StudentCertificationProfileJpaEntity {
     public Long getProfessionalProfileId() { return professionalProfileId; }
     public Long getCertificationTechnologyId() { return certificationTechnologyId; }
     public LocalDate getEnrollmentDate() { return enrollmentDate; }
-    public TechnologicalProfile getTechnologicalProfile() { return technologicalProfile; }
+    public String getTechnologicalProfile() { return technologicalProfile; }
     public String getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
