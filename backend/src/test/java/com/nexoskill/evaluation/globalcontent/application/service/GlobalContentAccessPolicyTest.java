@@ -75,4 +75,19 @@ class GlobalContentAccessPolicyTest {
         assertThat(allowed).isFalse();
     }
 
+    @Test
+    void globalAdministratorCanReadOrganizationalContentFromGlobalContext() {
+        OrganizationRepository organizations = mock(OrganizationRepository.class);
+        OrganizationGlobalContentGrantRepository grants = mock(OrganizationGlobalContentGrantRepository.class);
+        ContentReplicationLinkRepository links = mock(ContentReplicationLinkRepository.class);
+        GlobalContentVersionRepository versions = mock(GlobalContentVersionRepository.class);
+        GlobalContentAccessPolicy policy = new GlobalContentAccessPolicy(organizations, grants, links, versions, CLOCK);
+
+        boolean allowed = policy.canRead(GlobalContentType.QUESTION, 100L, ContentScope.ORGANIZATION, 21L,
+                TenantContext.global(1L, "00000000-0000-0000-0000-000000000001", "GLOBAL"));
+
+        assertThat(allowed).isTrue();
+    }
+
+
 }

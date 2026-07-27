@@ -19,6 +19,15 @@ function resolveCrumbs(pathname: string): Crumb[] {
     return base
   }
 
+  if (pathname.startsWith('/admin/organizations')) {
+    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Organizaciones', to: '/admin/organizations' }]
+    if (pathname.endsWith('/new')) base.push({ label: 'Nueva organización' })
+    else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname !== '/admin/organizations') base.push({ label: 'Detalle' })
+    return base
+  }
+
   if (pathname.startsWith('/admin/users')) {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Usuarios', to: '/admin/users' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nuevo usuario' })
@@ -38,16 +47,24 @@ function resolveCrumbs(pathname: string): Crumb[] {
 
   if (pathname === '/admin/question-categories') {
     return [
-      { label: 'Contenido' },
-      { label: 'Banco de preguntas', to: '/admin/questions' },
+      { label: 'Banco de Preguntas' },
+      { label: 'Preguntas', to: '/admin/questions' },
       { label: 'Categorías' }
+    ]
+  }
+
+  if (pathname === '/admin/question-technologies') {
+    return [
+      { label: 'Banco de Preguntas' },
+      { label: 'Preguntas', to: '/admin/questions' },
+      { label: 'Tecnologías' }
     ]
   }
 
   if (pathname.startsWith('/admin/questions')) {
     const base: Crumb[] = [
-      { label: 'Contenido' },
-      { label: 'Banco de preguntas', to: '/admin/questions' }
+      { label: 'Banco de Preguntas' },
+      { label: 'Preguntas', to: '/admin/questions' }
     ]
     if (pathname.endsWith('/new')) base.push({ label: 'Nueva pregunta' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })

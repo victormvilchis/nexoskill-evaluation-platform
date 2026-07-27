@@ -18,12 +18,10 @@ import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 
 const STATUS_OPTIONS: Array<{ value: OrganizationStatus | 'ALL'; label: string }> = [
-  { value: 'ALL', label: 'Todos los estados' },
-  { value: 'ACTIVE', label: 'Activa' },
-  { value: 'INACTIVE', label: 'Inactiva' },
-  { value: 'SUSPENDED', label: 'Suspendida' },
-  { value: 'EXPIRED', label: 'Vencida' },
-  { value: 'DELETED', label: 'Eliminada' }
+  { value: 'ACTIVE', label: 'Activas' },
+  { value: 'INACTIVE', label: 'Inactivas' },
+  { value: 'DELETED', label: 'Eliminadas' },
+  { value: 'ALL', label: 'Todas' }
 ]
 
 const VALID_STATUSES = new Set<OrganizationStatus>([
@@ -59,14 +57,12 @@ function pageFromQuery(value: string | null) {
 function formatDate(value?: string) {
   if (!value) return 'Sin vencimiento'
   const [yearText, monthText, dayText] = value.split('-')
-  if (!yearText || !monthText || !dayText) return value
   const year = Number(yearText)
   const month = Number(monthText)
   const day = Number(dayText)
   if (![year, month, day].every(Number.isFinite)) return value
-  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(
-    new Date(year, month - 1, day)
-  )
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' })
+    .format(new Date(year, month - 1, day))
 }
 
 function formatDateTime(value: string) {
@@ -93,13 +89,20 @@ export function AdminOrganizationsPage() {
   const page = pageFromQuery(searchParams.get('page'))
 
   useEffect(() => {
-    if (searchParams.get('created') !== '1') return
-    toast.success(
-      'Organización creada',
-      'La organización y su política de licenciamiento quedaron guardadas.'
-    )
+    const success = searchParams.get('success')
+    if (!success) return
+    const messages: Record<string, [string, string]> = {
+      created: ['Organización creada correctamente.', 'La organización ya aparece en el listado de activas.'],
+      updated: ['Organización actualizada correctamente.', 'Los cambios quedaron guardados.'],
+      activated: ['Organización activada.', 'El acceso operativo volvió a estar disponible.'],
+      deactivated: ['Organización desactivada.', 'Los accesos quedaron bloqueados y la información se conservó.'],
+      deleted: ['Organización eliminada lógicamente.', 'La información histórica permanece almacenada.'],
+      restored: ['Organización restaurada como inactiva.', 'Actívala explícitamente cuando deba volver a operar.']
+    }
+    const message = messages[success]
+    if (message) toast.success(message[0], message[1])
     const next = new URLSearchParams(searchParams)
-    next.delete('created')
+    next.delete('success')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams, toast])
 
@@ -107,11 +110,9 @@ export function AdminOrganizationsPage() {
     const currentQuery = searchParams.get('query') ?? ''
     const currentStatus = statusFromQuery(searchParams.get('status'))
     const normalizedQuery = debouncedQuery.trim()
-
     if (currentQuery === normalizedQuery && currentStatus === status) return
 
     const next = new URLSearchParams(searchParams)
-    next.delete('created')
     next.delete('page')
     normalizedQuery ? next.set('query', normalizedQuery) : next.delete('query')
     status === 'ACTIVE' ? next.delete('status') : next.set('status', status)
@@ -122,7 +123,6 @@ export function AdminOrganizationsPage() {
     const controller = new AbortController()
     setLoading(true)
     setError(undefined)
-
     searchOrganizations({
       query: searchParams.get('query') ?? '',
       status: statusFromQuery(searchParams.get('status')),
@@ -132,16 +132,13 @@ export function AdminOrganizationsPage() {
       .then(setData)
       .catch((requestError: unknown) => {
         if (controller.signal.aborted) return
-        setError(
-          requestError instanceof ApiRequestError
-            ? requestError.message
-            : 'No fue posible consultar las organizaciones.'
-        )
+        setError(requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible consultar las organizaciones.')
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
-
     return () => controller.abort()
   }, [page, reloadKey, searchParams])
 
@@ -154,7 +151,6 @@ export function AdminOrganizationsPage() {
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
-    next.delete('created')
     next.set('page', String(nextPage))
     setSearchParams(next)
   }
@@ -165,9 +161,7 @@ export function AdminOrganizationsPage() {
         <div>
           <p className="eyebrow">Administración</p>
           <h1>Organizaciones</h1>
-          <p className="muted">
-            Administra tenants, vigencia, contenido y configuración comercial.
-          </p>
+          <p className="muted">Administra tenants, vigencia, contenido y capacidad comercial sin eliminar su historial.</p>
         </div>
         {permissions.has('ORGANIZATION_CREATE') && (
           <Link className="primary-button button-link" to="/admin/organizations/new">
@@ -181,36 +175,17 @@ export function AdminOrganizationsPage() {
         hasActiveFilters={activeFilters}
         onClear={clearFilters}
       >
-        <ResourceSearchField
-          value={query}
-          onChange={setQuery}
-          placeholder="Buscar por nombre o código"
-        />
-        <ResourceSelectField
-          label="Estado"
-          value={status}
-          onChange={(value) => setStatus(value as OrganizationStatus | 'ALL')}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
+        <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre o código" />
+        <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as OrganizationStatus | 'ALL')}>
+          {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </ResourceSelectField>
       </FilterToolbar>
 
       {error && (
         <section className="inline-error-panel" role="alert">
           <div className="inline-error-icon"><Icon name="error" size={20} /></div>
-          <div>
-            <strong>No fue posible cargar las organizaciones</strong>
-            <p>{error}</p>
-          </div>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setReloadKey((value) => value + 1)}
-          >
-            Reintentar
-          </button>
+          <div><strong>No fue posible cargar las organizaciones</strong><p>{error}</p></div>
+          <button className="secondary-button" type="button" onClick={() => setReloadKey((value) => value + 1)}>Reintentar</button>
         </section>
       )}
 
@@ -222,26 +197,19 @@ export function AdminOrganizationsPage() {
                 <th>Organización</th>
                 <th>Modalidad</th>
                 <th>Estado</th>
+                <th>Estudiantes</th>
                 <th>Vigencia</th>
-                <th>Última actualización</th>
+                <th>Actualización</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {loading && (
-                <tr><td colSpan={6} className="ns-table-empty">Cargando organizaciones…</td></tr>
-              )}
+              {loading && <tr><td colSpan={7} className="ns-table-empty">Cargando organizaciones…</td></tr>}
               {!loading && !error && data?.content.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="ns-table-empty">
-                    <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones'}</strong>
-                    <span>
-                      {activeFilters
-                        ? 'Ajusta o limpia los filtros para ampliar la búsqueda.'
-                        : 'Crea la primera organización para comenzar a operar el modelo multitenant.'}
-                    </span>
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="ns-table-empty">
+                  <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones activas'}</strong>
+                  <span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea la primera organización comercial para comenzar.'}</span>
+                </td></tr>
               )}
               {!loading && !error && data?.content.map((item) => (
                 <tr className={item.status === 'DELETED' ? 'ns-row-muted' : ''} key={item.publicId}>
@@ -249,32 +217,19 @@ export function AdminOrganizationsPage() {
                     <strong>{item.name}</strong>
                     <small><code className="ns-code-label">{item.code}</code> · {item.organizationType === 'GLOBAL' ? 'Sistema global' : 'Comercial'}</small>
                   </td>
-                  <td>
-                    <span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>
-                      {CONTENT_MODE_LABELS[item.contentMode]}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`status-badge status-${item.status.toLowerCase()}`}>
-                      {STATUS_LABELS[item.status]}
-                    </span>
-                  </td>
+                  <td><span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>{CONTENT_MODE_LABELS[item.contentMode]}</span></td>
+                  <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
+                  <td><strong className="org-student-count">{item.studentCount ?? 0}</strong></td>
                   <td>{formatDate(item.expiresOn)}</td>
                   <td>{formatDateTime(item.updatedAt)}</td>
                   <td>
                     <TableActions>
-                      <TableActionLink
-                        to={`/admin/organizations/${item.publicId}`}
-                        label="Ver"
-                        icon="eye"
-                      />
+                      <TableActionLink to={`/admin/organizations/${item.publicId}`} label="Ver" icon="eye" />
                       {permissions.has('ORGANIZATION_UPDATE') && item.status !== 'DELETED' && item.organizationType !== 'GLOBAL' && (
-                        <TableActionLink
-                          to={`/admin/organizations/${item.publicId}/edit`}
-                          label="Editar"
-                          icon="edit"
-                          tone="primary"
-                        />
+                        <TableActionLink to={`/admin/organizations/${item.publicId}/edit`} label="Editar" icon="edit" tone="primary" />
+                      )}
+                      {permissions.has('ORGANIZATION_STATUS_CHANGE') && item.organizationType !== 'GLOBAL' && (
+                        <TableActionLink to={`/admin/organizations/${item.publicId}/manage`} label="Administrar" icon="lock" />
                       )}
                     </TableActions>
                   </td>
@@ -285,23 +240,9 @@ export function AdminOrganizationsPage() {
         </div>
 
         <div className="pagination-controls">
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={!data || data.page <= 0 || loading}
-            onClick={() => goToPage(page - 1)}
-          >
-            Anterior
-          </button>
+          <button className="secondary-button" type="button" disabled={!data || data.page <= 0 || loading} onClick={() => goToPage(page - 1)}>Anterior</button>
           <span>Página {(data?.page ?? 0) + 1} de {Math.max(data?.totalPages ?? 1, 1)}</span>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={!data || data.page + 1 >= data.totalPages || loading}
-            onClick={() => goToPage(page + 1)}
-          >
-            Siguiente
-          </button>
+          <button className="secondary-button" type="button" disabled={!data || data.page + 1 >= data.totalPages || loading} onClick={() => goToPage(page + 1)}>Siguiente</button>
         </div>
       </section>
     </main>

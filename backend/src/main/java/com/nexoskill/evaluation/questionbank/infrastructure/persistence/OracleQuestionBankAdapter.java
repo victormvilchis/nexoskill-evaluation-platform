@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexoskill.evaluation.globalcontent.application.service.ContentSynchronizationService;
+import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.globalcontent.application.service.GlobalContentAccessPolicy;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
@@ -24,7 +25,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final SpringDataQuestionRepository questions;
     private final SpringDataQuestionTypeRepository types;
     private final SpringDataQuestionDifficultyRepository difficulties;
+    private final SpringDataQuestionTechnologyRepository technologies;
     private final SpringDataQuestionCategoryRepository categories;
+    private final QuestionGovernanceSearchRepository governanceSearch;
     private final SpringDataQuestionMediaRepository media;
     private final QuestionUsageChecker usage;
     private final ObjectMapper json;
@@ -32,13 +35,16 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final TenantContextResolver tenantContextResolver;
     private final GlobalContentAccessPolicy accessPolicy;
     private final ContentSynchronizationService synchronization;
+    private final AuditLogPort audit;
     private final HttpServletRequest request;
 
     public OracleQuestionBankAdapter(
             SpringDataQuestionRepository questions,
             SpringDataQuestionTypeRepository types,
             SpringDataQuestionDifficultyRepository difficulties,
+            SpringDataQuestionTechnologyRepository technologies,
             SpringDataQuestionCategoryRepository categories,
+            QuestionGovernanceSearchRepository governanceSearch,
             SpringDataQuestionMediaRepository media,
             QuestionUsageChecker usage,
             ObjectMapper json,
@@ -46,11 +52,14 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             TenantContextResolver tenantContextResolver,
             GlobalContentAccessPolicy accessPolicy,
             ContentSynchronizationService synchronization,
+            AuditLogPort audit,
             HttpServletRequest request) {
         this.questions = questions;
         this.types = types;
         this.difficulties = difficulties;
+        this.technologies = technologies;
         this.categories = categories;
+        this.governanceSearch = governanceSearch;
         this.media = media;
         this.usage = usage;
         this.json = json;
@@ -58,43 +67,35 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.tenantContextResolver = tenantContextResolver;
         this.accessPolicy = accessPolicy;
         this.synchronization = synchronization;
+        this.audit = audit;
         this.request = request;
     }
 
     @Override
     public QuestionDetail create(CreateQuestionCommand command) {
-        var selection = selection(command.typeCode(), command.categoryPublicIds(), Set.of());
-        var settings = command.answerSettings();
-        var entity = QuestionJpaEntity.create(
-                UUID.randomUUID().toString(),
-                selection.type(),
-                internalDifficulty(),
-                selection.categories(),
-                trim(command.statement()),
-                nullable(command.explanation()),
-                optionalMedia(command.promptMediaPublicId()),
-                javaLanguage(command.codeContent()),
-                nullable(command.codeContent()),
-                writeAnswers(settings.acceptedAnswers()),
-                settings.caseSensitive(),
-                selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
-                null,
-                null,
-                null,
-                settings.maxLength(),
-                command.actorUserId(),
-                clock.instant());
         var tenant = tenantContextResolver.resolve(request);
         var ownership = accessPolicy.ownershipForCreation(tenant);
+        var selection = selection(command.typeCode(), command.categoryPublicIds(), Set.of(),
+                ownership.scope(), ownership.organizationId());
+        var settings = command.answerSettings();
+        var entity = QuestionJpaEntity.create(
+                UUID.randomUUID().toString(), selection.type(), difficulty(command.difficultyCode()),
+                technology(command.technologyPublicId()), command.levelCode(), selection.categories(),
+                trim(command.statement()), nullable(command.explanation()),
+                optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
+                nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
+                settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
+                null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
         entity.assignOwnership(ownership.scope(), ownership.organizationId());
         addOptions(entity, command.options());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     @Override
     public QuestionDetail update(UpdateQuestionCommand command) {
         var entity = locked(command.publicId());
+        var tenant = tenantContextResolver.resolve(request);
         assertEditable(entity);
         checkVersion(entity, command.expectedEntityVersion());
         if (entity.getStatus() == QuestionStatus.ARCHIVED) {
@@ -103,69 +104,62 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (entity.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "Restaura la pregunta antes de editarla.");
         }
+        boolean transversalEdit = tenant.globalAdministrator() && tenant.globalScope()
+                && entity.getContentScope() == ContentScope.ORGANIZATION;
+        String previousStatement = entity.getStatement();
 
         Set<String> existing = entity.getCategories().stream().map(QuestionCategoryJpaEntity::getPublicId)
                 .collect(java.util.stream.Collectors.toSet());
-        var selection = selection(command.typeCode(), command.categoryPublicIds(), existing);
+        var selection = selection(command.typeCode(), command.categoryPublicIds(), existing,
+                entity.getContentScope(), entity.getOwnerOrganizationId());
         var settings = command.answerSettings();
-
-        // Elimina primero las opciones administradas por Hibernate y fuerza el DELETE
-        // antes de insertar las nuevas. Esto evita tanto el conflicto del índice
-        // (QUESTION_ID, OPTION_ORDER) como el falso OptimisticLock causado por
-        // borrar las mismas filas mediante bulk delete y orphanRemoval.
         entity.clearOptions();
         questions.flush();
-        entity.apply(
-                selection.type(),
-                internalDifficulty(),
-                selection.categories(),
-                trim(command.statement()),
-                nullable(command.explanation()),
-                optionalMedia(command.promptMediaPublicId()),
-                javaLanguage(command.codeContent()),
-                nullable(command.codeContent()),
-                writeAnswers(settings.acceptedAnswers()),
-                settings.caseSensitive(),
-                selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
-                null,
-                null,
-                null,
-                settings.maxLength(),
-                command.actorUserId(),
-                clock.instant());
+        entity.apply(selection.type(), difficulty(command.difficultyCode()),
+                technology(command.technologyPublicId()), command.levelCode(), selection.categories(),
+                trim(command.statement()), nullable(command.explanation()),
+                optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
+                nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
+                settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
+                null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
         markCustomized(entity);
         addOptions(entity, command.options());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        if (transversalEdit) {
+            HashMap<String, Object> data = new HashMap<>();
+            data.put("questionPublicId", saved.getPublicId());
+            data.put("organizationId", saved.getOwnerOrganizationId());
+            data.put("previousStatement", previousStatement);
+            data.put("newStatement", saved.getStatement());
+            audit.record(command.actorUserId(), "ORGANIZATIONAL_QUESTION_EDITED_BY_GLOBAL_ADMIN",
+                    "QUESTION_BANK", "El Administrador global modificó contenido propiedad de una organización.",
+                    null, null, data, clock.instant());
+        }
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     @Override
     public QuestionDetail get(String id) {
         QuestionJpaEntity entity = find(id);
         assertReadable(entity);
-        return toDetail(entity, memberships(List.of(entity.getId())));
+        return toDetail(entity, memberships(List.of(entity.getId())), governanceSearch.metadata(entity.getId()));
     }
 
     @Override
-    public QuestionPage search(String query, QuestionStatus status, String type, String category,
-            int page, int size) {
-        String normalizedQuery = query == null || query.isBlank() ? null : query.trim().toLowerCase(Locale.ROOT);
-        String normalizedType = norm(type);
-        String normalizedCategory = category == null || category.isBlank() ? null
-                : PublicIdNormalizer.requiredUuid(category, "QUESTION_CATEGORY_INVALID",
-                        "La categoría indicada no es válida.");
-        PageRequest pageable = PageRequest.of(page, size);
+    public QuestionPage search(QuestionSearchFilter filter, int page, int size) {
         var tenant = tenantContextResolver.resolve(request);
-        int globalScope = tenant.globalScope() ? 1 : 0;
-        int allGlobalContent = accessPolicy.allowsAllGlobal(tenant) ? 1 : 0;
-        Page<QuestionJpaEntity> result = normalizedQuery == null
-                ? questions.searchWithoutText(status == null ? null : status.name(), normalizedType,
-                        normalizedCategory, globalScope, tenant.organizationId(), allGlobalContent, pageable)
-                : questions.searchWithText(normalizedQuery, status == null ? null : status.name(), normalizedType,
-                        normalizedCategory, globalScope, tenant.organizationId(), allGlobalContent, pageable);
-        MembershipIndex membershipIndex = memberships(result.getContent().stream().map(QuestionJpaEntity::getId).toList());
-        return new QuestionPage(result.getContent().stream().map(entity -> toSummary(entity, membershipIndex)).toList(),
-                result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
+        var result = governanceSearch.search(filter, tenant, page, size);
+        List<Long> ids = result.rows().stream().map(QuestionGovernanceSearchRepository.SearchRow::questionId).toList();
+        Map<Long, QuestionJpaEntity> byId = questions.findAllById(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(QuestionJpaEntity::getId, value -> value));
+        Map<Long, QuestionGovernanceSearchRepository.SearchRow> metadata = result.rows().stream()
+                .collect(java.util.stream.Collectors.toMap(QuestionGovernanceSearchRepository.SearchRow::questionId,
+                        value -> value));
+        MembershipIndex membershipIndex = memberships(ids);
+        List<QuestionSummary> content = ids.stream().map(byId::get).filter(Objects::nonNull)
+                .map(entity -> toSummary(entity, membershipIndex, metadata.get(entity.getId()))).toList();
+        int totalPages = size == 0 ? 0 : (int) Math.ceil((double) result.totalElements() / size);
+        return new QuestionPage(content, page, size, result.totalElements(), totalPages);
     }
 
     @Override
@@ -175,10 +169,19 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (source.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "No se puede duplicar una pregunta eliminada.");
         }
+        var tenant = tenantContextResolver.resolve(request);
+        var ownership = accessPolicy.ownershipForCreation(tenant);
+        if (source.getContentScope() != ownership.scope()
+                || !Objects.equals(source.getOwnerOrganizationId(), ownership.organizationId())) {
+            throw error("QUESTION_DUPLICATE_SCOPE_INVALID",
+                    "Utiliza Clonar a Global para copiar contenido de una organización al catálogo maestro.");
+        }
         var entity = QuestionJpaEntity.create(
                 UUID.randomUUID().toString(),
                 source.getType(),
-                internalDifficulty(),
+                source.getDifficulty(),
+                source.getTechnology(),
+                source.getLevelCode(),
                 new LinkedHashSet<>(source.getCategories()),
                 source.getStatement() + " (copia)",
                 source.getExplanation(),
@@ -194,8 +197,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 source.getResponseMaxLength(),
                 actor,
                 clock.instant());
-        var tenant = tenantContextResolver.resolve(request);
-        var ownership = accessPolicy.ownershipForCreation(tenant);
         entity.assignOwnership(ownership.scope(), ownership.organizationId());
         for (var option : source.getOptions()) {
             entity.addOption(QuestionOptionJpaEntity.create(
@@ -211,7 +212,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                     clock.instant()));
         }
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     @Override
@@ -229,7 +230,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.changeStatus(status, actor, clock.instant());
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     @Override
@@ -247,7 +248,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.softDelete(actor, clock.instant(), truncate(reason, 500));
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     @Override
@@ -261,7 +262,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.restore(actor, clock.instant());
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        return toDetail(saved, memberships(List.of(saved.getId())));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
     private void addOptions(QuestionJpaEntity entity, List<QuestionOptionCommand> commands) {
@@ -281,22 +282,23 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         }
     }
 
-    private Selection selection(String type, List<String> ids, Set<String> existing) {
+    private Selection selection(String type, List<String> ids, Set<String> existing,
+            ContentScope targetScope, Long targetOrganizationId) {
         var selectedType = types.findByCodeAndStatus(norm(type), CatalogStatus.ACTIVE)
                 .orElseThrow(() -> error("QUESTION_TYPE_INVALID", "El tipo de pregunta no está disponible."));
         if (ids == null || ids.isEmpty()) {
             throw error("QUESTION_CATEGORY_REQUIRED", "Selecciona al menos una categoría.");
         }
-        var tenant = tenantContextResolver.resolve(request);
         LinkedHashSet<QuestionCategoryJpaEntity> selectedCategories = new LinkedHashSet<>();
         for (String rawId : ids) {
             String id = PublicIdNormalizer.requiredUuid(rawId, "QUESTION_CATEGORY_INVALID",
                     "Una categoría seleccionada no es válida.");
             var category = categories.findByPublicId(id)
                     .orElseThrow(() -> error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe."));
-            if (category.getContentScope() == ContentScope.ORGANIZATION
-                    && !Objects.equals(category.getOwnerOrganizationId(), tenant.organizationId())) {
-                throw error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe.");
+            if (category.getContentScope() != targetScope
+                    || !Objects.equals(category.getOwnerOrganizationId(), targetOrganizationId)) {
+                throw error("QUESTION_CATEGORY_SCOPE_MISMATCH",
+                        "La categoría no pertenece al mismo alcance u organización que la pregunta.");
             }
             if (category.getStatus() == CatalogStatus.DELETED) {
                 throw error("CATEGORY_NOT_FOUND", "La categoría seleccionada no existe.");
@@ -310,10 +312,26 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         return new Selection(selectedType, selectedCategories);
     }
 
-    private QuestionDifficultyJpaEntity internalDifficulty() {
-        return difficulties.findById(INTERNAL_DIFFICULTY)
-                .orElseThrow(() -> error("QUESTION_INTERNAL_DIFFICULTY_MISSING",
-                        "No se encontró la clasificación interna requerida para guardar preguntas."));
+    private QuestionDifficultyJpaEntity difficulty(String code) {
+        String normalized = norm(code);
+        if (normalized == null) normalized = INTERNAL_DIFFICULTY;
+        return difficulties.findByCodeAndStatus(normalized, CatalogStatus.ACTIVE)
+                .orElseThrow(() -> error("QUESTION_DIFFICULTY_INVALID",
+                        "La dificultad seleccionada no está disponible."));
+    }
+
+    private QuestionTechnologyJpaEntity technology(String publicId) {
+        if (publicId == null || publicId.isBlank()) return null;
+        String normalized = PublicIdNormalizer.requiredUuid(publicId, "QUESTION_TECHNOLOGY_INVALID",
+                "La tecnología seleccionada no es válida.");
+        QuestionTechnologyJpaEntity value = technologies.findByPublicId(normalized)
+                .orElseThrow(() -> error("QUESTION_TECHNOLOGY_NOT_FOUND",
+                        "La tecnología seleccionada no existe."));
+        if (value.getStatus() != QuestionTechnologyStatus.ACTIVE) {
+            throw error("QUESTION_TECHNOLOGY_INACTIVE",
+                    "La tecnología seleccionada no se encuentra activa.");
+        }
+        return value;
     }
 
     private QuestionJpaEntity find(String id) {
@@ -333,7 +351,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private void assertReadable(QuestionJpaEntity entity) {
         accessPolicy.assertReadable(GlobalContentType.QUESTION, entity.getId(), entity.getContentScope(),
                 entity.getOwnerOrganizationId(), tenantContextResolver.resolve(request),
-                "QUESTION_NOT_FOUND", "La pregunta solicitada no existe.");
+                "QUESTION_ACCESS_FORBIDDEN", "No tienes permisos para acceder a esta pregunta.");
     }
 
     private void assertEditable(QuestionJpaEntity entity) {
@@ -354,55 +372,60 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         }
     }
 
-    private QuestionDetail toDetail(QuestionJpaEntity entity, MembershipIndex membershipIndex) {
-        return new QuestionDetail(
-                entity.getPublicId(),
-                entity.getStatement(),
-                entity.getExplanation(),
-                entity.getType().getCode(),
-                entity.getType().getName(),
+    private QuestionDetail toDetail(QuestionJpaEntity entity, MembershipIndex membershipIndex,
+            QuestionGovernanceSearchRepository.SearchRow metadata) {
+        return new QuestionDetail(entity.getPublicId(), entity.getStatement(), entity.getExplanation(),
+                entity.getType().getCode(), entity.getType().getName(),
+                entity.getDifficulty().getCode(), entity.getDifficulty().getName(), entity.getLevelCode(),
+                technologyView(entity),
                 entity.getCategories().stream().map(this::catRef)
                         .sorted(Comparator.comparing(QuestionCategoryRef::name)).toList(),
-                entity.getStatus(),
-                entity.getVersion(),
-                mediaView(entity.getPromptMedia()),
-                entity.getCodeContent() == null ? null : "JAVA",
-                entity.getCodeContent(),
+                entity.getStatus(), entity.getVersion(), mediaView(entity.getPromptMedia()),
+                entity.getCodeContent() == null ? null : "JAVA", entity.getCodeContent(),
                 new QuestionAnswerSettings(readAnswers(entity.getAcceptedAnswersJson()), entity.isCaseSensitive(),
                         entity.isManualReview(), null, null, null, entity.getResponseMaxLength()),
-                entity.getOptions().stream().map(option -> new QuestionOptionView(
-                        option.getPublicId(),
-                        option.getOptionOrder(),
-                        option.getText(),
-                        mediaView(option.getMedia()),
-                        option.getMatchText(),
-                        mediaView(option.getMatchMedia()),
-                        option.isCorrect(),
+                entity.getOptions().stream().map(option -> new QuestionOptionView(option.getPublicId(),
+                        option.getOptionOrder(), option.getText(), mediaView(option.getMedia()),
+                        option.getMatchText(), mediaView(option.getMatchMedia()), option.isCorrect(),
                         option.getFeedback())).toList(),
-                membershipIndex.forms(entity.getId()),
-                membershipIndex.collections(entity.getId()),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                ownership(entity, metadata), membershipIndex.forms(entity.getId()),
+                membershipIndex.collections(entity.getId()), entity.getCreatedAt(), entity.getUpdatedAt());
     }
 
-    private QuestionSummary toSummary(QuestionJpaEntity entity, MembershipIndex membershipIndex) {
-        return new QuestionSummary(
-                entity.getPublicId(),
-                entity.getStatement(),
-                entity.getType().getCode(),
-                entity.getType().getName(),
+    private QuestionSummary toSummary(QuestionJpaEntity entity, MembershipIndex membershipIndex,
+            QuestionGovernanceSearchRepository.SearchRow metadata) {
+        List<QuestionUsageRef> forms = membershipIndex.forms(entity.getId());
+        List<QuestionUsageRef> collections = membershipIndex.collections(entity.getId());
+        return new QuestionSummary(entity.getPublicId(), entity.getStatement(), entity.getType().getCode(),
+                entity.getType().getName(), entity.getDifficulty().getCode(), entity.getDifficulty().getName(),
+                entity.getLevelCode(), technologyView(entity),
                 entity.getCategories().stream().map(this::catRef)
                         .sorted(Comparator.comparing(QuestionCategoryRef::name)).toList(),
                 entity.getStatus(),
                 entity.getPromptMedia() != null || entity.getOptions().stream()
                         .anyMatch(option -> option.getMedia() != null || option.getMatchMedia() != null),
                 entity.getCodeContent() != null && !entity.getCodeContent().isBlank(),
-                membershipIndex.forms(entity.getId()),
-                membershipIndex.collections(entity.getId()),
-                entity.getVersion(),
-                entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                !forms.isEmpty() || !collections.isEmpty(), ownership(entity, metadata),
+                forms, collections, entity.getVersion(), entity.getCreatedAt(), entity.getUpdatedAt());
     }
+
+    private QuestionTechnologySummary technologyView(QuestionJpaEntity entity) {
+        if (entity.getTechnology() == null) return null;
+        var value = entity.getTechnology();
+        return new QuestionTechnologySummary(value.getPublicId(), value.getCode(), value.getName(),
+                value.getStatus().name(), value.getDisplayOrder());
+    }
+
+    private QuestionOwnershipView ownership(QuestionJpaEntity entity,
+            QuestionGovernanceSearchRepository.SearchRow metadata) {
+        QuestionGovernanceSearchRepository.SearchRow row = metadata == null
+                ? governanceSearch.metadata(entity.getId()) : metadata;
+        return new QuestionOwnershipView(entity.getContentScope(), row.ownerOrganizationPublicId(),
+                row.ownerOrganizationCode(), row.ownerOrganizationName(), row.creatorPublicId(), row.creatorName(),
+                row.sourceOrganizationPublicId(), row.sourceOrganizationName(), row.sourceQuestionPublicId(),
+                entity.getSourceOrganizationVersion(), entity.getSourceOrganizationQuestionId() != null);
+    }
+
 
     private MembershipIndex memberships(List<Long> ids) {
         if (ids == null || ids.isEmpty()) return MembershipIndex.empty();

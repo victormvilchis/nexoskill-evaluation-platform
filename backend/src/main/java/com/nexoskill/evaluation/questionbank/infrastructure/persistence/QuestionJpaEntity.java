@@ -27,6 +27,13 @@ public class QuestionJpaEntity {
     @JoinColumn(name = "DIFFICULTY_CODE", nullable = false)
     private QuestionDifficultyJpaEntity difficulty;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "TECHNOLOGY_ID")
+    private QuestionTechnologyJpaEntity technology;
+
+    @Column(name = "LEVEL_CODE", length = 30)
+    private String levelCode;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "QUESTION_CATEGORY_RELATION",
             joinColumns = @JoinColumn(name = "QUESTION_ID"),
@@ -113,6 +120,21 @@ public class QuestionJpaEntity {
     @Column(name = "SOURCE_GLOBAL_VERSION")
     private Long sourceGlobalVersion;
 
+    @Column(name = "SOURCE_ORGANIZATION_ID")
+    private Long sourceOrganizationId;
+
+    @Column(name = "SOURCE_ORGANIZATION_QUESTION_ID")
+    private Long sourceOrganizationQuestionId;
+
+    @Column(name = "SOURCE_ORGANIZATION_VERSION")
+    private Long sourceOrganizationVersion;
+
+    @Column(name = "CLONED_TO_GLOBAL_AT")
+    private Instant clonedToGlobalAt;
+
+    @Column(name = "CLONED_TO_GLOBAL_BY")
+    private Long clonedToGlobalBy;
+
     @Column(name = "IS_CUSTOMIZED", nullable = false)
     private Integer customized;
 
@@ -139,6 +161,15 @@ public class QuestionJpaEntity {
             String explanation, QuestionMediaJpaEntity prompt, String lang, String code, String answers, boolean cs,
             boolean manual, BigDecimal min, BigDecimal max, BigDecimal tolerance, Integer maxLength, Long actor,
             Instant now) {
+        return create(id, type, difficulty, null, null, cats, statement, explanation, prompt, lang, code, answers,
+                cs, manual, min, max, tolerance, maxLength, actor, now);
+    }
+
+    public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
+            QuestionDifficultyJpaEntity difficulty, QuestionTechnologyJpaEntity technology, String levelCode,
+            Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
+            String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
+            BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
         var entity = new QuestionJpaEntity();
         entity.publicId = id;
         entity.status = QuestionStatus.ACTIVE;
@@ -147,8 +178,8 @@ public class QuestionJpaEntity {
         entity.contentScope = ContentScope.GLOBAL;
         entity.customized = 0;
         entity.syncStatus = SyncStatus.NOT_LINKED;
-        entity.apply(type, difficulty, cats, statement, explanation, prompt, lang, code, answers, cs, manual, min, max,
-                tolerance, maxLength, actor, now);
+        entity.apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code,
+                answers, cs, manual, min, max, tolerance, maxLength, actor, now);
         return entity;
     }
 
@@ -156,8 +187,19 @@ public class QuestionJpaEntity {
             Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
             String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
             BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
+        apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code, answers,
+                cs, manual, min, max, tolerance, maxLength, actor, now);
+    }
+
+    public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
+            QuestionTechnologyJpaEntity technology, String levelCode,
+            Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
+            String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
+            BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
         this.type = type;
         this.difficulty = difficulty;
+        this.technology = technology;
+        this.levelCode = normalizeLevel(levelCode);
         this.categories.clear();
         this.categories.addAll(cats);
         this.statement = statement;
@@ -219,6 +261,26 @@ public class QuestionJpaEntity {
         this.ownerOrganizationId = organizationId;
     }
 
+    public void markClonedFromOrganization(Long organizationId, Long sourceQuestionId,
+            Long sourceVersion, Long actorId, Instant now) {
+        if (contentScope != ContentScope.GLOBAL) {
+            throw new IllegalStateException("La trazabilidad de promoción solo puede asignarse a una pregunta GLOBAL.");
+        }
+        this.sourceOrganizationId = organizationId;
+        this.sourceOrganizationQuestionId = sourceQuestionId;
+        this.sourceOrganizationVersion = sourceVersion;
+        this.clonedToGlobalAt = now;
+        this.clonedToGlobalBy = actorId;
+        this.updatedBy = actorId;
+        this.updatedAt = now;
+    }
+
+    private static String normalizeLevel(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return normalized.length() <= 30 ? normalized : normalized.substring(0, 30);
+    }
+
     public void markCustomized(Instant now) {
         if (sourceGlobalId != null) {
             customized = 1;
@@ -231,6 +293,8 @@ public class QuestionJpaEntity {
     public String getPublicId() { return publicId; }
     public QuestionTypeJpaEntity getType() { return type; }
     public QuestionDifficultyJpaEntity getDifficulty() { return difficulty; }
+    public QuestionTechnologyJpaEntity getTechnology() { return technology; }
+    public String getLevelCode() { return levelCode; }
     public Set<QuestionCategoryJpaEntity> getCategories() { return Set.copyOf(categories); }
     public QuestionStatus getStatus() { return status; }
     public String getStatement() { return statement; }
@@ -255,6 +319,11 @@ public class QuestionJpaEntity {
     public Long getOwnerOrganizationId() { return ownerOrganizationId; }
     public Long getSourceGlobalId() { return sourceGlobalId; }
     public Long getSourceGlobalVersion() { return sourceGlobalVersion; }
+    public Long getSourceOrganizationId() { return sourceOrganizationId; }
+    public Long getSourceOrganizationQuestionId() { return sourceOrganizationQuestionId; }
+    public Long getSourceOrganizationVersion() { return sourceOrganizationVersion; }
+    public Instant getClonedToGlobalAt() { return clonedToGlobalAt; }
+    public Long getClonedToGlobalBy() { return clonedToGlobalBy; }
     public boolean isCustomized() { return Integer.valueOf(1).equals(customized); }
     public SyncStatus getSyncStatus() { return syncStatus; }
     public Long getCreatedBy() { return createdBy; }

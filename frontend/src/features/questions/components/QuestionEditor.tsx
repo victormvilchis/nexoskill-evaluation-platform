@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import { getQuestionCatalogs } from '../api/questionApi'
+import { useAuth } from '../../authentication/context/AuthContext'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
 import { useToast } from '../../../shared/components/ToastProvider'
@@ -90,8 +91,13 @@ interface QuestionEditorProps {
 
 export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEditorProps) {
   const toast = useToast()
+  const { user } = useAuth()
+  const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
+  const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'BASIC')
+  const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
+  const [levelCode, setLevelCode] = useState(initial?.levelCode ?? '')
   const [categories, setCategories] = useState<string[]>(initial?.categories.map((category) => category.publicId) ?? [])
   const [statement, setStatement] = useState(initial?.statement ?? '')
   const [explanation, setExplanation] = useState(initial?.explanation ?? '')
@@ -118,12 +124,20 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
 
   const usesOptions = optionTypes.has(type)
   const categoryOptions = useMemo(() => {
-    const active = catalogs?.categories.filter((category) => category.status === 'ACTIVE') ?? []
+    const targetScope = initial?.ownership.scope ?? (globalAdministrator ? 'GLOBAL' : 'ORGANIZATION')
+    const targetOrganization = initial?.ownership.organizationPublicId
+    const active = catalogs?.categories.filter((category) => {
+      if (category.status !== 'ACTIVE' || category.contentScope !== targetScope) return false
+      if (targetScope === 'ORGANIZATION' && targetOrganization) {
+        return category.ownerOrganizationPublicId === targetOrganization
+      }
+      return true
+    }) ?? []
     const retained = initial?.categories.filter(
       (category) => !active.some((activeCategory) => activeCategory.publicId === category.publicId)
     ) ?? []
     return [...active, ...retained]
-  }, [catalogs, initial])
+  }, [catalogs, globalAdministrator, initial])
 
   const filteredCategoryOptions = useMemo(() => {
     const query = categoryQuery.trim().toLocaleLowerCase('es-MX')
@@ -189,6 +203,9 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
     try {
       const payload: QuestionPayload = {
         typeCode: type,
+        difficultyCode: difficultyCode || undefined,
+        technologyPublicId: technologyPublicId || undefined,
+        levelCode: levelCode.trim() || undefined,
         categoryPublicIds: categories,
         statement: statement.trim(),
         explanation: explanation.trim() || undefined,
@@ -265,7 +282,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
       </section>
 
       <section className="editor-card question-classification-card">
-        <div className="editor-grid single-type-grid">
+        <div className="editor-grid question-governance-grid">
           <div className="form-field">
             <label>Tipo de pregunta</label>
             <select value={type} onChange={(event) => changeType(event.target.value as QuestionTypeCode)}>
@@ -274,6 +291,32 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
               ))}
             </select>
             <small>El contenido escrito se conserva cuando cambias de tipo.</small>
+          </div>
+          <div className="form-field">
+            <label>Dificultad</label>
+            <select value={difficultyCode} onChange={(event) => setDifficultyCode(event.target.value)}>
+              {catalogs?.difficulties.map((difficulty) => (
+                <option key={difficulty.code} value={difficulty.code}>{difficulty.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>Tecnología</label>
+            <select value={technologyPublicId} onChange={(event) => setTechnologyPublicId(event.target.value)}>
+              <option value="">Sin tecnología</option>
+              {catalogs?.technologies.filter((technology) => technology.status === 'ACTIVE').map((technology) => (
+                <option key={technology.publicId} value={technology.publicId}>{technology.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>Nivel</label>
+            <input
+              maxLength={30}
+              value={levelCode}
+              onChange={(event) => setLevelCode(event.target.value.toUpperCase())}
+              placeholder="Ej. JR, I, AVANZADO"
+            />
           </div>
         </div>
 

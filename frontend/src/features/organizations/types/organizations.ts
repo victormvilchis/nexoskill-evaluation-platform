@@ -10,6 +10,7 @@ export interface OrganizationSummary {
   status: OrganizationStatus
   contentMode: ContentMode
   appliesCertifications: boolean
+  studentCount: number
   expiresOn?: string
   updatedAt: string
 }
@@ -23,6 +24,8 @@ export interface OrganizationDetail extends OrganizationSummary {
   exhaustedReleaseDays?: number
   cycleStartsOn?: string
   cycleEndsOn?: string
+  statusChangedAt?: string
+  statusReason?: string
   createdAt: string
   version: number
 }
@@ -41,6 +44,14 @@ export interface OrganizationPayload {
   cycleStartsOn?: string
   cycleEndsOn?: string
   version?: number
+}
+
+export interface OrganizationStatusHistory {
+  previousStatus?: OrganizationStatus
+  newStatus: OrganizationStatus
+  reason?: string
+  changedBy?: number
+  changedAt: string
 }
 
 export interface OrganizationPage {

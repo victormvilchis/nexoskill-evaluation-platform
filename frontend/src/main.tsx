@@ -15,7 +15,6 @@ import './styles/multitenancy-core-r1.css'
 import './styles/students-part2-r1.css'
 import './styles/internal-users-auth-r1.css'
 import './styles/category-lifecycle-r1.css'
-import './styles/global-content-governance-r1.css'
 import './styles/student-certifications-r1.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')

@@ -25,6 +25,8 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     boolean existsByOrganizationId(Long organizationId);
 
+    long countByOrganizationIdAndStatusNot(Long organizationId, com.nexoskill.evaluation.students.domain.StudentStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.normalizedEmail = :normalizedEmail")
     Optional<StudentJpaEntity> findForLogin(@Param("organizationId") Long organizationId,

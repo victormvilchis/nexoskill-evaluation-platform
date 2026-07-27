@@ -370,6 +370,8 @@ public class OracleGlobalContentResourceAdapter implements GlobalContentResource
                 .addValue("publicId", UUID.randomUUID().toString())
                 .addValue("typeCode", source.get("TYPE_CODE"))
                 .addValue("difficultyCode", source.get("DIFFICULTY_CODE"))
+                .addValue("technologyId", source.get("TECHNOLOGY_ID"))
+                .addValue("levelCode", source.get("LEVEL_CODE"))
                 .addValue("status", "ACTIVE")
                 .addValue("statement", source.get("STATEMENT_TEXT"))
                 .addValue("explanation", source.get("EXPLANATION_TEXT"))
@@ -390,15 +392,15 @@ public class OracleGlobalContentResourceAdapter implements GlobalContentResource
                 .addValue("actor", actor);
         Long targetId = insert("""
                 INSERT INTO QUESTION (
-                    PUBLIC_ID, TYPE_CODE, DIFFICULTY_CODE, STATUS, STATEMENT_TEXT, EXPLANATION_TEXT,
-                    PROMPT_MEDIA_ID, CODE_LANGUAGE, CODE_CONTENT, ACCEPTED_ANSWERS_JSON,
+                    PUBLIC_ID, TYPE_CODE, DIFFICULTY_CODE, TECHNOLOGY_ID, LEVEL_CODE,
+                    STATUS, STATEMENT_TEXT, EXPLANATION_TEXT, PROMPT_MEDIA_ID, CODE_LANGUAGE, CODE_CONTENT, ACCEPTED_ANSWERS_JSON,
                     ANSWER_CASE_SENSITIVE, MANUAL_REVIEW, NUMERIC_MIN, NUMERIC_MAX, NUMERIC_TOLERANCE,
                     RESPONSE_MAX_LENGTH, CONTENT_SCOPE, OWNER_ORGANIZATION_ID, SOURCE_GLOBAL_ID,
                     SOURCE_GLOBAL_VERSION, IS_CUSTOMIZED, LAST_SYNCHRONIZED_AT, SYNC_STATUS,
                     CREATED_BY, CREATED_AT, UPDATED_BY, UPDATED_AT, VERSION_NO
                 ) VALUES (
-                    :publicId, :typeCode, :difficultyCode, :status, :statement, :explanation,
-                    :promptMedia, :codeLanguage, :codeContent, :answers,
+                    :publicId, :typeCode, :difficultyCode, :technologyId, :levelCode,
+                    :status, :statement, :explanation, :promptMedia, :codeLanguage, :codeContent, :answers,
                     :caseSensitive, :manualReview, :numericMin, :numericMax, :numericTolerance,
                     :maxLength, :scope, :owner, :sourceGlobalId,
                     :sourceGlobalVersion, 0,

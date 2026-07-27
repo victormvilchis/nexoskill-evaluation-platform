@@ -38,4 +38,20 @@ public interface SpringDataAuthSessionRepository extends JpaRepository<AuthSessi
 			@Param("activeStatus") SessionStatus activeStatus, @Param("revokedStatus") SessionStatus revokedStatus,
 			@Param("revokedAt") Instant revokedAt);
 
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query(value = """
+			UPDATE AUTH_SESSION session
+			   SET session.STATUS = 'REVOKED',
+			       session.REVOKED_AT = :revokedAt
+			 WHERE session.STATUS = 'ACTIVE'
+			   AND EXISTS (
+			       SELECT 1
+			         FROM APP_USER_ORGANIZATION membership
+			        WHERE membership.USER_ID = session.USER_ID
+			          AND membership.ORGANIZATION_ID = :organizationId
+			   )
+			""", nativeQuery = true)
+	int revokeActiveSessionsByOrganization(@Param("organizationId") Long organizationId,
+			@Param("revokedAt") Instant revokedAt);
+
 }

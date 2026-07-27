@@ -22,6 +22,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     private final SpringDataQuestionTypeRepository types;
+    private final SpringDataQuestionDifficultyRepository difficulties;
+    private final SpringDataQuestionTechnologyRepository technologies;
     private final SpringDataQuestionCategoryRepository categories;
     private final SpringDataQuestionRepository questions;
     private final QuestionCategoryStatusHistoryRepository historyRepository;
@@ -31,7 +33,8 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     private final Clock clock;
 
     public OracleQuestionCatalogAdapter(SpringDataQuestionTypeRepository types,
-            SpringDataQuestionDifficultyRepository ignoredDifficulties,
+            SpringDataQuestionDifficultyRepository difficulties,
+            SpringDataQuestionTechnologyRepository technologies,
             SpringDataQuestionCategoryRepository categories,
             SpringDataQuestionRepository questions,
             QuestionCategoryStatusHistoryRepository historyRepository,
@@ -40,6 +43,8 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
             ContentSynchronizationService synchronization,
             Clock clock) {
         this.types = types;
+        this.difficulties = difficulties;
+        this.technologies = technologies;
         this.categories = categories;
         this.questions = questions;
         this.historyRepository = historyRepository;
@@ -51,10 +56,19 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
 
     @Override
     public QuestionCatalogs activeCatalogs(TenantContext tenant) {
+        List<QuestionCategoryJpaEntity> visibleCategories = tenant.globalAdministrator() && tenant.globalScope()
+                ? categories.findAllByStatusOrderByNameAsc(CatalogStatus.ACTIVE)
+                : categories.findVisible(tenant.organizationId(), CatalogStatus.ACTIVE);
         return new QuestionCatalogs(
                 types.findAllByStatusOrderByNameAsc(CatalogStatus.ACTIVE).stream()
                         .map(type -> new CatalogOption(type.getCode(), type.getName(), type.getDescription())).toList(),
-                categories.findVisible(tenant.organizationId(), CatalogStatus.ACTIVE).stream()
+                difficulties.findAllByStatusOrderBySortOrderAsc(CatalogStatus.ACTIVE).stream()
+                        .map(value -> new CatalogOption(value.getCode(), value.getName(), null)).toList(),
+                technologies.findByStatusOrderByDisplayOrderAscNameAsc(
+                                com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus.ACTIVE)
+                        .stream().map(value -> new QuestionTechnologySummary(value.getPublicId(), value.getCode(),
+                                value.getName(), value.getStatus().name(), value.getDisplayOrder())).toList(),
+                visibleCategories.stream()
                         .filter(category -> accessPolicy.canRead(GlobalContentType.CATEGORY, category.getId(),
                                 category.getContentScope(), category.getOwnerOrganizationId(), tenant))
                         .map(this::summary).toList());
@@ -62,7 +76,10 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
 
     @Override
     public List<QuestionCategorySummary> categories(TenantContext tenant, CatalogStatus status) {
-        return categories.findVisible(tenant.organizationId(), status).stream()
+        List<QuestionCategoryJpaEntity> visible = tenant.globalAdministrator() && tenant.globalScope()
+                ? (status == null ? categories.findAll() : categories.findAllByStatusOrderByNameAsc(status))
+                : categories.findVisible(tenant.organizationId(), status);
+        return visible.stream()
                 .filter(category -> accessPolicy.canRead(GlobalContentType.CATEGORY, category.getId(),
                         category.getContentScope(), category.getOwnerOrganizationId(), tenant))
                 .map(this::summary).toList();

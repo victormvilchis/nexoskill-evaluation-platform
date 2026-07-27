@@ -48,9 +48,10 @@ public class GlobalContentAccessPolicy {
         if (tenant == null || scope == null || internalId == null) return false;
 
         if (tenant.globalScope()) {
-            // El contexto GLOBAL opera el catálogo maestro. La revisión transversal
-            // de contenido privado se realiza exclusivamente mediante /global-content/review.
-            return scope == ContentScope.GLOBAL;
+            // El Administrador global opera el Banco de Preguntas como centro transversal.
+            // La lectura de contenido organizacional sigue siendo explícita y auditada,
+            // pero ya no depende de un módulo paralelo de “Gobierno global”.
+            return tenant.globalAdministrator();
         }
 
         if (!tenant.hasOrganization()) return false;
@@ -97,6 +98,9 @@ public class GlobalContentAccessPolicy {
             }
             return;
         }
+        // La edición transversal de contenido organizacional es exclusiva del
+        // Administrador global y se registra desde el adaptador del módulo.
+        if (tenant.globalAdministrator() && tenant.globalScope()) return;
         if (!tenant.hasOrganization() || !Objects.equals(ownerOrganizationId, tenant.organizationId())) {
             throw new BusinessException("CONTENT_NOT_FOUND", "El contenido solicitado no existe.");
         }

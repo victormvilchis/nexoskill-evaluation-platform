@@ -210,3 +210,106 @@
     flex-direction: column-reverse;
   }
 }
+
+/* Ciclo de vida y conteo de organizaciones */
+.org-data-table {
+  min-width: 1120px;
+}
+
+.org-data-table th:nth-child(1) { width: 24%; }
+.org-data-table th:nth-child(2) { width: 14%; }
+.org-data-table th:nth-child(3) { width: 10%; }
+.org-data-table th:nth-child(4) { width: 9%; }
+.org-data-table th:nth-child(5) { width: 13%; }
+.org-data-table th:nth-child(6) { width: 18%; }
+
+.org-student-count {
+  display: inline-flex;
+  min-width: 36px;
+  justify-content: center;
+  border: 1px solid #d9e3ef;
+  border-radius: 999px;
+  background: #f6f9fc;
+  padding: 5px 10px;
+  color: #243b53;
+}
+
+.org-management-page {
+  display: grid;
+  gap: 18px;
+}
+
+.org-management-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 22px;
+}
+
+.org-management-summary > div {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid #e6edf5;
+  padding-bottom: 12px;
+}
+
+.org-management-summary span,
+.clone-preview-summary span,
+.question-governance-detail-grid span {
+  color: #6b7c93;
+  font-size: .76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.org-management-wide { grid-column: 1 / -1; }
+
+.org-management-actions,
+.org-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.org-consequence-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  border: 1px solid #f0c7c2;
+  border-radius: 14px;
+  background: #fff9f8;
+  padding: 18px;
+}
+
+.org-consequence-panel h3,
+.org-consequence-panel p,
+.org-consequence-panel ul { margin: 0; }
+.org-consequence-panel ul { display: grid; gap: 6px; padding-left: 20px; color: #52657a; }
+.org-confirm-actions { justify-content: flex-end; }
+
+.org-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.org-history-list article {
+  border: 1px solid #dde6f0;
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 13px 15px;
+}
+
+.org-history-list article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.org-history-list time { color: #718096; font-size: .8rem; }
+.org-history-list p { margin: 7px 0 0; color: #607086; }
+
+@media (max-width: 700px) {
+  .org-management-summary { grid-template-columns: 1fr; }
+  .org-management-wide { grid-column: auto; }
+  .org-history-list article > div { align-items: flex-start; flex-direction: column; gap: 5px; }
+}

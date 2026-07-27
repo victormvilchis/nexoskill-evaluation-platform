@@ -14,6 +14,14 @@ export interface CatalogOption {
   description?: string
 }
 
+export interface QuestionTechnology {
+  publicId: string
+  code: string
+  name: string
+  status: 'ACTIVE' | 'INACTIVE'
+  displayOrder: number
+}
+
 export interface QuestionCategoryRef {
   publicId: string
   code: string
@@ -83,15 +91,35 @@ export interface QuestionAnswerSettings {
   maxLength?: number
 }
 
+export interface QuestionOwnership {
+  scope: ContentScope
+  organizationPublicId?: string
+  organizationCode?: string
+  organizationName?: string
+  creatorPublicId?: string
+  creatorName?: string
+  sourceOrganizationPublicId?: string
+  sourceOrganizationName?: string
+  sourceQuestionPublicId?: string
+  sourceQuestionVersion?: number
+  clonedToGlobal: boolean
+}
+
 export interface QuestionSummary {
   publicId: string
   statement: string
   typeCode: QuestionTypeCode
   typeName: string
+  difficultyCode?: string
+  difficultyName?: string
+  levelCode?: string
+  technology?: QuestionTechnology
   categories: QuestionCategoryRef[]
   status: QuestionStatus
   hasMedia: boolean
   hasCode: boolean
+  inUse: boolean
+  ownership: QuestionOwnership
   forms: QuestionUsageRef[]
   collections: QuestionUsageRef[]
   entityVersion: number
@@ -101,7 +129,6 @@ export interface QuestionSummary {
 
 export interface QuestionDetail extends QuestionSummary {
   explanation?: string
-  entityVersion: number
   promptMedia?: QuestionMedia
   codeLanguage?: 'JAVA'
   codeContent?: string
@@ -119,6 +146,8 @@ export interface QuestionPage {
 
 export interface QuestionCatalogs {
   types: CatalogOption[]
+  difficulties: CatalogOption[]
+  technologies: QuestionTechnology[]
   categories: QuestionCategory[]
 }
 
@@ -133,6 +162,9 @@ export interface QuestionOptionPayload {
 
 export interface QuestionPayload {
   typeCode: QuestionTypeCode
+  difficultyCode?: string
+  technologyPublicId?: string
+  levelCode?: string
   categoryPublicIds: string[]
   statement: string
   explanation?: string
@@ -154,6 +186,37 @@ export interface CreateQuestionCategoryPayload {
 
 export interface UpdateQuestionCategoryPayload extends CreateQuestionCategoryPayload {
   expectedEntityVersion: number
+}
+
+export interface CloneToGlobalPreview {
+  source: {
+    publicId: string
+    name: string
+    scope: ContentScope
+    ownerOrganizationName?: string
+    version: number
+  }
+  dependencies: Array<{
+    contentType: string
+    publicId: string
+    name: string
+    scope: ContentScope
+    globalEquivalentAvailable: boolean
+    globalEquivalentPublicId?: string
+  }>
+  possibleDuplicates: Array<{
+    publicId: string
+    name: string
+    version: number
+  }>
+  promotable: boolean
+  warnings: string[]
+}
+
+export interface CloneToGlobalResult {
+  promotionPublicId: string
+  sourceQuestionPublicId: string
+  globalQuestionPublicId: string
 }
 
 export type CollectionStatus = 'ACTIVE' | 'INACTIVE'

@@ -5,6 +5,9 @@ import type {
   CollectionPayload,
   CollectionStatus,
   CatalogStatus,
+  CloneToGlobalPreview,
+  CloneToGlobalResult,
+  ContentScope,
   CreateQuestionCategoryPayload,
   QuestionCatalogs,
   QuestionCategory,
@@ -98,6 +101,18 @@ export interface QuestionSearchParams {
   status?: QuestionStatus | ''
   typeCode?: string
   categoryPublicId?: string
+  scope?: ContentScope | ''
+  organizationPublicId?: string
+  technologyPublicId?: string
+  difficultyCode?: string
+  levelCode?: string
+  creatorPublicId?: string
+  createdFrom?: string
+  createdTo?: string
+  updatedFrom?: string
+  updatedTo?: string
+  clonedToGlobal?: boolean | ''
+  inUse?: boolean | ''
   page?: number
   size?: number
   signal?: AbortSignal
@@ -108,13 +123,23 @@ export function searchQuestions(params: QuestionSearchParams = {}) {
     page: String(params.page ?? 0),
     size: String(params.size ?? 20)
   })
-  if (params.query) query.set('query', params.query)
+  if (params.query?.trim()) query.set('query', params.query.trim())
   if (params.status === '') query.set('status', 'ALL')
   else if (params.status) query.set('status', params.status)
   if (params.typeCode) query.set('typeCode', params.typeCode)
-  if (params.categoryPublicId) {
-    query.set('categoryPublicId', params.categoryPublicId)
-  }
+  if (params.categoryPublicId) query.set('categoryPublicId', params.categoryPublicId)
+  if (params.scope) query.set('scope', params.scope)
+  if (params.organizationPublicId) query.set('organizationPublicId', params.organizationPublicId)
+  if (params.technologyPublicId) query.set('technologyPublicId', params.technologyPublicId)
+  if (params.difficultyCode) query.set('difficultyCode', params.difficultyCode)
+  if (params.levelCode) query.set('levelCode', params.levelCode)
+  if (params.creatorPublicId) query.set('creatorPublicId', params.creatorPublicId)
+  if (params.createdFrom) query.set('createdFrom', params.createdFrom)
+  if (params.createdTo) query.set('createdTo', params.createdTo)
+  if (params.updatedFrom) query.set('updatedFrom', params.updatedFrom)
+  if (params.updatedTo) query.set('updatedTo', params.updatedTo)
+  if (typeof params.clonedToGlobal === 'boolean') query.set('clonedToGlobal', String(params.clonedToGlobal))
+  if (typeof params.inUse === 'boolean') query.set('inUse', String(params.inUse))
 
   return apiRequest<QuestionPage>(`/admin/questions?${query}`, {
     signal: params.signal
@@ -135,6 +160,17 @@ export function createQuestion(payload: QuestionPayload) {
 export function updateQuestion(id: string, payload: UpdateQuestionPayload) {
   return apiRequest<QuestionDetail>(`/admin/questions/${id}`, {
     method: 'PUT',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function getQuestionClonePreview(id: string, signal?: AbortSignal) {
+  return apiRequest<CloneToGlobalPreview>(`/admin/questions/${id}/clone-to-global/preview`, { signal })
+}
+
+export function cloneQuestionToGlobal(id: string, payload: { includeDependencies: boolean; notes?: string }) {
+  return apiRequest<CloneToGlobalResult>(`/admin/questions/${id}/clone-to-global`, {
+    method: 'POST',
     body: JSON.stringify(payload)
   })
 }

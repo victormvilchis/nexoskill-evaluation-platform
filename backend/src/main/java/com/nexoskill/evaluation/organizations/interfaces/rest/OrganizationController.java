@@ -12,12 +12,14 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,7 +46,7 @@ public class OrganizationController {
                              @RequestParam(defaultValue = "0") int page,
                              @RequestParam(defaultValue = "20") int size) {
         OrganizationStatus parsedStatus = parseStatus(status);
-        Page<OrganizationJpaEntity> result = service.search(query, parsedStatus, page, size);
+        Page<OrganizationService.OrganizationListItem> result = service.search(query, parsedStatus, page, size);
         return new PageResponse(result.getContent().stream().map(this::summary).toList(),
                 result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
@@ -76,6 +78,44 @@ public class OrganizationController {
                 request.cycleEndsOn(), request.version(), request.appliesCertifications())));
     }
 
+    @PostMapping("/{publicId}/activate")
+    @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+    public OrganizationResponse activate(@PathVariable String publicId,
+                                         @RequestBody(required = false) ActionRequest request) {
+        return response(service.activate(publicId, request == null ? null : request.reason()));
+    }
+
+    @PostMapping("/{publicId}/deactivate")
+    @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+    public OrganizationResponse deactivate(@PathVariable String publicId,
+                                           @RequestBody(required = false) ActionRequest request) {
+        return response(service.deactivate(publicId, request == null ? null : request.reason()));
+    }
+
+    @DeleteMapping("/{publicId}")
+    @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+    public OrganizationResponse delete(@PathVariable String publicId,
+                                       @Valid @RequestBody ActionRequest request) {
+        return response(service.softDelete(publicId, request.reason()));
+    }
+
+    @PostMapping("/{publicId}/restore")
+    @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+    public OrganizationResponse restore(@PathVariable String publicId,
+                                        @RequestBody(required = false) ActionRequest request) {
+        return response(service.restore(publicId, request == null ? null : request.reason()));
+    }
+
+    @GetMapping("/{publicId}/status-history")
+    @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+    public List<StatusHistoryResponse> statusHistory(@PathVariable String publicId) {
+        return service.statusHistory(publicId).stream()
+                .map(row -> new StatusHistoryResponse(row.previousStatus(), row.newStatus(),
+                        row.reason(), row.changedBy(), row.changedAt()))
+                .toList();
+    }
+
+    /** Compatibilidad temporal para clientes anteriores, con reglas de transición del servicio. */
     @PostMapping("/{publicId}/status/{status}")
     @PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
     public OrganizationResponse changeStatus(@PathVariable String publicId,
@@ -93,10 +133,11 @@ public class OrganizationController {
         }
     }
 
-    private OrganizationSummary summary(OrganizationJpaEntity entity) {
+    private OrganizationSummary summary(OrganizationService.OrganizationListItem item) {
+        OrganizationJpaEntity entity = item.organization();
         return new OrganizationSummary(entity.getPublicId(), entity.getCode(), entity.getName(),
                 entity.getOrganizationType(), entity.getStatus(), entity.getContentMode(),
-                entity.isAppliesCertifications(), entity.getExpiresOn(), entity.getUpdatedAt());
+                entity.isAppliesCertifications(), item.studentCount(), entity.getExpiresOn(), entity.getUpdatedAt());
     }
 
     private OrganizationResponse response(OrganizationService.OrganizationAggregate aggregate) {
@@ -104,7 +145,8 @@ public class OrganizationController {
         OrganizationLicensePolicyJpaEntity policy = aggregate.policy();
         return new OrganizationResponse(organization.getPublicId(), organization.getCode(), organization.getName(),
                 organization.getOrganizationType(), organization.getStatus(), organization.getContentMode(),
-                organization.isAppliesCertifications(), organization.getValidFrom(), organization.getExpiresOn(),
+                organization.isAppliesCertifications(), aggregate.studentCount(),
+                organization.getValidFrom(), organization.getExpiresOn(),
                 policy == null ? null : policy.getContractedSeats(),
                 policy == null ? null : policy.getIncludedReplacements(),
                 policy == null ? null : policy.getAdditionalReplacements(),
@@ -112,77 +154,68 @@ public class OrganizationController {
                 policy == null ? null : policy.getExhaustedReleaseDays(),
                 policy == null ? null : policy.getCycleStartsOn(),
                 policy == null ? null : policy.getCycleEndsOn(),
+                organization.getStatusChangedAt(), organization.getStatusReason(),
                 organization.getCreatedAt(), organization.getUpdatedAt(), organization.getVersion());
     }
 
+    public record ActionRequest(@Size(max = 500, message = "El motivo no puede superar 500 caracteres.")
+                                String reason) { }
+
     public record CreateRequest(
             @NotBlank(message = "El nombre es obligatorio.")
-            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.")
-            String name,
+            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.") String name,
             @NotBlank(message = "El código es obligatorio.")
-            @Size(max = 80, message = "El código no puede superar 80 caracteres.")
-            String code,
-            @NotNull(message = "Selecciona una modalidad de contenido.")
-            ContentMode contentMode,
+            @Size(max = 80, message = "El código no puede superar 80 caracteres.") String code,
+            @NotNull(message = "Selecciona una modalidad de contenido.") ContentMode contentMode,
             Boolean appliesCertifications,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
-            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
-            Integer contractedSeats,
-            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.")
-            Integer includedReplacements,
-            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.")
-            Integer additionalReplacements,
-            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.")
-            Integer standardReleaseHours,
-            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.")
-            Integer exhaustedReleaseDays,
+            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.") Integer contractedSeats,
+            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.") Integer includedReplacements,
+            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.") Integer additionalReplacements,
+            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.") Integer standardReleaseHours,
+            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.") Integer exhaustedReleaseDays,
             LocalDate cycleStartsOn,
-            LocalDate cycleEndsOn) {}
+            LocalDate cycleEndsOn) { }
 
     public record UpdateRequest(
             @NotBlank(message = "El nombre es obligatorio.")
-            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.")
-            String name,
-            @NotNull(message = "Selecciona una modalidad de contenido.")
-            ContentMode contentMode,
+            @Size(max = 200, message = "El nombre no puede superar 200 caracteres.") String name,
+            @NotNull(message = "Selecciona una modalidad de contenido.") ContentMode contentMode,
             Boolean appliesCertifications,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
-            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.")
-            Integer contractedSeats,
+            @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.") Integer contractedSeats,
             @NotNull(message = "Las sustituciones incluidas son obligatorias.")
-            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.")
-            Integer includedReplacements,
+            @Min(value = 0, message = "Las sustituciones incluidas no pueden ser negativas.") Integer includedReplacements,
             @NotNull(message = "Las sustituciones adicionales son obligatorias.")
-            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.")
-            Integer additionalReplacements,
+            @Min(value = 0, message = "Las sustituciones adicionales no pueden ser negativas.") Integer additionalReplacements,
             @NotNull(message = "La liberación estándar es obligatoria.")
-            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.")
-            Integer standardReleaseHours,
+            @Min(value = 1, message = "La liberación estándar debe ser mayor a cero.") Integer standardReleaseHours,
             @NotNull(message = "El bloqueo antifraude es obligatorio.")
-            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.")
-            Integer exhaustedReleaseDays,
-            @NotNull(message = "El inicio de ciclo es obligatorio.")
-            LocalDate cycleStartsOn,
-            @NotNull(message = "El fin de ciclo es obligatorio.")
-            LocalDate cycleEndsOn,
-            @NotNull(message = "La versión de la organización es obligatoria.")
-            Long version) {}
+            @Min(value = 0, message = "El bloqueo antifraude no puede ser negativo.") Integer exhaustedReleaseDays,
+            @NotNull(message = "El inicio de ciclo es obligatorio.") LocalDate cycleStartsOn,
+            @NotNull(message = "El fin de ciclo es obligatorio.") LocalDate cycleEndsOn,
+            @NotNull(message = "La versión de la organización es obligatoria.") Long version) { }
 
     public record OrganizationSummary(String publicId, String code, String name, OrganizationType organizationType,
                                       OrganizationStatus status, ContentMode contentMode,
-                                      boolean appliesCertifications, LocalDate expiresOn,
-                                      java.time.Instant updatedAt) {}
+                                      boolean appliesCertifications, long studentCount,
+                                      LocalDate expiresOn, Instant updatedAt) { }
 
     public record OrganizationResponse(String publicId, String code, String name, OrganizationType organizationType,
                                        OrganizationStatus status, ContentMode contentMode,
-                                       boolean appliesCertifications, LocalDate validFrom,
-                                       LocalDate expiresOn, Integer contractedSeats, Integer includedReplacements,
+                                       boolean appliesCertifications, long studentCount,
+                                       LocalDate validFrom, LocalDate expiresOn,
+                                       Integer contractedSeats, Integer includedReplacements,
                                        Integer additionalReplacements, Integer standardReleaseHours,
                                        Integer exhaustedReleaseDays, LocalDate cycleStartsOn, LocalDate cycleEndsOn,
-                                       java.time.Instant createdAt, java.time.Instant updatedAt, Long version) {}
+                                       Instant statusChangedAt, String statusReason,
+                                       Instant createdAt, Instant updatedAt, Long version) { }
+
+    public record StatusHistoryResponse(OrganizationStatus previousStatus, OrganizationStatus newStatus,
+                                        String reason, Long changedBy, Instant changedAt) { }
 
     public record PageResponse(List<OrganizationSummary> content, int page, int size, long totalElements,
-                               int totalPages) {}
+                               int totalPages) { }
 }

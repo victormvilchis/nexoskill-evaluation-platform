@@ -2,6 +2,7 @@ import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getQuestion, updateQuestion } from '../features/questions/api/questionApi'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { QuestionEditor } from '../features/questions/components/QuestionEditor'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
@@ -12,6 +13,8 @@ import type { QuestionDetail, QuestionPayload } from '../shared/types/questions'
 export function EditQuestionPage() {
   const { publicId = '' } = useParams()
   const completeSave = useSaveNavigation('/admin/questions')
+  const { user } = useAuth()
+  const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [question, setQuestion] = useState<QuestionDetail>()
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
@@ -74,6 +77,15 @@ export function EditQuestionPage() {
           </p>
         </div>
       </div>
+      {globalAdministrator && question.ownership.scope === 'ORGANIZATION' && (
+        <section className="inline-warning-panel question-transversal-warning" role="status">
+          <Icon name="warning" size={20} />
+          <div>
+            <strong>Edición transversal de contenido organizacional</strong>
+            <p>Estás modificando contenido propiedad de {question.ownership.organizationName ?? 'una organización'}. Los cambios afectarán directamente su Banco de Preguntas y quedarán auditados.</p>
+          </div>
+        </section>
+      )}
       <QuestionEditor
         initial={question}
         onSubmit={save}

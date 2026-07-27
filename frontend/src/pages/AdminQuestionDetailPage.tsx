@@ -163,6 +163,18 @@ export function AdminQuestionDetailPage() {
           {question.categories.map((category) => <span className="category-chip" key={category.publicId}>{category.name}</span>)}
         </div>
 
+        <div className="question-governance-detail-grid">
+          <div><span>Alcance</span><strong>{question.ownership.scope}</strong></div>
+          <div><span>Organización propietaria</span><strong>{question.ownership.organizationName ?? 'Sin propietario'}</strong></div>
+          <div><span>Tecnología</span><strong>{question.technology?.name ?? 'Sin tecnología'}</strong></div>
+          <div><span>Dificultad</span><strong>{question.difficultyName ?? 'Sin dificultad'}</strong></div>
+          <div><span>Nivel</span><strong>{question.levelCode ?? 'Sin nivel'}</strong></div>
+          <div><span>Usuario creador</span><strong>{question.ownership.creatorName ?? 'Sin registro'}</strong></div>
+          {question.ownership.clonedToGlobal && (
+            <div className="question-governance-wide"><span>Origen organizacional</span><strong>{question.ownership.sourceOrganizationName ?? 'Sin registro'} · Versión {question.ownership.sourceQuestionVersion ?? '—'}</strong></div>
+          )}
+        </div>
+
         {question.options.length > 0 && question.typeCode !== 'MATCHING' && (
           <div className="answer-preview-list answer-preview-list-v2">
             {question.options.map((option) => (

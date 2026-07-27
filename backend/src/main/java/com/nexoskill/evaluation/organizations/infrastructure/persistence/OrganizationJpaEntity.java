@@ -60,6 +60,21 @@ public class OrganizationJpaEntity {
     @Column(name = "UPDATED_AT", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "STATUS_CHANGED_AT")
+    private Instant statusChangedAt;
+
+    @Column(name = "STATUS_CHANGED_BY")
+    private Long statusChangedBy;
+
+    @Column(name = "STATUS_REASON", length = 500)
+    private String statusReason;
+
+    @Column(name = "DELETED_AT")
+    private Instant deletedAt;
+
+    @Column(name = "DELETED_BY")
+    private Long deletedBy;
+
     @Version
     @Column(name = "VERSION_NO", nullable = false)
     private Long version;
@@ -89,6 +104,8 @@ public class OrganizationJpaEntity {
         entity.updatedBy = actorId;
         entity.createdAt = now;
         entity.updatedAt = now;
+        entity.statusChangedAt = now;
+        entity.statusChangedBy = actorId;
         // La versión debe permanecer nula en entidades nuevas para que Spring Data use persist, no merge.
         return entity;
     }
@@ -109,11 +126,35 @@ public class OrganizationJpaEntity {
         this.updatedAt = now;
     }
 
-    public void changeStatus(OrganizationStatus status, Long actorId, Instant now) {
+    public void transitionTo(OrganizationStatus nextStatus, String reason, Long actorId, Instant now) {
         ensureCustomerMutable();
-        this.status = status;
+        if (nextStatus == null) {
+            throw new IllegalArgumentException("El estado de la organización es obligatorio.");
+        }
+        this.status = nextStatus;
+        this.statusChangedAt = now;
+        this.statusChangedBy = actorId;
+        this.statusReason = normalizeReason(reason);
         this.updatedBy = actorId;
         this.updatedAt = now;
+        if (nextStatus == OrganizationStatus.DELETED) {
+            this.deletedAt = now;
+            this.deletedBy = actorId;
+        } else {
+            this.deletedAt = null;
+            this.deletedBy = null;
+        }
+    }
+
+    /** Compatibilidad con el endpoint anterior. Las reglas de transición viven en el servicio. */
+    public void changeStatus(OrganizationStatus status, Long actorId, Instant now) {
+        transitionTo(status, null, actorId, now);
+    }
+
+    private static String normalizeReason(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim();
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 500);
     }
 
     public void configureCertifications(boolean appliesCertifications, Long actorId, Instant now) {
@@ -152,5 +193,10 @@ public class OrganizationJpaEntity {
     public boolean isAppliesCertifications() { return appliesCertifications; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public Instant getStatusChangedAt() { return statusChangedAt; }
+    public Long getStatusChangedBy() { return statusChangedBy; }
+    public String getStatusReason() { return statusReason; }
+    public Instant getDeletedAt() { return deletedAt; }
+    public Long getDeletedBy() { return deletedBy; }
     public Long getVersion() { return version; }
 }

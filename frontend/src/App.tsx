@@ -18,15 +18,16 @@ import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { QuestionCategoriesPage } from './pages/QuestionCategoriesPage'
+import { QuestionTechnologiesPage } from './pages/QuestionTechnologiesPage'
 import { AdminOrganizationsPage } from './pages/AdminOrganizationsPage'
 import { OrganizationEditorPage } from './pages/OrganizationEditorPage'
+import { OrganizationManagementPage } from './pages/OrganizationManagementPage'
 import { AdminStudentsPage } from './pages/AdminStudentsPage'
 import { StudentEditorPage } from './pages/StudentEditorPage'
 import { StudentCertificationsPage } from './pages/StudentCertificationsPage'
 import { StudentLoginPage } from './pages/StudentLoginPage'
 import { StudentPortalPage } from './pages/StudentPortalPage'
 import { StudentChangePasswordPage } from './pages/StudentChangePasswordPage'
-import { GlobalContentGovernancePage } from './pages/GlobalContentGovernancePage'
 import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute'
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
@@ -73,6 +74,12 @@ export default function App() {
               element={<OrganizationEditorPage mode="edit" />}
             />
           </Route>
+          <Route element={<PermissionRoute permission="ORGANIZATION_STATUS_CHANGE" />}>
+            <Route
+              path="/admin/organizations/:publicId/manage"
+              element={<OrganizationManagementPage />}
+            />
+          </Route>
 
           <Route element={<PermissionRoute permission="USER_VIEW" />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
@@ -106,9 +113,6 @@ export default function App() {
           </Route>
 
 
-          <Route element={<PermissionRoute permission="GLOBAL_CONTENT_REVIEW" />}>
-            <Route path="/admin/global-content" element={<GlobalContentGovernancePage />} />
-          </Route>
 
           <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>
             <Route path="/admin/questions" element={<AdminQuestionsPage />} />
@@ -151,13 +155,11 @@ export default function App() {
             <Route path="/admin/forms/new" element={<FormBuilderPage />} />
           </Route>
 
-          <Route
-            element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}
-          >
-            <Route
-              path="/admin/question-categories"
-              element={<QuestionCategoriesPage />}
-            />
+          <Route element={<PermissionRoute permission="QUESTION_CATEGORY_MANAGE" />}>
+            <Route path="/admin/question-categories" element={<QuestionCategoriesPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>
+            <Route path="/admin/question-technologies" element={<QuestionTechnologiesPage />} />
           </Route>
         </Route>
       </Route>
