@@ -4,10 +4,15 @@ import com.nexoskill.evaluation.forms.infrastructure.FormJpaEntity;
 import com.nexoskill.evaluation.forms.infrastructure.FormRepository;
 import com.nexoskill.evaluation.globalcontent.application.service.ContentSynchronizationService;
 import com.nexoskill.evaluation.globalcontent.application.service.GlobalContentAccessPolicy;
+import com.nexoskill.evaluation.globalcontent.domain.model.DistributionMode;
+import com.nexoskill.evaluation.globalcontent.domain.model.EditorialStatus;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
+import com.nexoskill.evaluation.globalcontent.domain.model.GrantStatus;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
+import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import jakarta.servlet.http.HttpServletRequest;
 import java.text.Normalizer;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -16,6 +21,8 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +68,43 @@ public class FormService {
                 .map(form -> new FormModels.FormSummary(form.publicId, form.code, form.title, form.status,
                         form.modeCode, form.passingScore, 0, 0, form.startsAt, form.endsAt, form.version))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FormModels.FormSummary> list(
+            String query,
+            String requestedStatus,
+            String requestedMode,
+            Pageable pageable) {
+        String normalizedStatus = normalizeListStatus(requestedStatus);
+        String normalizedQuery = query == null || query.isBlank()
+                ? null
+                : "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
+        String normalizedMode = requestedMode == null || requestedMode.isBlank()
+                ? null
+                : requestedMode.trim().toUpperCase(Locale.ROOT);
+        if (normalizedMode != null && !Set.of("ASSESSMENT", "PRACTICE").contains(normalizedMode)) {
+            throw new IllegalArgumentException("FORM_MODE_INVALID");
+        }
+        var tenant = tenantContextResolver.resolve(request);
+        return repository.searchVisible(
+                        normalizedQuery,
+                        normalizedStatus,
+                        normalizedMode,
+                        tenant.globalScope(),
+                        tenant.organizationId(),
+                        accessPolicy.allowsAllGlobal(tenant),
+                        ContentScope.ORGANIZATION,
+                        ContentScope.GLOBAL,
+                        GlobalContentType.FORM,
+                        GrantStatus.ACTIVE,
+                        DistributionMode.GLOBAL_REFERENCE,
+                        EditorialStatus.PUBLISHED,
+                        Instant.now(),
+                        pageable)
+                .map(form -> new FormModels.FormSummary(
+                        form.publicId, form.code, form.title, form.status, form.modeCode,
+                        form.passingScore, 0, 0, form.startsAt, form.endsAt, form.version));
     }
 
     @Transactional(readOnly = true)

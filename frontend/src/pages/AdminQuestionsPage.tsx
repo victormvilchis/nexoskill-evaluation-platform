@@ -22,6 +22,8 @@ import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionButton, TableActionLink, TableActions } from '../shared/components/TableActions'
+import { TablePagination } from '../shared/components/TablePagination'
+import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type {
@@ -57,10 +59,6 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(value))
 }
 
-function parsePage(value: string | null) {
-  const parsed = Number(value ?? '0')
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
-}
 
 export function AdminQuestionsPage() {
   const { user } = useAuth()
@@ -78,6 +76,7 @@ export function AdminQuestionsPage() {
   const difficultyCode = searchParams.get('difficulty') ?? ''
   const creationYear = searchParams.get('year') ?? ''
   const page = parsePage(searchParams.get('page'))
+  const size = parsePageSize(searchParams.get('size'))
   const debouncedQuery = useDebouncedValue(query, 300)
 
   const [data, setData] = useState<QuestionPage>()
@@ -158,7 +157,7 @@ export function AdminQuestionsPage() {
       difficultyCode: difficultyCode || undefined,
       createdYear: creationYear ? Number(creationYear) : undefined,
       page,
-      size: 20,
+      size,
       signal: controller.signal
     })
       .then(setData)
@@ -174,7 +173,7 @@ export function AdminQuestionsPage() {
       })
     return () => controller.abort()
   }, [categoryPublicId, creationYear, debouncedQuery, difficultyCode, globalAdministrator,
-    organizationPublicId, page, reloadKey, status])
+    organizationPublicId, page, reloadKey, size, status])
 
   const questions = data?.content ?? []
   const hasFilters = Boolean(query || organizationPublicId || categoryPublicId || status !== 'ACTIVE' || difficultyCode || creationYear)
@@ -189,6 +188,15 @@ export function AdminQuestionsPage() {
       const next = new URLSearchParams(current)
       if (nextPage > 0) next.set('page', String(nextPage))
       else next.delete('page')
+      return next
+    }, { replace: true })
+  }
+  function setPageSize(nextSize: PageSize) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('page')
+      if (nextSize === 10) next.delete('size')
+      else next.set('size', String(nextSize))
       return next
     }, { replace: true })
   }
@@ -333,7 +341,7 @@ export function AdminQuestionsPage() {
             </tbody>
           </table>
         </div>
-        <div className="pagination-controls"><button className="secondary-button" disabled={loading || page === 0} type="button" onClick={() => setPage(Math.max(0, page - 1))}>Anterior</button><span>Página {(data?.page ?? 0) + 1} de {Math.max(data?.totalPages ?? 1, 1)}</span><button className="secondary-button" disabled={loading || !data || page + 1 >= data.totalPages} type="button" onClick={() => setPage(page + 1)}>Siguiente</button></div>
+        <TablePagination currentPage={data?.page ?? page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </section>
 
       <ConfirmDialog open={pendingAction !== null} title={dialogTitle} description={dialogDescription} confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Archivar' : 'Reactivar'} tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'} onCancel={() => setPendingAction(null)} onConfirm={() => void executePendingAction()} />

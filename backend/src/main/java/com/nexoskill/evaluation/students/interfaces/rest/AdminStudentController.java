@@ -4,6 +4,7 @@ import com.nexoskill.evaluation.authentication.infrastructure.security.Authentic
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import com.nexoskill.evaluation.students.application.StudentService;
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
@@ -45,7 +46,8 @@ public class AdminStudentController {
 	public StudentService.PageResult search(HttpServletRequest request, @RequestParam(required = false) String query,
 			@RequestParam(defaultValue = "ACTIVE") String status,
 			@RequestParam(defaultValue = "false") boolean includeDeleted, @RequestParam(defaultValue = "0") int page,
-			@RequestParam(defaultValue = "20") int size) {
+			@RequestParam(defaultValue = "10") int size) {
+		PaginationParameters.validate(page, size);
 		return service.search(tenant(request), query, parseStatus(status), includeDeleted, page, size);
 	}
 

@@ -6,19 +6,24 @@ import type {
   OrganizationStatus,
   OrganizationStatusHistory
 } from '../types/organizations'
+import type { SortDirection } from '../../../shared/types/pagination'
 
 export async function searchOrganizations(params: {
   query?: string
   status?: OrganizationStatus | 'ALL'
   page?: number
   size?: number
+  sort?: string
+  direction?: SortDirection
   signal?: AbortSignal
 }): Promise<OrganizationPage> {
   const search = new URLSearchParams()
   if (params.query?.trim()) search.set('query', params.query.trim())
   search.set('status', params.status ?? 'ACTIVE')
   search.set('page', String(params.page ?? 0))
-  search.set('size', String(params.size ?? 20))
+  search.set('size', String(params.size ?? 10))
+  search.set('sort', params.sort ?? 'createdAt')
+  search.set('direction', params.direction ?? 'DESC')
   return apiRequest<OrganizationPage>(`/admin/organizations?${search.toString()}`, {
     signal: params.signal
   })

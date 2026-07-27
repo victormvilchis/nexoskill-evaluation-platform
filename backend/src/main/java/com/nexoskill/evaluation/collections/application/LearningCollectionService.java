@@ -7,13 +7,18 @@ import com.nexoskill.evaluation.forms.infrastructure.FormJpaEntity;
 import com.nexoskill.evaluation.forms.infrastructure.FormRepository;
 import com.nexoskill.evaluation.globalcontent.application.service.ContentSynchronizationService;
 import com.nexoskill.evaluation.globalcontent.application.service.GlobalContentAccessPolicy;
+import com.nexoskill.evaluation.globalcontent.domain.model.DistributionMode;
+import com.nexoskill.evaluation.globalcontent.domain.model.EditorialStatus;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
+import com.nexoskill.evaluation.globalcontent.domain.model.GrantStatus;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
+import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.servlet.http.HttpServletRequest;
 import java.text.Normalizer;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,6 +28,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,28 +62,30 @@ public class LearningCollectionService {
         this.accessPolicy = accessPolicy;
         this.synchronization = synchronization;
         this.request = request;
-    }
-
-    @Transactional(readOnly = true)
-    public List<LearningCollectionModels.CollectionSummary> list(
+    }    @Transactional(readOnly = true)
+    public Page<LearningCollectionModels.CollectionSummary> list(
             String query,
-            String status) {
+            String status,
+            Pageable pageable) {
 
         String normalizedQuery = normalizeSearch(query);
         String normalizedStatus = normalizeOptionalStatus(status);
-
         var tenant = tenantContextResolver.resolve(request);
-        return collectionRepository.findAll().stream()
-                .filter(collection -> accessPolicy.canRead(GlobalContentType.COLLECTION, collection.id,
-                        collection.contentScope, collection.ownerOrganizationId, tenant))
-                .filter(collection -> normalizedStatus == null
-                        || normalizedStatus.equals(collection.status))
-                .filter(collection -> normalizedQuery == null
-                        || searchableText(collection).contains(normalizedQuery))
-                .sorted(Comparator.comparing(
-                        collection -> collection.name.toLowerCase(Locale.ROOT)))
-                .map(this::summary)
-                .toList();
+        return collectionRepository.searchVisible(
+                        normalizedQuery == null ? null : "%" + normalizedQuery + "%",
+                        normalizedStatus,
+                        tenant.globalScope(),
+                        tenant.organizationId(),
+                        accessPolicy.allowsAllGlobal(tenant),
+                        ContentScope.ORGANIZATION,
+                        ContentScope.GLOBAL,
+                        GlobalContentType.COLLECTION,
+                        GrantStatus.ACTIVE,
+                        DistributionMode.GLOBAL_REFERENCE,
+                        EditorialStatus.PUBLISHED,
+                        Instant.now(),
+                        pageable)
+                .map(this::summary);
     }
 
     @Transactional(readOnly = true)

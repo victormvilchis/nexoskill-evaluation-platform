@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   changeCatalogItemStatus,
   createCatalogItem,
@@ -24,6 +24,9 @@ import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionButton, TableActions } from '../shared/components/TableActions'
+import { TablePagination } from '../shared/components/TablePagination'
+import { useClientPagination } from '../shared/hooks/useClientPagination'
+import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 
@@ -56,6 +59,7 @@ export function CatalogItemsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const toast = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const type = params.type?.toUpperCase() as CatalogType
   const validType = catalogTypes.has(type)
   const mode = getDialogMode(location.pathname, params.id)
@@ -76,6 +80,8 @@ export function CatalogItemsPage() {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<CatalogPayload>({ code: '', name: '', description: '', displayOrder: 0 })
   const debouncedQuery = useDebouncedValue(query, 250)
+  const page = parsePage(searchParams.get('page'))
+  const size = parsePageSize(searchParams.get('size'))
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
   useEffect(() => {
@@ -191,6 +197,37 @@ export function CatalogItemsPage() {
     return items.filter((item) => `${item.code} ${item.name} ${item.description ?? ''} ${item.organizationName ?? ''}`
       .toLocaleLowerCase('es-MX').includes(term))
   }, [debouncedQuery, items])
+  const pageData = useClientPagination(filtered, page, size)
+
+  useEffect(() => {
+    if (pageData.page === page) return
+    const next = new URLSearchParams(searchParams)
+    if (pageData.page > 0) next.set('page', String(pageData.page))
+    else next.delete('page')
+    setSearchParams(next, { replace: true })
+  }, [page, pageData.page, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (!searchParams.has('page')) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    setSearchParams(next, { replace: true })
+  }, [debouncedQuery, organizationPublicId, searchParams, setSearchParams, status])
+
+  function setPage(nextPage: number) {
+    const next = new URLSearchParams(searchParams)
+    if (nextPage > 0) next.set('page', String(nextPage))
+    else next.delete('page')
+    setSearchParams(next)
+  }
+
+  function setPageSize(nextSize: PageSize) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    if (nextSize === 10) next.delete('size')
+    else next.set('size', String(nextSize))
+    setSearchParams(next)
+  }
 
   function openCreate() {
     navigate(`${listPath}/new`)
@@ -349,7 +386,7 @@ export function CatalogItemsPage() {
                   </td>
                 </tr>
               )}
-              {!loading && filtered.map((item) => (
+              {!loading && pageData.content.map((item) => (
                 <tr key={item.id}>
                   <td className="ns-primary-cell"><strong>{item.name}</strong><small>{item.description || 'Sin descripción'}</small></td>
                   <td><code>{item.code}</code></td>
@@ -367,10 +404,9 @@ export function CatalogItemsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </table>        </div>
+        <TablePagination currentPage={pageData.page} pageSize={pageData.size} totalElements={pageData.totalElements} totalPages={pageData.totalPages} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </section>
-
       {mode && (
         <div className="ns-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) close() }}>
           <section className="ns-resource-dialog catalog-dialog" role="dialog" aria-modal="true" aria-labelledby="catalog-dialog-title">

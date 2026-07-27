@@ -3,7 +3,11 @@ package com.nexoskill.evaluation.collections.interfaces.rest;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.collections.application.LearningCollectionModels;
 import com.nexoskill.evaluation.collections.application.LearningCollectionService;
+import com.nexoskill.evaluation.shared.interfaces.rest.PagedResponse;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import java.util.List;
+import java.util.Map;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,6 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/admin/collections")
 public class AdminLearningCollectionController {
 
+    private static final Map<String, String> ALLOWED_SORTS = Map.of(
+            "name", "name",
+            "code", "code",
+            "status", "status",
+            "createdAt", "createdAt",
+            "updatedAt", "updatedAt");
+
     private final LearningCollectionService service;
 
     public AdminLearningCollectionController(LearningCollectionService service) {
@@ -29,10 +40,16 @@ public class AdminLearningCollectionController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('COLLECTION_VIEW')")
-    public List<LearningCollectionModels.CollectionSummary> list(
+    public PagedResponse<LearningCollectionModels.CollectionSummary> list(
             @RequestParam(required = false) String query,
-            @RequestParam(defaultValue = "ACTIVE") String status) {
-        return service.list(query, status);
+            @RequestParam(defaultValue = "ACTIVE") String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "DESC") String direction) {
+        var pageable = PaginationParameters.of(page, size, sort, direction, ALLOWED_SORTS,
+                "updatedAt", Sort.Direction.DESC, "id");
+        return PagedResponse.from(service.list(query, status, pageable), item -> item);
     }
 
     @GetMapping("/form-options")
@@ -45,8 +62,7 @@ public class AdminLearningCollectionController {
 
     @GetMapping("/{publicId}")
     @PreAuthorize("hasAuthority('COLLECTION_VIEW')")
-    public LearningCollectionModels.CollectionDetail get(
-            @PathVariable String publicId) {
+    public LearningCollectionModels.CollectionDetail get(@PathVariable String publicId) {
         return service.get(publicId);
     }
 

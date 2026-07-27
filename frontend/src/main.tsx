@@ -17,6 +17,7 @@ import './styles/internal-users-auth-r1.css'
 import './styles/category-lifecycle-r1.css'
 import './styles/student-certifications-r1.css'
 import './styles/catalog-navigation-r2.css'
+import './styles/table-pagination-r1.css'
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 

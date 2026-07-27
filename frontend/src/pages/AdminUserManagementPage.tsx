@@ -18,6 +18,9 @@ import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
+import { TablePagination } from '../shared/components/TablePagination'
+import { useClientPagination } from '../shared/hooks/useClientPagination'
+import type { PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import type {
   AdminUser,
@@ -110,7 +113,12 @@ export function AdminUserManagementPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [busy, setBusy] = useState(false)
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
-
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historySize, setHistorySize] = useState<PageSize>(10)
+  const [sessionsPage, setSessionsPage] = useState(0)
+  const [sessionsSize, setSessionsSize] = useState<PageSize>(10)
+  const historyData = useClientPagination(history, historyPage, historySize)
+  const sessionsData = useClientPagination(sessions, sessionsPage, sessionsSize)
   const selfManagement = currentUser?.publicId === user?.publicId
   const activeSessionCount = useMemo(
     () => sessions.filter((session) => session.status === 'ACTIVE').length,
@@ -305,7 +313,7 @@ export function AdminUserManagementPage() {
             <thead><tr><th>Fecha</th><th>Estado anterior</th><th>Estado nuevo</th><th>Ejecutado por</th><th>Motivo</th></tr></thead>
             <tbody>
               {history.length === 0 && <tr><td colSpan={5} className="ns-table-empty">Sin cambios registrados.</td></tr>}
-              {history.map((item, index) => (
+              {historyData.content.map((item, index) => (
                 <tr key={`${item.occurredAt}-${index}`}>
                   <td>{formatDate(item.occurredAt)}</td>
                   <td>{item.previousStatus ? statusLabels[item.previousStatus] : 'Creación'}</td>
@@ -315,10 +323,9 @@ export function AdminUserManagementPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </table>        </div>
+        <TablePagination compact currentPage={historyData.page} pageSize={historyData.size} totalElements={historyData.totalElements} totalPages={historyData.totalPages} onPageChange={setHistoryPage} onPageSizeChange={(nextSize) => { setHistorySize(nextSize); setHistoryPage(0) }} />
       </section>
-
       <section className="ns-data-panel internal-user-sessions-panel">
         <header className="internal-panel-heading"><div><h2>Sesiones</h2><p className="muted">Sesiones normales y restringidas para cambio obligatorio de contraseña.</p></div></header>
         <div className="ns-data-table-wrap">
@@ -326,7 +333,7 @@ export function AdminUserManagementPage() {
             <thead><tr><th>Estado</th><th>Tipo</th><th>Inicio</th><th>Última actividad</th><th>Vencimiento</th><th>Dirección IP</th></tr></thead>
             <tbody>
               {sessions.length === 0 && <tr><td colSpan={6} className="ns-table-empty">Sin sesiones registradas.</td></tr>}
-              {sessions.map((session) => (
+              {sessionsData.content.map((session) => (
                 <tr key={session.publicId}>
                   <td><span className={`status-badge status-${session.status.toLowerCase()}`}>{sessionStatusLabel(session.status)}</span></td>
                   <td>{session.scope === 'PASSWORD_CHANGE' ? 'Cambio de contraseña' : 'Completa'}</td>
@@ -337,10 +344,9 @@ export function AdminUserManagementPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </table>        </div>
+        <TablePagination compact currentPage={sessionsData.page} pageSize={sessionsData.size} totalElements={sessionsData.totalElements} totalPages={sessionsData.totalPages} onPageChange={setSessionsPage} onPageSizeChange={(nextSize) => { setSessionsSize(nextSize); setSessionsPage(0) }} />
       </section>
-
       <ConfirmDialog
         open={Boolean(pending)}
         title={pendingCopy?.title ?? ''}

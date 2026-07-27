@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.users.interfaces.rest;
 
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import com.nexoskill.evaluation.users.application.model.*;
 import com.nexoskill.evaluation.users.application.service.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,7 +58,8 @@ public class AdminUserController {
     @PreAuthorize("hasAuthority('USER_VIEW')")
     public AdminUserPage search(@RequestParam(required = false) String query,
             @RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "10") int size) {
+        PaginationParameters.validate(page, size);
         return searchUsersService.search(query, status, page, size);
     }
 

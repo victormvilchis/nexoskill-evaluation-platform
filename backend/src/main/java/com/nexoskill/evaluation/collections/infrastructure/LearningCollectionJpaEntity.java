@@ -17,7 +17,7 @@ import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-
+import org.hibernate.annotations.BatchSize;
 @Entity
 @Table(name = "LEARNING_COLLECTION")
 public class LearningCollectionJpaEntity {
@@ -83,6 +83,7 @@ public class LearningCollectionJpaEntity {
 
     @OneToMany(mappedBy = "collection", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("levelOrder ASC")
+    @BatchSize(size = 100)
     public List<LearningCollectionLevelJpaEntity> levels = new ArrayList<>();
 
     public LearningCollectionJpaEntity() {

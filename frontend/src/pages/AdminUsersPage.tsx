@@ -8,6 +8,8 @@ import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionLink, TableActions } from '../shared/components/TableActions'
+import { TablePagination } from '../shared/components/TablePagination'
+import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { AdminUserPage, UserStatus } from '../shared/types/users'
@@ -68,46 +70,52 @@ export function AdminUsersPage() {
   const [data, setData] = useState<AdminUserPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query, 300)
-  const parsedPage = Number.parseInt(searchParams.get('page') ?? '0', 10)
-  const page = Number.isFinite(parsedPage) && parsedPage >= 0 ? parsedPage : 0
+  const page = parsePage(searchParams.get('page'))
+  const size = parsePageSize(searchParams.get('size'))
 
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
     const currentStatus = validStatus(searchParams.get('status'))
     if (currentQuery === debouncedQuery.trim() && currentStatus === status) return
 
-    const next = new URLSearchParams()
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
     if (debouncedQuery.trim()) next.set('query', debouncedQuery.trim())
-    next.set('status', status)
+    else next.delete('query')
+    if (status === 'ACTIVE') next.delete('status')
+    else next.set('status', status)
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, searchParams, setSearchParams, status])
-
   useEffect(() => {
-    let active = true
+    const controller = new AbortController()
     setLoading(true)
     setError(null)
-
     searchUsers({
       query: searchParams.get('query') ?? '',
       status: validStatus(searchParams.get('status')),
-      page
+      page,
+      size,
+      sort: searchParams.get('sort') ?? 'createdAt',
+      direction: searchParams.get('direction') === 'ASC' ? 'ASC' : 'DESC',
+      signal: controller.signal
     })
       .then((response) => {
-        if (active) setData(response)
+        setData(response)
+        if (response.totalPages > 0 && page >= response.totalPages) goToPage(response.totalPages - 1)
       })
       .catch((requestError) => {
-        if (!active) return
+        if (controller.signal.aborted) return
         setError(requestError instanceof ApiRequestError
           ? requestError.message
           : 'No fue posible consultar los usuarios internos.')
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       })
-
-    return () => { active = false }
-  }, [page, searchParams])
+    return () => controller.abort()
+  }, [page, reloadKey, searchParams, size])
 
   function clearFilters() {
     setQuery('')
@@ -116,7 +124,16 @@ export function AdminUsersPage() {
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
-    next.set('page', String(nextPage))
+    if (nextPage > 0) next.set('page', String(nextPage))
+    else next.delete('page')
+    setSearchParams(next)
+  }
+
+  function changePageSize(nextSize: PageSize) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    if (nextSize === 10) next.delete('size')
+    else next.set('size', String(nextSize))
     setSearchParams(next)
   }
 
@@ -165,7 +182,7 @@ export function AdminUsersPage() {
         </ResourceSelectField>
       </FilterToolbar>
 
-      {error && <div className="error-message" role="alert">{error}</div>}
+      {error && <section className="inline-error-panel" role="alert"><div className="inline-error-icon"><Icon name="error" size={20} /></div><div><strong>No fue posible cargar los usuarios</strong><p>{error}</p></div><button className="secondary-button" type="button" onClick={() => setReloadKey((value) => value + 1)}>Reintentar</button></section>}
 
       <section className="ns-data-panel" aria-busy={loading}>
         <div className="ns-data-table-wrap">
@@ -225,17 +242,15 @@ export function AdminUsersPage() {
           </table>
         </div>
 
-        {data && data.totalPages > 1 && (
-          <div className="pagination-bar">
-            <button className="secondary-button" disabled={page <= 0} onClick={() => goToPage(page - 1)}>
-              Anterior
-            </button>
-            <span>Página {page + 1} de {data.totalPages}</span>
-            <button className="secondary-button" disabled={page + 1 >= data.totalPages} onClick={() => goToPage(page + 1)}>
-              Siguiente
-            </button>
-          </div>
-        )}
+        <TablePagination
+          currentPage={data?.page ?? page}
+          pageSize={data?.size ?? size}
+          totalElements={data?.totalElements ?? 0}
+          totalPages={data?.totalPages ?? 0}
+          isLoading={loading}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </section>
 
       <ConfirmDialog

@@ -7,6 +7,7 @@ import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyJpaEntity;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -44,7 +45,8 @@ public class OrganizationController {
     public PageResponse list(@RequestParam(required = false) String query,
                              @RequestParam(defaultValue = "ACTIVE") String status,
                              @RequestParam(defaultValue = "0") int page,
-                             @RequestParam(defaultValue = "20") int size) {
+                             @RequestParam(defaultValue = "10") int size) {
+        PaginationParameters.validate(page, size);
         OrganizationStatus parsedStatus = parseStatus(status);
         Page<OrganizationService.OrganizationListItem> result = service.search(query, parsedStatus, page, size);
         return new PageResponse(result.getContent().stream().map(this::summary).toList(),

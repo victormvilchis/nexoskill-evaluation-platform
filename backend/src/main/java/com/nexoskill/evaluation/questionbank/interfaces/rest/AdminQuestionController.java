@@ -6,6 +6,7 @@ import com.nexoskill.evaluation.questionbank.application.service.QuestionService
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionFilterOptionsService;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -68,7 +69,8 @@ public class AdminQuestionController {
             @RequestParam(required = false) Boolean clonedToGlobal,
             @RequestParam(required = false) Boolean inUse,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "10") int size) {
+        PaginationParameters.validate(page, size);
         java.time.LocalDate effectiveCreatedFrom = createdFrom;
         java.time.LocalDate effectiveCreatedTo = createdTo;
         if (createdYear != null) {

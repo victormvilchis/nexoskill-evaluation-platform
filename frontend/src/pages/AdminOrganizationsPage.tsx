@@ -14,6 +14,8 @@ import {
   ResourceSelectField
 } from '../shared/components/ResourceFilters'
 import { TableActionLink, TableActions } from '../shared/components/TableActions'
+import { TablePagination } from '../shared/components/TablePagination'
+import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 
@@ -49,10 +51,6 @@ function statusFromQuery(value: string | null): OrganizationStatus | 'ALL' {
     : 'ACTIVE'
 }
 
-function pageFromQuery(value: string | null) {
-  const parsed = Number.parseInt(value ?? '0', 10)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
-}
 
 function formatDate(value?: string) {
   if (!value) return 'Sin vencimiento'
@@ -86,7 +84,8 @@ export function AdminOrganizationsPage() {
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query, 300)
-  const page = pageFromQuery(searchParams.get('page'))
+  const page = parsePage(searchParams.get('page'))
+  const size = parsePageSize(searchParams.get('size'))
 
   useEffect(() => {
     const success = searchParams.get('success')
@@ -127,6 +126,9 @@ export function AdminOrganizationsPage() {
       query: searchParams.get('query') ?? '',
       status: statusFromQuery(searchParams.get('status')),
       page,
+      size,
+      sort: searchParams.get('sort') ?? 'createdAt',
+      direction: searchParams.get('direction') === 'ASC' ? 'ASC' : 'DESC',
       signal: controller.signal
     })
       .then(setData)
@@ -140,7 +142,7 @@ export function AdminOrganizationsPage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [page, reloadKey, searchParams])
+  }, [page, reloadKey, searchParams, size])
 
   const activeFilters = Boolean(query.trim()) || status !== 'ACTIVE'
 
@@ -151,7 +153,16 @@ export function AdminOrganizationsPage() {
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
-    next.set('page', String(nextPage))
+    if (nextPage > 0) next.set('page', String(nextPage))
+    else next.delete('page')
+    setSearchParams(next)
+  }
+
+  function changePageSize(nextSize: PageSize) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    if (nextSize === 10) next.delete('size')
+    else next.set('size', String(nextSize))
     setSearchParams(next)
   }
 
@@ -239,11 +250,15 @@ export function AdminOrganizationsPage() {
           </table>
         </div>
 
-        <div className="pagination-controls">
-          <button className="secondary-button" type="button" disabled={!data || data.page <= 0 || loading} onClick={() => goToPage(page - 1)}>Anterior</button>
-          <span>Página {(data?.page ?? 0) + 1} de {Math.max(data?.totalPages ?? 1, 1)}</span>
-          <button className="secondary-button" type="button" disabled={!data || data.page + 1 >= data.totalPages || loading} onClick={() => goToPage(page + 1)}>Siguiente</button>
-        </div>
+        <TablePagination
+          currentPage={data?.page ?? page}
+          pageSize={data?.size ?? size}
+          totalElements={data?.totalElements ?? 0}
+          totalPages={data?.totalPages ?? 0}
+          isLoading={loading}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
       </section>
     </main>
   )

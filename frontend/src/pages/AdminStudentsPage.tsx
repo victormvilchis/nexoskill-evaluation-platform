@@ -17,6 +17,8 @@ import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionButton, TableActionLink, TableActions } from '../shared/components/TableActions'
+import { TablePagination } from '../shared/components/TablePagination'
+import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
@@ -77,8 +79,9 @@ export function AdminStudentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [busy, setBusy] = useState(false)
-  const parsedPage = Number.parseInt(searchParams.get('page') ?? '0', 10)
-  const page = Number.isFinite(parsedPage) && parsedPage >= 0 ? parsedPage : 0
+  const [reloadKey, setReloadKey] = useState(0)
+  const page = parsePage(searchParams.get('page'))
+  const size = parsePageSize(searchParams.get('size'))
   const debouncedQuery = useDebouncedValue(query, 300)
 
   useEffect(() => {
@@ -101,12 +104,15 @@ export function AdminStudentsPage() {
 
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
-    const currentStatus = searchParams.get('status') ?? ''
+    const currentStatus = statusFromQuery(searchParams.get('status'))
     const currentDeleted = searchParams.get('deleted') === '1'
     if (currentQuery === debouncedQuery.trim() && currentStatus === status && currentDeleted === includeDeleted) return
-    const next = new URLSearchParams()
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
     if (debouncedQuery.trim()) next.set('query', debouncedQuery.trim())
-    next.set('status', status)
+    else next.delete('query')
+    if (status === 'ACTIVE') next.delete('status')
+    else next.set('status', status)
     if (includeDeleted) next.set('deleted', '1')
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, includeDeleted, searchParams, setSearchParams, status])
@@ -139,15 +145,20 @@ export function AdminStudentsPage() {
       query: searchParams.get('query') ?? '',
       status: statusFromQuery(searchParams.get('status')),
       includeDeleted: searchParams.get('deleted') === '1',
-      page
+      page,
+      size,
+      sort: searchParams.get('sort') ?? 'createdAt',
+      direction: searchParams.get('direction') === 'ASC' ? 'ASC' : 'DESC'
     }).then((response) => {
-      if (active) setData({ ...response, content: response.content ?? [] })
+      if (!active) return
+      setData({ ...response, content: response.content ?? [] })
+      if (response.totalPages > 0 && page >= response.totalPages) goToPage(response.totalPages - 1)
     })
       .catch((requestError) => {
         if (active) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar estudiantes.')
       }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [administrator, page, searchParams, selectedOrganization])
+  }, [administrator, page, reloadKey, searchParams, selectedOrganization, size])
 
   async function executeAction() {
     if (!pending) return
@@ -158,10 +169,7 @@ export function AdminStudentsPage() {
           : pending.action === 'SUSPEND' ? await suspendStudent(pending.student.publicId)
             : pending.action === 'ARCHIVE' ? await archiveStudent(pending.student.publicId)
               : await restoreStudent(pending.student.publicId)
-      setData((current) => current ? {
-        ...current,
-        content: current.content.map((item) => item.publicId === updated.publicId ? updated : item)
-      } : current)
+      setReloadKey((value) => value + 1)
       toast.success('Estado actualizado', `${updated.displayName} quedó como ${statusLabels[updated.effectiveStatus].toLowerCase()}.`)
       setPending(null)
     } catch (requestError) {
@@ -177,7 +185,16 @@ export function AdminStudentsPage() {
 
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
-    next.set('page', String(nextPage))
+    if (nextPage > 0) next.set('page', String(nextPage))
+    else next.delete('page')
+    setSearchParams(next)
+  }
+
+  function changePageSize(nextSize: PageSize) {
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    if (nextSize === 10) next.delete('size')
+    else next.set('size', String(nextSize))
     setSearchParams(next)
   }
 
@@ -294,13 +311,15 @@ export function AdminStudentsPage() {
                 </tbody>
               </table>
             </div>
-            {data && data.totalPages > 1 && (
-              <div className="pagination-bar">
-                <button className="secondary-button" disabled={page <= 0} onClick={() => goToPage(page - 1)}>Anterior</button>
-                <span>Página {page + 1} de {data.totalPages}</span>
-                <button className="secondary-button" disabled={page + 1 >= data.totalPages} onClick={() => goToPage(page + 1)}>Siguiente</button>
-              </div>
-            )}
+            <TablePagination
+              currentPage={data?.page ?? page}
+              pageSize={data?.size ?? size}
+              totalElements={data?.totalElements ?? 0}
+              totalPages={data?.totalPages ?? 0}
+              isLoading={loading}
+              onPageChange={goToPage}
+              onPageSizeChange={changePageSize}
+            />
           </section>
         </>
       )}

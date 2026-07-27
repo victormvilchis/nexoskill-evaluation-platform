@@ -20,6 +20,9 @@ import { ApiRequestError, ORGANIZATION_CONTEXT_KEY } from '../shared/api/apiClie
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
+import { TablePagination } from '../shared/components/TablePagination'
+import { useClientPagination } from '../shared/hooks/useClientPagination'
+import type { PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { StudentDetail, StudentSession, StudentStatus } from '../shared/types/students'
@@ -66,6 +69,9 @@ export function StudentEditorPage({ mode }: Props) {
   const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('INACTIVE')
   const [validFrom, setValidFrom] = useState(toLocalInput(new Date().toISOString()))
   const [expiresAt, setExpiresAt] = useState('')
+  const [sessionsPage, setSessionsPage] = useState(0)
+  const [sessionsSize, setSessionsSize] = useState<PageSize>(10)
+  const sessionsData = useClientPagination(sessions, sessionsPage, sessionsSize)
   const readOnly = mode === 'view'
 
   useEffect(() => {
@@ -256,8 +262,9 @@ export function StudentEditorPage({ mode }: Props) {
               <div className="section-heading"><div><h2>Sesiones</h2><p>Solo puede existir una sesión activa por estudiante.</p></div>{sessions.some((session) => session.status === 'ACTIVE') && <button className="danger-button" onClick={() => setPendingAction('REVOKE_ALL')}>Revocar sesión activa</button>}</div>
               <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Estado</th><th>Inicio</th><th>Vencimiento</th><th>Dirección IP</th><th>Dispositivo</th><th>Acción</th></tr></thead><tbody>
                 {sessions.length === 0 && <tr><td colSpan={6} className="ns-table-empty">No hay sesiones registradas.</td></tr>}
-                {sessions.map((session) => <tr key={session.publicId}><td><span className={`status-badge status-${session.status.toLowerCase()}`}>{session.status}</span></td><td>{formatDate(session.createdAt)}</td><td>{formatDate(session.expiresAt)}</td><td>{session.ipAddress ?? '—'}</td><td className="student-user-agent">{session.userAgent ?? '—'}</td><td>{session.status === 'ACTIVE' ? <button className="danger-button compact-button" disabled={busySession === session.publicId} onClick={() => void handleRevokeSession(session.publicId)}>Revocar</button> : session.revocationReason ?? '—'}</td></tr>)}
+                {sessionsData.content.map((session) => <tr key={session.publicId}><td><span className={`status-badge status-${session.status.toLowerCase()}`}>{session.status}</span></td><td>{formatDate(session.createdAt)}</td><td>{formatDate(session.expiresAt)}</td><td>{session.ipAddress ?? '—'}</td><td className="student-user-agent">{session.userAgent ?? '—'}</td><td>{session.status === 'ACTIVE' ? <button className="danger-button compact-button" disabled={busySession === session.publicId} onClick={() => void handleRevokeSession(session.publicId)}>Revocar</button> : session.revocationReason ?? '—'}</td></tr>)}
               </tbody></table></div>
+              <TablePagination compact currentPage={sessionsData.page} pageSize={sessionsData.size} totalElements={sessionsData.totalElements} totalPages={sessionsData.totalPages} onPageChange={setSessionsPage} onPageSizeChange={(nextSize) => { setSessionsSize(nextSize); setSessionsPage(0) }} />
             </section>
           )}
         </>

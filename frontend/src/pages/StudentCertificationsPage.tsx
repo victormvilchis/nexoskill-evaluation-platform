@@ -7,6 +7,9 @@ import {
 } from '../features/certifications/api/certificationApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
+import { TablePagination } from '../shared/components/TablePagination'
+import { useClientPagination } from '../shared/hooks/useClientPagination'
+import type { PageSize } from '../shared/types/pagination'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type {
   CertificationAttemptPayload,
@@ -103,7 +106,9 @@ export function StudentCertificationsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-
+  const [attemptsPage, setAttemptsPage] = useState(0)
+  const [attemptsSize, setAttemptsSize] = useState<PageSize>(10)
+  const attemptsData = useClientPagination(detail?.attempts ?? [], attemptsPage, attemptsSize)
   useEffect(() => {
     if (!publicId) return
     let active = true
@@ -440,7 +445,7 @@ export function StudentCertificationsPage() {
                 <thead><tr><th>Certificación</th><th>Intento</th><th>Aplicación</th><th>Estado</th><th>Promedio</th></tr></thead>
                 <tbody>
                   {detail?.attempts.length === 0 && <tr><td colSpan={5} className="ns-table-empty">Todavía no existen intentos registrados.</td></tr>}
-                  {detail?.attempts.map((attempt) => (
+                  {attemptsData.content.map((attempt) => (
                     <tr key={attempt.publicId}>
                       <td>{TYPE_LABELS[attempt.type]}</td>
                       <td>{attempt.attemptNumber}</td>
@@ -450,10 +455,9 @@ export function StudentCertificationsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </table>            </div>
+            <TablePagination compact currentPage={attemptsData.page} pageSize={attemptsData.size} totalElements={attemptsData.totalElements} totalPages={attemptsData.totalPages} onPageChange={setAttemptsPage} onPageSizeChange={(nextSize) => { setAttemptsSize(nextSize); setAttemptsPage(0) }} />
           </section>
-
           <section className="ns-card">
             <div className="ns-card-heading"><div><h2>Historial de cambios</h2></div></div>
             <div className="certification-history">
