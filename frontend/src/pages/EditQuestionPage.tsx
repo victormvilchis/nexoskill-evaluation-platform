@@ -2,8 +2,9 @@ import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getQuestion, updateQuestion } from '../features/questions/api/questionApi'
+import { updateQuestionAvailability, type QuestionAvailability } from '../features/questions/api/questionAvailabilityApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
-import { QuestionEditor } from '../features/questions/components/QuestionEditor'
+import { QuestionEditorV2 } from '../features/questions/components/QuestionEditorV2'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
@@ -18,79 +19,33 @@ export function EditQuestionPage() {
   const [question, setQuestion] = useState<QuestionDetail>()
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
-
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
-
   useEffect(() => {
     const controller = new AbortController()
     setError(undefined)
-
-    getQuestion(publicId, controller.signal)
-      .then(setQuestion)
-      .catch((requestError: unknown) => {
-        if (controller.signal.aborted) return
-        setError(
-          requestError instanceof ApiRequestError
-            ? requestError.message
-            : 'No fue posible consultar la pregunta.'
-        )
-      })
-
+    getQuestion(publicId, controller.signal).then(setQuestion).catch((requestError: unknown) => {
+      if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar la pregunta.')
+    })
     return () => controller.abort()
   }, [publicId, reloadKey])
-
-  if (error && !question) {
-    return (
-      <main className="content-page">
-      <BackButton fallback="/admin/questions" />
-        <section className="inline-error-panel" role="alert">
-          <div className="inline-error-icon"><Icon name="error" /></div>
-          <div>
-            <strong>No fue posible cargar la pregunta</strong>
-            <p>{error}</p>
-          </div>
-          <button className="secondary-button" onClick={reload}>Reintentar</button>
-        </section>
-      </main>
-    )
-  }
-
+  if (error && !question) return <main className="content-page"><BackButton fallback="/admin/questions" /><section className="inline-error-panel" role="alert"><div className="inline-error-icon"><Icon name="error" /></div><div><strong>No fue posible cargar la pregunta</strong><p>{error}</p></div><button className="secondary-button" onClick={reload}>Reintentar</button></section></main>
   if (!question) return <LoadingScreen />
-
-  async function save(payload: QuestionPayload) {
-    await updateQuestion(publicId, {
-      ...payload,
-      expectedEntityVersion: question!.entityVersion
-    })
+  async function save(payload: QuestionPayload, availability?: QuestionAvailability) {
+    await updateQuestion(publicId, { ...payload, expectedEntityVersion: question!.entityVersion })
+    if (globalAdministrator && question!.ownership.scope === 'GLOBAL' && availability) {
+      await updateQuestionAvailability(publicId, {
+        mode: availability.mode,
+        organizationPublicIds: availability.organizations.map((organization) => organization.publicId)
+      })
+    }
     completeSave({ title: 'Pregunta actualizada correctamente.' })
   }
-
   return (
     <main className="content-page editor-page">
       <BackButton fallback="/admin/questions" />
-      <div className="page-heading compact resource-heading">
-        <div>
-          <p className="eyebrow">Banco de preguntas</p>
-          <h1>Editar pregunta</h1>
-          <p className="muted">
-            Los cambios se reflejarán en las colecciones y formularios que la utilicen.
-          </p>
-        </div>
-      </div>
-      {globalAdministrator && question.ownership.scope === 'ORGANIZATION' && (
-        <section className="inline-warning-panel question-transversal-warning" role="status">
-          <Icon name="warning" size={20} />
-          <div>
-            <strong>Edición transversal de contenido organizacional</strong>
-            <p>Estás modificando contenido propiedad de {question.ownership.organizationName ?? 'una organización'}. Los cambios afectarán directamente su Banco de Preguntas y quedarán auditados.</p>
-          </div>
-        </section>
-      )}
-      <QuestionEditor
-        initial={question}
-        onSubmit={save}
-        submitLabel="Guardar cambios"
-      />
+      <div className="page-heading compact resource-heading"><div><p className="eyebrow">Banco de preguntas</p><h1>Editar pregunta</h1><p className="muted">Los cambios se reflejarán en los recursos que utilicen esta pregunta.</p></div></div>
+      {globalAdministrator && question.ownership.scope === 'ORGANIZATION' && <section className="inline-warning-panel question-transversal-warning" role="status"><Icon name="warning" size={20} /><div><strong>Contenido propiedad de una organización</strong><p>La disponibilidad transversal solo puede modificarse en preguntas propiedad de GLOBAL.</p></div></section>}
+      <QuestionEditorV2 initial={question} globalAdministrator={globalAdministrator && question.ownership.scope === 'GLOBAL'} onSubmit={save} submitLabel="Guardar cambios" />
     </main>
   )
 }

@@ -19,7 +19,7 @@ import './styles/student-certifications-r1.css'
 import './styles/catalog-navigation-r2.css'
 import './styles/table-pagination-r1.css'
 import './styles/question-tags-r1.css'
-
+import './styles/platform-foundation-r1.css'
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 createRoot(document.getElementById('root')!).render(

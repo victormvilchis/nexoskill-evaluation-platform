@@ -15,14 +15,13 @@ import com.nexoskill.evaluation.organizations.infrastructure.persistence.Organiz
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Centraliza las reglas de lectura y edición del contenido GLOBAL y ORGANIZATION.
- * Los módulos operativos no deben inferir acceso únicamente a partir de un ID
- * recibido desde el frontend.
- */
+/** Centraliza las reglas de lectura y edición de contenido GLOBAL y ORGANIZATION. */
 @Component
 public class GlobalContentAccessPolicy {
     private final OrganizationRepository organizations;
@@ -30,48 +29,75 @@ public class GlobalContentAccessPolicy {
     private final ContentReplicationLinkRepository replicationLinks;
     private final GlobalContentVersionRepository versions;
     private final Clock clock;
+    private final NamedParameterJdbcTemplate jdbc;
 
+    /** Constructor conservado para pruebas unitarias existentes. */
     public GlobalContentAccessPolicy(OrganizationRepository organizations,
             OrganizationGlobalContentGrantRepository grants,
             ContentReplicationLinkRepository replicationLinks,
             GlobalContentVersionRepository versions,
             Clock clock) {
+        this(organizations, grants, replicationLinks, versions, clock, null);
+    }
+
+    @Autowired
+    public GlobalContentAccessPolicy(OrganizationRepository organizations,
+            OrganizationGlobalContentGrantRepository grants,
+            ContentReplicationLinkRepository replicationLinks,
+            GlobalContentVersionRepository versions,
+            Clock clock,
+            NamedParameterJdbcTemplate jdbc) {
         this.organizations = organizations;
         this.grants = grants;
         this.replicationLinks = replicationLinks;
         this.versions = versions;
         this.clock = clock;
+        this.jdbc = jdbc;
     }
 
     public boolean canRead(GlobalContentType type, Long internalId, ContentScope scope,
             Long ownerOrganizationId, TenantContext tenant) {
         if (tenant == null || scope == null || internalId == null) return false;
-
-        if (tenant.globalScope()) {
-            // El Administrador global opera el Banco de Preguntas como centro transversal.
-            // La lectura de contenido organizacional sigue siendo explícita y auditada,
-            // pero ya no depende de un módulo paralelo de “Gobierno global”.
-            return tenant.globalAdministrator();
-        }
-
+        if (tenant.globalScope()) return tenant.globalAdministrator();
         if (!tenant.hasOrganization()) return false;
         if (scope == ContentScope.ORGANIZATION) {
             return Objects.equals(ownerOrganizationId, tenant.organizationId());
         }
-
+        if (type == GlobalContentType.QUESTION && questionAvailabilityAllows(internalId, tenant.organizationId())) {
+            return isPublishedOrLegacy(type, internalId);
+        }
         OrganizationJpaEntity organization = organizations.findById(tenant.organizationId()).orElse(null);
         if (organization == null || organization.isGlobal()) return false;
         if (!isPublishedOrLegacy(type, internalId)) return false;
         if (organization.getContentMode() == ContentMode.GLOBAL_CATALOG) return true;
-
-        // CLEAN y CUSTOM no exponen el catálogo maestro completo, pero sí deben
-        // respetar habilitaciones explícitas otorgadas por el Administrador global.
         Instant now = clock.instant();
         return grants.findAllByOrganizationIdAndContentTypeAndGlobalContentIdAndStatus(
                         tenant.organizationId(), type, internalId, GrantStatus.ACTIVE)
                 .stream()
                 .anyMatch(grant -> grant.getDistributionMode() == DistributionMode.GLOBAL_REFERENCE
                         && grant.isOperational(now));
+    }
+
+    private boolean questionAvailabilityAllows(Long questionId, Long organizationId) {
+        if (jdbc == null || organizationId == null) return false;
+        Integer count = jdbc.queryForObject("""
+            SELECT COUNT(*)
+              FROM QUESTION q
+             WHERE q.QUESTION_ID = :questionId
+               AND q.CONTENT_SCOPE = 'GLOBAL'
+               AND q.STATUS <> 'DELETED'
+               AND (
+                    NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_ORGANIZATION_AVAILABILITY availability
+                         WHERE availability.QUESTION_ID = q.QUESTION_ID
+                           AND availability.ORGANIZATION_ID = :organizationId
+                           AND availability.STATUS = 'ACTIVE'
+                    )
+               )
+            """, Map.of("questionId", questionId, "organizationId", organizationId), Integer.class);
+        return count != null && count > 0;
     }
 
     private boolean isPublishedOrLegacy(GlobalContentType type, Long internalId) {
@@ -83,8 +109,6 @@ public class GlobalContentAccessPolicy {
     public void assertReadable(GlobalContentType type, Long internalId, ContentScope scope,
             Long ownerOrganizationId, TenantContext tenant, String notFoundCode, String notFoundMessage) {
         if (!canRead(type, internalId, scope, ownerOrganizationId, tenant)) {
-            // Se responde como recurso inexistente para no revelar contenido privado
-            // de otra organización.
             throw new BusinessException(notFoundCode, notFoundMessage);
         }
     }
@@ -98,14 +122,11 @@ public class GlobalContentAccessPolicy {
             }
             return;
         }
-        // La edición transversal de contenido organizacional es exclusiva del
-        // Administrador global y se registra desde el adaptador del módulo.
         if (tenant.globalAdministrator() && tenant.globalScope()) return;
         if (!tenant.hasOrganization() || !Objects.equals(ownerOrganizationId, tenant.organizationId())) {
             throw new BusinessException("CONTENT_NOT_FOUND", "El contenido solicitado no existe.");
         }
         if (sourceGlobalId == null) return;
-
         var link = replicationLinks.findByOrganizationIdAndContentTypeAndTargetContentId(
                 tenant.organizationId(), type, internalId).orElse(null);
         if (link == null) {

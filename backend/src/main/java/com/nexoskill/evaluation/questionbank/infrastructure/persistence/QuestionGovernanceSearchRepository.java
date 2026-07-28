@@ -7,8 +7,6 @@ import com.nexoskill.evaluation.questionbank.application.service.QuestionTagNorm
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -26,12 +24,10 @@ public class QuestionGovernanceSearchRepository {
     public SearchPage search(QuestionSearchFilter filter, TenantContext tenant, int page, int size) {
         boolean globalAdministrator = tenant != null && tenant.globalAdministrator();
         ContentScope effectiveScope = filter.scope();
-
         StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
         MapSqlParameterSource params = new MapSqlParameterSource();
         addTenant(where, params, tenant, globalAdministrator);
         addFilters(where, params, filter, effectiveScope);
-
         String from = """
              FROM QUESTION q
              JOIN ORGANIZATION owner_org ON owner_org.ORGANIZATION_ID = q.OWNER_ORGANIZATION_ID
@@ -57,14 +53,12 @@ public class QuestionGovernanceSearchRepository {
         String order = " ORDER BY NVL(q.UPDATED_AT, q.CREATED_AT) DESC, q.QUESTION_ID DESC ";
         params.addValue("offsetRows", page * size);
         params.addValue("pageSize", size);
-
         List<SearchRow> rows = jdbc.query(select + from + where + order
                         + " OFFSET :offsetRows ROWS FETCH NEXT :pageSize ROWS ONLY ",
                 params, this::mapRow);
         Long total = jdbc.queryForObject("SELECT COUNT(*) " + from + where, params, Long.class);
         return new SearchPage(rows, total == null ? 0 : total);
     }
-
 
     public List<Integer> creationYears(TenantContext tenant) {
         boolean globalAdministrator = tenant != null && tenant.globalAdministrator();
@@ -101,7 +95,7 @@ public class QuestionGovernanceSearchRepository {
              WHERE q.QUESTION_ID = :questionId
             """;
         List<SearchRow> rows = jdbc.query(sql, Map.of("questionId", questionId), this::mapRow);
-        return rows.isEmpty() ? SearchRow.empty(questionId) : rows.get(0);
+        return rows.isEmpty() ? SearchRow.empty(questionId) : rows.getFirst();
     }
 
     private void addTenant(StringBuilder where, MapSqlParameterSource params,
@@ -111,7 +105,25 @@ public class QuestionGovernanceSearchRepository {
             where.append(" AND 1 = 0 ");
             return;
         }
-        where.append(" AND q.CONTENT_SCOPE = 'ORGANIZATION' AND q.OWNER_ORGANIZATION_ID = :tenantOrganizationId ");
+        where.append("""
+            AND (
+                (q.CONTENT_SCOPE = 'ORGANIZATION'
+                    AND q.OWNER_ORGANIZATION_ID = :tenantOrganizationId)
+                OR (
+                    q.CONTENT_SCOPE = 'GLOBAL'
+                    AND (
+                        NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
+                        OR EXISTS (
+                            SELECT 1
+                              FROM QUESTION_ORGANIZATION_AVAILABILITY availability
+                             WHERE availability.QUESTION_ID = q.QUESTION_ID
+                               AND availability.ORGANIZATION_ID = :tenantOrganizationId
+                               AND availability.STATUS = 'ACTIVE'
+                        )
+                    )
+                )
+            )
+            """);
         params.addValue("tenantOrganizationId", tenant.organizationId());
     }
 
@@ -160,12 +172,9 @@ public class QuestionGovernanceSearchRepository {
         }
         optionalEquals(where, params, "q.TYPE_CODE", "typeCode", normalize(filter.typeCode()));
         optionalEquals(where, params, "q.DIFFICULTY_CODE", "difficultyCode", normalize(filter.difficultyCode()));
-        optionalEquals(where, params, "q.LEVEL_CODE", "levelCode", normalize(filter.levelCode()));
         optionalEquals(where, params, "q.CONTENT_SCOPE", "scope", scope == null ? null : scope.name());
         optionalEquals(where, params, "owner_org.PUBLIC_ID", "ownerPublicId", blankToNull(filter.organizationPublicId()));
-        optionalEquals(where, params, "tech.PUBLIC_ID", "technologyPublicId", blankToNull(filter.technologyPublicId()));
         optionalEquals(where, params, "creator.PUBLIC_ID", "creatorPublicId", blankToNull(filter.creatorPublicId()));
-
         if (filter.categoryPublicId() != null && !filter.categoryPublicId().isBlank()) {
             where.append("""
                 AND EXISTS (
@@ -182,7 +191,6 @@ public class QuestionGovernanceSearchRepository {
         dateTo(where, params, "q.CREATED_AT", "createdTo", filter.createdTo());
         dateFrom(where, params, "NVL(q.UPDATED_AT, q.CREATED_AT)", "updatedFrom", filter.updatedFrom());
         dateTo(where, params, "NVL(q.UPDATED_AT, q.CREATED_AT)", "updatedTo", filter.updatedTo());
-
         if (filter.clonedToGlobal() != null) {
             where.append(filter.clonedToGlobal()
                     ? " AND q.SOURCE_ORGANIZATION_QUESTION_ID IS NOT NULL "
