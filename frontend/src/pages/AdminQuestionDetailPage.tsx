@@ -1,32 +1,18 @@
 import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import {
-  changeQuestionStatus,
-  deleteQuestion,
-  duplicateQuestion,
-  getQuestion,
-  restoreQuestion
-} from '../features/questions/api/questionApi'
+import { useParams } from 'react-router-dom'
+import { getQuestion } from '../features/questions/api/questionApi'
 import { JavaCodePreview } from '../features/questions/components/JavaCodePanel'
 import { ApiRequestError } from '../shared/api/apiClient'
-import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
-import { useToast } from '../shared/components/ToastProvider'
 import type { QuestionDetail } from '../shared/types/questions'
-
-type Action = 'STATUS' | 'DELETE' | 'RESTORE' | null
 
 export function AdminQuestionDetailPage() {
   const { publicId = '' } = useParams()
-  const navigate = useNavigate()
-  const toast = useToast()
   const [question, setQuestion] = useState<QuestionDetail>()
-  const [action, setAction] = useState<Action>(null)
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
-  const [busy, setBusy] = useState(false)
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
   useEffect(() => {
@@ -60,92 +46,11 @@ export function AdminQuestionDetailPage() {
 
   const deleted = question.status === 'DELETED'
 
-  async function execute() {
-    if (!action || !question) return
-    setBusy(true)
-    try {
-      let updated: QuestionDetail
-      if (action === 'DELETE') {
-        updated = await deleteQuestion(publicId, question.entityVersion, 'Eliminación administrativa')
-      } else if (action === 'RESTORE') {
-        updated = await restoreQuestion(publicId, question.entityVersion)
-      } else {
-        updated = await changeQuestionStatus(
-          publicId,
-          question.status === 'ACTIVE' ? 'ARCHIVED' : 'ACTIVE',
-          question.entityVersion
-        )
-      }
-      setQuestion(updated)
-      setAction(null)
-      toast.success(action === 'DELETE'
-        ? 'Pregunta eliminada'
-        : action === 'RESTORE'
-          ? 'Pregunta restaurada como archivada'
-          : updated.status === 'ACTIVE'
-            ? 'Pregunta reactivada'
-            : 'Pregunta archivada')
-    } catch (requestError) {
-      toast.error('No fue posible completar la operación',
-        requestError instanceof ApiRequestError ? requestError.message : undefined)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function duplicate() {
-    setBusy(true)
-    try {
-      const copy = await duplicateQuestion(publicId)
-      toast.success('Pregunta duplicada')
-      navigate(`/admin/questions/${copy.publicId}/edit`)
-    } catch (requestError) {
-      toast.error('No fue posible duplicar la pregunta',
-        requestError instanceof ApiRequestError ? requestError.message : undefined)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const title = action === 'DELETE'
-    ? 'Eliminar pregunta'
-    : action === 'RESTORE'
-      ? 'Restaurar pregunta'
-      : question.status === 'ACTIVE'
-        ? 'Archivar pregunta'
-        : 'Reactivar pregunta'
-  const description = action === 'DELETE'
-    ? 'Desaparecerá del banco normal, pero el registro permanecerá almacenado.'
-    : action === 'RESTORE'
-      ? 'La pregunta volverá como archivada. Después podrás reactivarla.'
-      : question.status === 'ACTIVE'
-        ? 'Dejará de estar disponible para formularios nuevos.'
-        : 'Volverá a estar disponible.'
-
   return (
     <main className="content-page narrow-content resource-page">
       <BackButton fallback="/admin/questions" />
       <div className="page-heading resource-heading">
-        <div><p className="eyebrow">Pregunta</p><h1>Detalle</h1></div>
-        <div className="heading-actions resource-heading-actions">
-          {!deleted && (
-            <>
-              <button className="secondary-button" disabled={busy} onClick={() => void duplicate()}>
-                <Icon name="copy" size={15} /> Duplicar
-              </button>
-              {question.status === 'ACTIVE' && (
-                <Link className="primary-button button-link" to={`/admin/questions/${publicId}/edit`}>
-                  <Icon name="edit" size={15} /> Editar
-                </Link>
-              )}
-              <button className="secondary-button" disabled={busy} onClick={() => setAction('STATUS')}>
-                {question.status === 'ACTIVE' ? 'Archivar' : 'Reactivar'}
-              </button>
-              <button className="danger-button" disabled={busy} onClick={() => setAction('DELETE')}>Eliminar</button>
-            </>
-          )}
-          {deleted && <button className="primary-button" disabled={busy} onClick={() => setAction('RESTORE')}>Restaurar</button>}
-        </div>
+        <div><p className="eyebrow">Pregunta</p><h1>Detalle</h1><p className="muted">Vista de solo lectura.</p></div>
       </div>
 
       <section className={`detail-card question-preview question-preview-v2 ${deleted ? 'deleted-detail' : ''}`}>
@@ -235,15 +140,6 @@ export function AdminQuestionDetailPage() {
         </div>
       </section>
 
-      <ConfirmDialog
-        open={action !== null}
-        title={title}
-        description={description}
-        confirmLabel={action === 'DELETE' ? 'Eliminar' : action === 'RESTORE' ? 'Restaurar' : question.status === 'ACTIVE' ? 'Archivar' : 'Reactivar'}
-        tone={action === 'DELETE' || question.status === 'ACTIVE' ? 'danger' : 'primary'}
-        onCancel={() => setAction(null)}
-        onConfirm={() => void execute()}
-      />
     </main>
   )
 }

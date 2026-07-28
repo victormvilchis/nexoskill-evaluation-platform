@@ -27,6 +27,7 @@ public final class QuestionServices {
         @Transactional
         public QuestionDetail execute(CreateQuestionCommand command) {
             var type = parseType(command.typeCode());
+            validateDifficulty(command.difficultyCode());
             validator.validate(type, command.statement(), command.categoryPublicIds(), command.answerSettings(),
                     command.options(), command.codeContent());
             return port.create(command);
@@ -48,6 +49,7 @@ public final class QuestionServices {
             PublicIdNormalizer.requiredUuid(command.publicId(), "QUESTION_ID_INVALID",
                     "La pregunta indicada no es válida.");
             var type = parseType(command.typeCode());
+            validateDifficulty(command.difficultyCode());
             validator.validate(type, command.statement(), command.categoryPublicIds(), command.answerSettings(),
                     command.options(), command.codeContent());
             return port.update(command);
@@ -148,6 +150,16 @@ public final class QuestionServices {
         @Transactional
         public QuestionDetail execute(String id, long version, Long actor) {
             return port.restore(id, version, actor);
+        }
+    }
+
+    private static void validateDifficulty(String value) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException("QUESTION_DIFFICULTY_REQUIRED", "La dificultad es obligatoria.");
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (!java.util.Set.of("JR", "STD", "SR").contains(normalized)) {
+            throw new BusinessException("QUESTION_DIFFICULTY_INVALID", "La dificultad debe ser JR, STD o SR.");
         }
     }
 

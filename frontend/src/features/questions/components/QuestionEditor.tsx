@@ -96,10 +96,10 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
-  const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'BASIC')
+  const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'JR')
   const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
   const [levelCode, setLevelCode] = useState(initial?.levelCode ?? '')
-  const [categories, setCategories] = useState<string[]>(initial?.categories.map((category) => category.publicId) ?? [])
+  const [categoryPublicId, setCategoryPublicId] = useState(initial?.categories[0]?.publicId ?? '')
   const [tags, setTags] = useState<string[]>(initial?.tags.map((tag) => tag.displayName) ?? [])
   const [statement, setStatement] = useState(initial?.statement ?? '')
   const [explanation, setExplanation] = useState(initial?.explanation ?? '')
@@ -117,9 +117,6 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
     getQuestionCatalogs()
       .then((response) => {
         setCatalogs(response)
-        if (categories.length === 0 && response.categories[0]) {
-          setCategories([response.categories[0].publicId])
-        }
       })
       .catch(() => toast.error('No fue posible cargar los catálogos'))
   }, [])
@@ -208,7 +205,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
         difficultyCode: difficultyCode || undefined,
         technologyPublicId: technologyPublicId || undefined,
         levelCode: levelCode.trim() || undefined,
-        categoryPublicIds: categories,
+        categoryPublicIds: categoryPublicId ? [categoryPublicId] : [],
         tags,
         statement: statement.trim(),
         explanation: explanation.trim() || undefined,
@@ -296,11 +293,16 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
             <small>El contenido escrito se conserva cuando cambias de tipo.</small>
           </div>
           <div className="form-field">
-            <label>Dificultad</label>
-            <select value={difficultyCode} onChange={(event) => setDifficultyCode(event.target.value)}>
-              {catalogs?.difficulties.map((difficulty) => (
-                <option key={difficulty.code} value={difficulty.code}>{difficulty.name}</option>
-              ))}
+            <label htmlFor="question-difficulty">Dificultad</label>
+            <select
+              id="question-difficulty"
+              required
+              value={difficultyCode}
+              onChange={(event) => setDifficultyCode(event.target.value)}
+            >
+              <option value="JR">JR</option>
+              <option value="STD">STD</option>
+              <option value="SR">SR</option>
             </select>
           </div>
           <div className="form-field">
@@ -324,50 +326,35 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
         </div>
 
         <div className="form-field category-picker-field">
-          <div className="category-picker-header">
-            <div>
-              <label>Categorías</label>
-              <span className="selection-count">
-                {categories.length} seleccionada{categories.length === 1 ? '' : 's'}
-              </span>
-            </div>
-            {categoryOptions.length > 6 && (
-              <input
-                className="category-filter-input"
-                type="search"
-                value={categoryQuery}
-                onChange={(event) => setCategoryQuery(event.target.value)}
-                placeholder="Buscar categoría"
-                aria-label="Buscar categoría"
-              />
-            )}
-          </div>
-          <div className="category-selector-compact" role="group" aria-label="Categorías de la pregunta">
-            {filteredCategoryOptions.map((category) => {
-              const selected = categories.includes(category.publicId)
-              return (
-                <button
-                  className={`category-choice-compact ${selected ? 'selected' : ''} ${category.status === 'INACTIVE' ? 'inactive' : ''}`}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={selected}
-                  key={category.publicId}
-                  onClick={() => setCategories((current) =>
-                    selected
-                      ? current.filter((id) => id !== category.publicId)
-                      : [...current, category.publicId]
-                  )}
-                >
-                  <span className="category-choice-indicator" aria-hidden="true">
-                    {selected && <Icon name="check" size={13} />}
-                  </span>
-                  <span className="category-choice-label">{category.name}</span>
-                  {category.status === 'INACTIVE' && <span className="category-choice-meta">Inactiva</span>}
-                </button>
-              )
-            })}
-          </div>
-          {filteredCategoryOptions.length === 0 && (
+          <label htmlFor="question-category">Categoría</label>
+          {categoryOptions.length > 6 && (
+            <input
+              className="category-filter-input"
+              type="search"
+              value={categoryQuery}
+              onChange={(event) => setCategoryQuery(event.target.value)}
+              placeholder="Buscar categoría"
+              aria-label="Buscar categoría"
+            />
+          )}
+          <select
+            id="question-category"
+            required
+            value={categoryPublicId}
+            onChange={(event) => setCategoryPublicId(event.target.value)}
+          >
+            <option value="">Selecciona una categoría</option>
+            {filteredCategoryOptions.map((category) => (
+              <option key={category.publicId} value={category.publicId}>
+                {category.name}{category.status === 'INACTIVE' ? ' (Inactiva)' : ''}
+              </option>
+            ))}
+          </select>
+          {!catalogs && <small>Cargando categorías disponibles…</small>}
+          {catalogs && categoryOptions.length === 0 && (
+            <p className="empty-inline-message">No existen categorías activas disponibles para crear una pregunta.</p>
+          )}
+          {catalogs && categoryOptions.length > 0 && filteredCategoryOptions.length === 0 && (
             <p className="empty-inline-message">No hay categorías que coincidan con la búsqueda.</p>
           )}
         </div>
@@ -542,7 +529,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
 
       <div className="sticky-form-actions">
         <Link className="secondary-button button-link" to="/admin/questions">Cancelar</Link>
-        <button className="primary-button" disabled={busy || categories.length === 0} type="submit">
+        <button className="primary-button" disabled={busy || categoryOptions.length === 0 || !categoryPublicId} type="submit">
           {busy ? 'Guardando…' : submitLabel}
         </button>
       </div>

@@ -30,13 +30,16 @@ public class QuestionValidator {
 			throw error("QUESTION_CODE_TOO_LONG", "El bloque de código no puede superar 30,000 caracteres.");
 		}
 		if (categories == null || categories.isEmpty()) {
-			throw error("QUESTION_CATEGORY_REQUIRED", "Selecciona al menos una categoría.");
+			throw error("QUESTION_CATEGORY_REQUIRED", "Selecciona una categoría.");
 		}
 		if (categories.stream().anyMatch(value -> value == null || value.isBlank())) {
 			throw error("QUESTION_CATEGORY_INVALID", "Una categoría seleccionada no es válida.");
 		}
 		if (new HashSet<>(categories).size() != categories.size()) {
 			throw error("QUESTION_CATEGORY_DUPLICATED", "No repitas categorías dentro de la pregunta.");
+		}
+		if (categories.size() != 1) {
+			throw error("QUESTION_CATEGORY_SINGLE_REQUIRED", "La pregunta debe tener una sola categoría principal.");
 		}
 
 		Integer maxLength = settings.maxLength();
