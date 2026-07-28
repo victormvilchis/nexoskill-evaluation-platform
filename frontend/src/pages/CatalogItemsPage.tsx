@@ -413,6 +413,16 @@ export function CatalogItemsPage() {
             </tbody>
           </table>
         </div>
+<TablePagination
+          currentPage={pageData.page}
+          pageSize={size}
+          totalElements={pageData.totalElements}
+          totalPages={pageData.totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          isLoading={loading}
+          compact
+        />
       </section>
 
       {mode && (
