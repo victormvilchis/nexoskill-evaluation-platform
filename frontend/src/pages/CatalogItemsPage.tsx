@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   changeCatalogItemStatus,
@@ -80,6 +80,8 @@ export function CatalogItemsPage() {
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<CatalogPayload>({ code: '', name: '', description: '', displayOrder: 0 })
   const debouncedQuery = useDebouncedValue(query, 250)
+  const paginationResetKey = `${debouncedQuery}\u0000${organizationPublicId}\u0000${status}`
+  const previousPaginationResetKey = useRef(paginationResetKey)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
@@ -208,13 +210,16 @@ export function CatalogItemsPage() {
   }, [page, pageData.page, searchParams, setSearchParams])
 
   useEffect(() => {
+    if (previousPaginationResetKey.current === paginationResetKey) return
+    previousPaginationResetKey.current = paginationResetKey
+
     setSearchParams((current) => {
       if (!current.has('page')) return current
       const next = new URLSearchParams(current)
       next.delete('page')
       return next
     }, { replace: true })
-  }, [debouncedQuery, organizationPublicId, setSearchParams, status])
+  }, [paginationResetKey, setSearchParams])
 
   function setPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
@@ -334,6 +339,7 @@ export function CatalogItemsPage() {
       </header>
 
       <FilterToolbar
+        resultLabel={`${filtered.length} ${filtered.length === 1 ? 'registro' : 'registros'}`}
         hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organizationPublicId)}
         onClear={() => { setQuery(''); setStatus('ACTIVE'); setOrganizationPublicId('') }}
       >
@@ -369,17 +375,19 @@ export function CatalogItemsPage() {
                 <th>Nombre</th>
                 <th>Código</th>
                 {type === 'CATEGORIES' && <th>Organización</th>}
+                <th>Usos</th>
+                <th>Actualización</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 5 : 4}>Cargando registros…</td></tr>
+                <tr><td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>Cargando registros…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 5 : 4}>
+                  <td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>
                     <strong>No hay registros</strong>
                     <span>Ajusta los filtros o crea un valor nuevo.</span>
                   </td>
@@ -390,6 +398,8 @@ export function CatalogItemsPage() {
                   <td className="ns-primary-cell"><strong>{item.name}</strong><small>{item.description || 'Sin descripción'}</small></td>
                   <td><code>{item.code}</code></td>
                   {type === 'CATEGORIES' && <td>{item.organizationName ?? 'GLOBAL'}</td>}
+                  <td>{item.dependencyCount}</td>
+                  <td>{formatDate(item.updatedAt ?? item.createdAt)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
                     <TableActions>
@@ -401,9 +411,10 @@ export function CatalogItemsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>        </div>
-        <TablePagination currentPage={pageData.page} pageSize={pageData.size} totalElements={pageData.totalElements} totalPages={pageData.totalPages} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          </table>
+        </div>
       </section>
+
       {mode && (
         <div className="ns-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) close() }}>
           <section className="ns-resource-dialog catalog-dialog" role="dialog" aria-modal="true" aria-labelledby="catalog-dialog-title">
