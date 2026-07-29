@@ -6,6 +6,7 @@ import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
 import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
+import com.nexoskill.evaluation.students.application.StudentAdministrationService;
 import com.nexoskill.evaluation.students.application.StudentDeletionService;
 import com.nexoskill.evaluation.students.application.StudentFoundationService;
 import com.nexoskill.evaluation.students.application.StudentService;
@@ -19,7 +20,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,25 +44,27 @@ public class AdminStudentController {
     private final TenantContextResolver tenantResolver;
     private final StudentFoundationService foundation;
     private final StudentDeletionService deletion;
+    private final StudentAdministrationService administration;
 
     /** Constructor conservado para pruebas unitarias existentes. */
     public AdminStudentController(StudentService service, TenantContextResolver tenantResolver) {
-        this(service, tenantResolver, null, null);
+        this(service, tenantResolver, null, null, null);
     }
 
-    /** Constructor conservado para pruebas que no ejercen la purga física. */
     public AdminStudentController(StudentService service, TenantContextResolver tenantResolver,
             StudentFoundationService foundation) {
-        this(service, tenantResolver, foundation, null);
+        this(service, tenantResolver, foundation, null, null);
     }
 
     @Autowired
     public AdminStudentController(StudentService service, TenantContextResolver tenantResolver,
-            StudentFoundationService foundation, StudentDeletionService deletion) {
+            StudentFoundationService foundation, StudentDeletionService deletion,
+            StudentAdministrationService administration) {
         this.service = service;
         this.tenantResolver = tenantResolver;
         this.foundation = foundation;
         this.deletion = deletion;
+        this.administration = administration;
     }
 
     @GetMapping
@@ -115,9 +118,11 @@ public class AdminStudentController {
         StudentFoundationService.StudentView created = foundation.create(tenant(request),
                 new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.studentCode(), body.email(),
                         body.firstName(), body.lastName(), body.displayName(), body.temporaryPassword(), body.status(),
-                        body.validFrom(), body.expiresAt(), body.professionalProfilePublicId(),
-                        body.technologicalProfilePublicId(), body.technologyPublicId(), body.certificationEnrollmentDate()),
-                actor(actor, request));
+                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
+                        body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
+                        Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
+                        Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
+                        Boolean.TRUE.equals(body.appliesAgile())), actor(actor, request));
         return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId())).body(created);
     }
 
@@ -132,9 +137,29 @@ public class AdminStudentController {
         }
         return foundation.update(tenant(request), publicId,
                 new StudentFoundationService.UpdateCommand(body.email(), body.firstName(), body.lastName(), body.displayName(),
-                        body.validFrom(), body.expiresAt(), body.professionalProfilePublicId(),
-                        body.technologicalProfilePublicId(), body.technologyPublicId(),
-                        body.certificationEnrollmentDate(), body.version()), actor(actor, request));
+                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
+                        body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
+                        Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
+                        Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
+                        Boolean.TRUE.equals(body.appliesAgile()), body.version()), actor(actor, request));
+    }
+
+    @GetMapping("/{publicId}/administration")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
+    public StudentAdministrationService.AdministrationView administration(@PathVariable String publicId,
+            HttpServletRequest request) {
+        if (administration == null) throw new IllegalStateException("StudentAdministrationService no está disponible.");
+        return administration.get(effectiveTenant(request, publicId), publicId);
+    }
+
+    @GetMapping("/{publicId}/administrative-history")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
+    public StudentAdministrationService.HistoryPage administrativeHistory(@PathVariable String publicId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+        PaginationParameters.validate(page, size);
+        if (administration == null) throw new IllegalStateException("StudentAdministrationService no está disponible.");
+        return administration.history(effectiveTenant(request, publicId), publicId, page, size);
     }
 
     @PostMapping("/{publicId}/activate")
@@ -155,33 +180,30 @@ public class AdminStudentController {
         return enriched(request, publicId, updated);
     }
 
-    @PostMapping("/{publicId}/renew")
-    @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public Object renew(@PathVariable String publicId, @Valid @RequestBody RenewRequest body,
+    @DeleteMapping("/{publicId}")
+    @PreAuthorize("hasAuthority('STUDENT_DELETE')")
+    public StudentDeletionService.DeletionResult delete(@PathVariable String publicId,
+            @RequestParam(defaultValue = "false") boolean confirmed,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        StudentService.StudentDetail updated = service.renew(effectiveTenant(request, publicId), publicId,
-                body.expiresAt(), body.version(), actor(actor, request));
-        return enriched(request, publicId, updated);
+        return requireDeletion().deletePermanently(effectiveTenant(request, publicId), publicId, confirmed,
+                actor(actor, request));
     }
 
+    /** Compatibilidad temporal con clientes anteriores. */
     @PostMapping("/{publicId}/permanent-delete")
     @PreAuthorize("hasAuthority('STUDENT_DELETE')")
     public StudentDeletionService.DeletionResult deletePermanently(@PathVariable String publicId,
             @Valid @RequestBody PermanentDeleteRequest body,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        if (deletion == null) throw new IllegalStateException("StudentDeletionService no está disponible.");
-        return deletion.deletePermanently(effectiveTenant(request, publicId), publicId,
+        return requireDeletion().deletePermanently(effectiveTenant(request, publicId), publicId,
                 Boolean.TRUE.equals(body.confirmed()), actor(actor, request));
     }
 
     @PostMapping("/{publicId}/reset-password")
     @PreAuthorize("hasAuthority('STUDENT_PASSWORD_RESET')")
-    public Object resetPassword(@PathVariable String publicId,
-            @Valid @RequestBody ResetPasswordRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
-            HttpServletRequest request) {
-        StudentService.StudentDetail updated = service.resetPassword(effectiveTenant(request, publicId), publicId,
-                body.temporaryPassword(), actor(actor, request));
-        return enriched(request, publicId, updated);
+    public StudentService.PasswordResetResult resetPassword(@PathVariable String publicId,
+            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
+        return service.resetPassword(effectiveTenant(request, publicId), publicId, actor(actor, request));
     }
 
     @GetMapping("/{publicId}/sessions")
@@ -215,6 +237,10 @@ public class AdminStudentController {
         if (foundation == null) throw new IllegalStateException("StudentFoundationService no está disponible.");
         return foundation;
     }
+    private StudentDeletionService requireDeletion() {
+        if (deletion == null) throw new IllegalStateException("StudentDeletionService no está disponible.");
+        return deletion;
+    }
     private Object enriched(HttpServletRequest request, String publicId, StudentService.StudentDetail fallback) {
         return foundation == null ? fallback : foundation.get(tenant(request), publicId);
     }
@@ -236,12 +262,11 @@ public class AdminStudentController {
             @NotBlank(message = "La contraseña temporal es obligatoria.")
             @Size(min = 10, max = 128, message = "La contraseña temporal debe tener entre 10 y 128 caracteres.") String temporaryPassword,
             StudentStatus status,
-            @NotNull(message = "La fecha de inicio es obligatoria.") Instant validFrom,
-            Instant expiresAt,
-            String professionalProfilePublicId,
-            String technologicalProfilePublicId,
-            String technologyPublicId,
-            LocalDate certificationEnrollmentDate) {}
+            @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
+            @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
+            LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
+            Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
+            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile) {}
 
     public record UpdateRequest(
             @NotBlank(message = "El correo electrónico es obligatorio.")
@@ -252,25 +277,16 @@ public class AdminStudentController {
             @NotBlank(message = "Los apellidos son obligatorios.")
             @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
             @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
-            @NotNull(message = "La fecha de inicio es obligatoria.") Instant validFrom,
-            Instant expiresAt,
-            String professionalProfilePublicId,
-            String technologicalProfilePublicId,
-            String technologyPublicId,
-            LocalDate certificationEnrollmentDate,
-            @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
-
-    public record RenewRequest(
-            @NotNull(message = "La nueva fecha de vencimiento es obligatoria.") Instant expiresAt,
+            @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
+            @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
+            LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
+            Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
+            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile,
             @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
 
     public record PermanentDeleteRequest(
             @NotNull(message = "Debes confirmar la eliminación permanente.")
             @AssertTrue(message = "Debes confirmar que comprendes que la eliminación es permanente.") Boolean confirmed) {}
-
-    public record ResetPasswordRequest(
-            @NotBlank(message = "La contraseña temporal es obligatoria.")
-            @Size(min = 10, max = 128, message = "La contraseña temporal debe tener entre 10 y 128 caracteres.") String temporaryPassword) {}
 
     private StudentEffectiveStatus parseStatus(String value) {
         if (value == null || value.isBlank() || "ACTIVE".equalsIgnoreCase(value)) return StudentEffectiveStatus.ACTIVE;

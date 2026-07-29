@@ -30,7 +30,7 @@ function statusFromQuery(value: string | null): StudentEffectiveStatus | 'ALL' {
 }
 function formatDate(value: string | null) {
   if (!value) return 'Sin vencimiento'
-  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(value))
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
 
 export function AdminStudentsPage() {

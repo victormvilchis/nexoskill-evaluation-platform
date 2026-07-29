@@ -3,7 +3,7 @@ package com.nexoskill.evaluation.students.infrastructure.persistence;
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
 import jakarta.persistence.LockModeType;
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -46,9 +46,9 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
         select s.id from StudentJpaEntity s
         where s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
           and s.expiresAt is not null
-          and s.expiresAt <= :now
+          and s.expiresAt < :now
         """)
-    List<Long> findExpiredActiveStudentIds(@Param("now") Instant now);
+    List<Long> findExpiredActiveStudentIds(@Param("now") LocalDate now);
 
     @Query("""
         select s from StudentJpaEntity s
@@ -58,11 +58,11 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
                :status is null
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.validFrom <= :now and (s.expiresAt is null or s.expiresAt > :now))
+                   and s.validFrom <= :now and (s.expiresAt is null or s.expiresAt >= :now))
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED
                    and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
                         or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                            and s.expiresAt is not null and s.expiresAt <= :now)))
+                            and s.expiresAt is not null and s.expiresAt < :now)))
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE)
           )
@@ -74,6 +74,6 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId,
             @Param("query") String query,
             @Param("status") StudentEffectiveStatus status,
-            @Param("now") Instant now,
+            @Param("now") LocalDate now,
             Pageable pageable);
 }

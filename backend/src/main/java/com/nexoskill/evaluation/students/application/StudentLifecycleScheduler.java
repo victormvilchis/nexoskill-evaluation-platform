@@ -3,11 +3,13 @@ package com.nexoskill.evaluation.students.application;
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.students.domain.StudentSessionRevocationReason;
 import com.nexoskill.evaluation.students.domain.StudentSessionStatus;
+import com.nexoskill.evaluation.students.domain.StudentStatus;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepository;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionRepository;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -32,12 +34,13 @@ public class StudentLifecycleScheduler {
     @Transactional
     public void revokeInvalidSessions() {
         Instant now = clock.instant();
+        LocalDate today = LocalDate.now(clock);
         sessionRepository.expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
                 StudentSessionRevocationReason.EXPIRED, now);
-        for (Long studentId : studentRepository.findExpiredActiveStudentIds(now)) {
+        for (Long studentId : studentRepository.findExpiredActiveStudentIds(today)) {
             StudentJpaEntity student = studentRepository.findByIdForUpdate(studentId).orElse(null);
-            if (student == null || student.getStatus() != com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                    || student.getExpiresAt() == null || student.getExpiresAt().isAfter(now)) {
+            if (student == null || student.getStatus() != StudentStatus.ACTIVE
+                    || student.getExpiresAt() == null || !student.getExpiresAt().isBefore(today)) {
                 continue;
             }
             student.expire(student.getUpdatedBy(), now);
@@ -46,8 +49,7 @@ public class StudentLifecycleScheduler {
                     StudentSessionRevocationReason.EXPIRED, now);
             audit.record(null, "STUDENT_EXPIRED", "STUDENTS",
                     "La vigencia del estudiante expiró y sus sesiones activas fueron revocadas.",
-                    null, null, Map.of(
-                            "studentPublicId", student.getPublicId(),
+                    null, null, Map.of("studentPublicId", student.getPublicId(),
                             "organizationId", student.getOrganizationId()), now);
         }
     }

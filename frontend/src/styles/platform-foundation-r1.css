@@ -376,3 +376,112 @@
   display: grid;
   gap: .2rem;
 }
+
+/* Crear/Editar estudiante: organización y aplicabilidad. */
+.student-organization-first {
+  background: #f8fbff;
+  border: 1px solid #cfe0f5;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.student-certification-flags {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.student-certification-flag,
+.student-certification-flag-readonly {
+  align-items: flex-start;
+  border: 1px solid #dce5ef;
+  border-radius: 11px;
+  display: flex;
+  gap: 10px;
+  min-height: 58px;
+  padding: 12px 13px;
+}
+
+.student-certification-flag {
+  cursor: pointer;
+}
+
+.student-certification-flag:has(input:checked) {
+  background: #f1f6ff;
+  border-color: #8eb4ef;
+}
+
+.student-certification-flag input {
+  height: 1rem;
+  margin: 2px 0 0;
+  width: 1rem;
+}
+
+.student-certification-flag-readonly {
+  background: #f7f9fc;
+}
+
+/* Administrar estudiante. */
+.student-management-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-administration-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-credentials-actions,
+.student-management-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.student-permanent-delete-zone {
+  background: #fff8f7;
+  border-color: #efc3bd;
+}
+
+.student-credentials-dialog {
+  max-width: 580px;
+}
+
+.temporary-credentials {
+  background: #f7f9fc;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  display: grid;
+  gap: .75rem;
+  padding: 1rem;
+}
+
+.temporary-credentials > div {
+  display: grid;
+  gap: .25rem;
+}
+
+.temporary-credentials code {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+@media (max-width: 700px) {
+  .student-certification-flags {
+    grid-template-columns: 1fr;
+  }
+
+  .student-credentials-actions,
+  .student-management-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-credentials-actions button,
+  .student-management-actions button,
+  .student-management-actions a {
+    width: 100%;
+  }
+}

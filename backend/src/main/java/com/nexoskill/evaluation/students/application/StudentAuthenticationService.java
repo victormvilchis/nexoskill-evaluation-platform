@@ -79,12 +79,13 @@ public class StudentAuthenticationService {
 		if (student.isTemporaryPasswordExpiredAt(now)) {
 			throw invalidLogin(command, student, "TEMP_PASSWORD_EXPIRED", now);
 		}
-		StudentEffectiveStatus effectiveStatus = student.effectiveStatusAt(now);
+		LocalDate today = LocalDate.now(clock);
+		StudentEffectiveStatus effectiveStatus = student.effectiveStatusOn(today);
 		if (effectiveStatus == StudentEffectiveStatus.EXPIRED) {
 			revokeActive(student.getId(), StudentSessionRevocationReason.EXPIRED, now);
 			throw invalidLogin(command, student, "STUDENT_ACCESS_EXPIRED", now);
 		}
-		if (!student.canAuthenticateAt(now)) {
+		if (!student.canAuthenticateOn(today, now)) {
 			throw invalidLogin(command, student, "STUDENT_ACCOUNT_UNAVAILABLE", now);
 		}
 
@@ -102,8 +103,9 @@ public class StudentAuthenticationService {
 
 		String rawToken = tokenGenerator.generate();
 		Instant expiresAt = now.plus(properties.getSecurity().getSessionDuration());
-		if (student.getExpiresAt() != null && student.getExpiresAt().isBefore(expiresAt)) {
-			expiresAt = student.getExpiresAt();
+		Instant accessExpiration = student.accessExpirationInstant(clock.getZone());
+		if (accessExpiration != null && accessExpiration.isBefore(expiresAt)) {
+			expiresAt = accessExpiration;
 		}
 		if (student.isPasswordChangeRequired() && student.getTemporaryPasswordExpiresAt() != null
 				&& student.getTemporaryPasswordExpiresAt().isBefore(expiresAt)) {
@@ -165,7 +167,7 @@ public class StudentAuthenticationService {
 		return new AuthenticatedStudent(student.getId(), student.getPublicId(), organization.getId(),
 				organization.getPublicId(), organization.getCode(), organization.getName(), student.getStudentCode(),
 				student.getEmail(), student.getFirstName(), student.getLastName(), student.getDisplayName(),
-				student.effectiveStatusAt(now), student.getValidFrom(), student.getExpiresAt(),
+				student.effectiveStatusOn(LocalDate.now(clock)), student.getValidFrom(), student.getExpiresAt(),
 				student.getLastLoginAt(), student.isPasswordChangeRequired());
 	}
 

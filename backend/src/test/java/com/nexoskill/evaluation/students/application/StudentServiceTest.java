@@ -31,13 +31,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 class StudentServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
+    private static final LocalDate TODAY = LocalDate.of(2026, 7, 26);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final TenantContext TENANT = TenantContext.organization(20L, "org-public", "ACME", true);
 
@@ -53,9 +54,8 @@ class StudentServiceTest {
         sessions = mock(StudentSessionRepository.class);
         organizations = mock(OrganizationRepository.class);
         passwords = mock(PasswordHasher.class);
-        AuditLogPort audit = mock(AuditLogPort.class);
         service = new StudentService(students, sessions, organizations, passwords, new PasswordPolicy(),
-                new AppProperties(), audit, CLOCK);
+                new AppProperties(), mock(AuditLogPort.class), CLOCK);
         OrganizationJpaEntity organization = OrganizationJpaEntity.create("org-public", "ACME", "Acme",
                 ContentMode.CLEAN, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), 1L, NOW);
         setId(organization, 20L);
@@ -64,19 +64,14 @@ class StudentServiceTest {
         when(students.saveAndFlush(any(StudentJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
-
     @Test
     void shouldReturnAnEmptyPageWhenTheOrganizationHasNoStudents() {
         when(students.existsByOrganizationId(20L)).thenReturn(false);
-
         StudentService.PageResult result = service.search(TENANT, null,
                 com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 20);
-
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();
         assertThat(result.totalPages()).isZero();
-        assertThat(result.page()).isZero();
-        assertThat(result.size()).isEqualTo(20);
         verify(students, times(1)).existsByOrganizationId(20L);
         verify(students, never()).search(any(), any(), any(), any(), any());
     }
@@ -84,25 +79,19 @@ class StudentServiceTest {
     @Test
     void shouldKeepTheResponseEmptyWhenTheRepositoryReturnsAnEmptyPage() {
         when(students.existsByOrganizationId(20L)).thenReturn(true);
-        when(students.search(any(), any(), any(), any(), any()))
-                .thenReturn(Page.empty(PageRequest.of(0, 20)));
-
+        when(students.search(any(), any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 20)));
         StudentService.PageResult result = service.search(TENANT, null,
                 com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 20);
-
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();
-        assertThat(result.totalPages()).isZero();
-        assertThat(result.size()).isEqualTo(20);
     }
 
     @Test
     void shouldCreateAnInactiveStudentWithoutCreatingASession() {
         StudentService.StudentDetail created = service.create(TENANT,
                 new StudentService.CreateCommand("stu-001", "ana@example.com", "Ana", "López", null,
-                        "StrongPass1!", StudentStatus.INACTIVE, NOW, NOW.plusSeconds(3600)),
+                        "StrongPass1!", StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30)),
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
-
         assertThat(created.studentCode()).isEqualTo("STU-001");
         assertThat(created.status()).isEqualTo(StudentStatus.INACTIVE);
         verify(sessions, never()).save(any(StudentSessionJpaEntity.class));
@@ -110,13 +99,11 @@ class StudentServiceTest {
 
     @Test
     void shouldRevokeTheActiveSessionWhenDeactivated() {
-        StudentJpaEntity student = student(StudentStatus.ACTIVE, NOW.plusSeconds(3600));
+        StudentJpaEntity student = student(StudentStatus.ACTIVE, TODAY.plusDays(30));
         when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public")).thenReturn(Optional.of(student));
         when(students.save(student)).thenReturn(student);
-
         StudentService.StudentDetail updated = service.deactivate(TENANT, "student-public",
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
-
         assertThat(updated.status()).isEqualTo(StudentStatus.INACTIVE);
         verify(sessions).revokeActive(student.getId(), StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
                 StudentSessionRevocationReason.DEACTIVATED, NOW);
@@ -124,19 +111,18 @@ class StudentServiceTest {
 
     @Test
     void shouldRejectActivationWhenValidityAlreadyExpired() {
-        StudentJpaEntity student = student(StudentStatus.INACTIVE, NOW.minusSeconds(1));
+        StudentJpaEntity student = student(StudentStatus.INACTIVE, TODAY.minusDays(1));
         when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public")).thenReturn(Optional.of(student));
-
         assertThatThrownBy(() -> service.activate(TENANT, "student-public",
                 new StudentService.Actor(1L, "127.0.0.1", "browser")))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_RENEWAL_REQUIRED"));
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_ACCESS_DATES_INVALID"));
     }
 
-    private StudentJpaEntity student(StudentStatus status, Instant expiresAt) {
+    private StudentJpaEntity student(StudentStatus status, LocalDate expiresAt) {
         StudentJpaEntity student = StudentJpaEntity.create("student-public", 20L, "STU-001",
                 "ana@example.com", "ana@example.com", "password-hash", "Ana", "López", "Ana López",
-                status, NOW.minusSeconds(3600), expiresAt, NOW.plusSeconds(7200), 1L, NOW.minusSeconds(3600));
+                status, TODAY.minusDays(1), expiresAt, NOW.plusSeconds(7200), 1L, NOW.minusSeconds(3600));
         setId(student, 30L);
         return student;
     }

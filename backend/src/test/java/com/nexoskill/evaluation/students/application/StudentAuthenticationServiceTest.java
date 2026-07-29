@@ -119,8 +119,8 @@ class StudentAuthenticationServiceTest {
 
 	private StudentJpaEntity student(StudentStatus status) {
 		StudentJpaEntity student = StudentJpaEntity.create("student-public", 20L, "STU-001", "ana@example.com",
-				"ana@example.com", "password-hash", "Ana", "López", "Ana López", status, NOW.minusSeconds(3600),
-				NOW.plusSeconds(7200), NOW.plusSeconds(7200), 1L, NOW);
+				"ana@example.com", "password-hash", "Ana", "López", "Ana López", status, LocalDate.of(2026, 7, 25),
+				LocalDate.of(2026, 8, 26), NOW.plusSeconds(7200), 1L, NOW);
 		setId(student, 30L);
 		return student;
 	}

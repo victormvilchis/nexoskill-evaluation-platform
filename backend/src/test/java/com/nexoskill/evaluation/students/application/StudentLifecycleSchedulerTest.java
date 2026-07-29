@@ -14,6 +14,7 @@ import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessi
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +29,7 @@ class StudentLifecycleSchedulerTest {
         AuditLogPort audit = org.mockito.Mockito.mock(AuditLogPort.class);
         StudentJpaEntity first = student(11L, now.minusSeconds(1));
         StudentJpaEntity second = student(12L, now.minusSeconds(10));
-        when(students.findExpiredActiveStudentIds(now)).thenReturn(List.of(11L, 12L));
+        when(students.findExpiredActiveStudentIds(LocalDate.of(2026, 7, 26))).thenReturn(List.of(11L, 12L));
         when(students.findByIdForUpdate(11L)).thenReturn(Optional.of(first));
         when(students.findByIdForUpdate(12L)).thenReturn(Optional.of(second));
         StudentLifecycleScheduler scheduler = new StudentLifecycleScheduler(students, sessions, audit,
@@ -58,9 +59,10 @@ class StudentLifecycleSchedulerTest {
     }
 
     private StudentJpaEntity student(Long id, Instant expiresAt) {
+        LocalDate expirationDate = LocalDate.ofInstant(expiresAt, ZoneOffset.UTC).minusDays(1);
         StudentJpaEntity student = StudentJpaEntity.create("student-" + id, 20L, "ST-" + id,
                 "student" + id + "@example.com", "student" + id + "@example.com", "hash", "Nombre",
-                "Apellidos", "Nombre Apellidos", StudentStatus.ACTIVE, expiresAt.minusSeconds(3600), expiresAt,
+                "Apellidos", "Nombre Apellidos", StudentStatus.ACTIVE, expirationDate.minusDays(30), expirationDate,
                 expiresAt.plusSeconds(3600), 1L, expiresAt.minusSeconds(3600));
         setId(student, id);
         return student;

@@ -1,484 +1,781 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   getCertificationCatalogs,
+  getStudentCertificationAttempts,
+  getStudentCertificationHistory,
   getStudentCertifications,
   saveStudentCertifications
 } from '../features/certifications/api/certificationApi'
 import { ApiRequestError } from '../shared/api/apiClient'
-import { Icon } from '../shared/components/Icon'
+import { BackButton } from '../shared/components/BackButton'
+import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { TablePagination } from '../shared/components/TablePagination'
-import { useClientPagination } from '../shared/hooks/useClientPagination'
-import type { PageSize } from '../shared/types/pagination'
-import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
+import { useToast } from '../shared/components/ToastProvider'
 import type {
+  CertificationApplicability,
   CertificationAttemptPayload,
+  CertificationAttemptView,
   CertificationCatalogs,
+  CertificationCyclePayload,
+  CertificationCycleView,
   CertificationExamStatus,
-  CertificationRequirementPayload,
-  CertificationStatus,
+  CertificationHistoryView,
+  CertificationLevel,
+  CertificationProcessType,
+  CertificationTrackingStatus,
   CertificationType,
+  CertificationValidityStatus,
+  PagedResponse,
   StudentCertificationDetail
 } from '../shared/types/certifications'
+import type { PageSize } from '../shared/types/pagination'
+
+type TabId = 'SUMMARY' | 'APPLICABILITY' | CertificationType | 'ATTEMPTS' | 'EXPIRATIONS' | 'HISTORY'
+
+type EditableCycle = CertificationCyclePayload & {
+  key: string
+  processType?: CertificationProcessType
+  deadlineDate?: string | null
+  expirationDate?: string | null
+  validityStatus?: CertificationValidityStatus
+  technologyName?: string | null
+  previousApprovedCyclePublicId?: string | null
+  attemptCount?: number
+  latestScore?: number | null
+}
 
 const TYPE_LABELS: Record<CertificationType, string> = {
+  TECHNOLOGICAL: 'Tecnológica',
   DEVELOPMENT_SECURITY: 'Desarrollo Seguro',
-  TECHNOLOGICAL: 'Certificación tecnológica',
-  ONE: 'ONE',
   NORMATIVE_TESTING: 'Normativa y Testing',
+  ONE: 'ONE',
   AGILE: 'Agile'
 }
 
-interface ProfileModel {
-  professionalProfilePublicId: string
-  certificationTechnologyPublicId: string
-  enrollmentDate: string
-  technologicalProfile: string
-  profileVersion: number | null
+const TRACKING_LABELS: Record<CertificationTrackingStatus, string> = {
+  PENDING: 'Pendiente',
+  NOT_SCHEDULED: 'Sin programar',
+  SCHEDULED: 'Programada',
+  IN_PROGRESS: 'En proceso',
+  APPLIED: 'Aplicada',
+  APPROVED: 'Aprobada',
+  NOT_APPROVED: 'No aprobada',
+  EXPIRED: 'Vencida',
+  CANCELLED: 'Cancelada'
 }
 
-interface AttemptDraft extends CertificationAttemptPayload {
-  enabled: boolean
+const VALIDITY_LABELS: Record<CertificationValidityStatus, string> = {
+  NOT_OBTAINED: 'Aún no obtenida',
+  VALID: 'Vigente',
+  EXPIRING_SOON: 'Próxima a vencer',
+  EXPIRED: 'Vencida'
 }
 
-function blankProfile(): ProfileModel {
-  return {
-    professionalProfilePublicId: '',
-    certificationTechnologyPublicId: '',
-    enrollmentDate: '',
-    technologicalProfile: '',
-    profileVersion: null
-  }
+const EXAM_LABELS: Record<CertificationExamStatus, string> = {
+  NOT_SCHEDULED: 'Sin programar',
+  SCHEDULED: 'Programado',
+  RESCHEDULED: 'Reprogramado',
+  COMPLETED: 'Completado',
+  PASSED: 'Aprobado',
+  FAILED: 'No aprobado',
+  ABSENT: 'Ausente',
+  CANCELLED: 'Cancelado'
 }
 
-function requirementFromDetail(detail: StudentCertificationDetail): CertificationRequirementPayload[] {
-  return detail.requirements.map((item) => ({
-    type: item.type,
-    applies: item.applies,
-    certificationStatus: item.certificationStatus,
-    examStatus: item.examStatus,
-    manualDeadline: item.manualDeadline,
-    deadlineOverrideReason: item.deadlineOverrideReason,
-    applicationDate: item.applicationDate,
-    score: item.score,
-    currentAttempt: item.currentAttempt,
-    actionsToTake: item.actionsToTake,
-    observations: item.observations,
-    version: item.version
-  }))
-}
+const FLAG_OPTIONS: Array<{ key: keyof CertificationApplicability; type: CertificationType; label: string }> = [
+  { key: 'technological', type: 'TECHNOLOGICAL', label: 'Tecnológica' },
+  { key: 'developmentSecurity', type: 'DEVELOPMENT_SECURITY', label: 'Desarrollo Seguro' },
+  { key: 'normativeTesting', type: 'NORMATIVE_TESTING', label: 'Normativa y Testing' },
+  { key: 'one', type: 'ONE', label: 'ONE' },
+  { key: 'agile', type: 'AGILE', label: 'Agile' }
+]
 
-function blankAttempt(type: CertificationType): AttemptDraft {
-  return {
-    enabled: false,
-    type,
-    attemptNumber: 1,
-    scheduledDate: null,
-    applicationDate: null,
-    examStatus: 'NOT_SCHEDULED',
-    score: null,
-    result: null,
-    observations: null
-  }
-}
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'SUMMARY', label: 'Resumen' },
+  { id: 'APPLICABILITY', label: 'Certificaciones aplicables' },
+  { id: 'TECHNOLOGICAL', label: 'Tecnológica' },
+  { id: 'DEVELOPMENT_SECURITY', label: 'Desarrollo Seguro' },
+  { id: 'NORMATIVE_TESTING', label: 'Normativa y Testing' },
+  { id: 'ONE', label: 'ONE' },
+  { id: 'AGILE', label: 'Agile' },
+  { id: 'ATTEMPTS', label: 'Intentos' },
+  { id: 'EXPIRATIONS', label: 'Vencimientos' },
+  { id: 'HISTORY', label: 'Historial' }
+]
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value?: string | null) {
   if (!value) return 'Sin fecha'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Sin fecha'
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function cycleFromView(cycle: CertificationCycleView): EditableCycle {
+  return {
+    key: cycle.publicId,
+    publicId: cycle.publicId,
+    type: cycle.type,
+    technologyPublicId: cycle.technologyPublicId,
+    technologyName: cycle.technologyName,
+    certificationLevel: cycle.certificationLevel,
+    primary: cycle.primary,
+    processType: cycle.processType,
+    trackingStatus: cycle.trackingStatus,
+    deadlineDate: cycle.deadlineDate,
+    scheduledDate: cycle.scheduledDate,
+    applicationDate: cycle.applicationDate,
+    approved: cycle.approved,
+    expirationDate: cycle.expirationDate,
+    validityStatus: cycle.validityStatus,
+    previousApprovedCyclePublicId: cycle.previousApprovedCyclePublicId,
+    actionsToTake: cycle.actionsToTake,
+    softtekManagement: cycle.softtekManagement,
+    observations: cycle.observations,
+    active: cycle.active,
+    latestScore: cycle.latestScore,
+    attemptCount: cycle.attemptCount,
+    version: cycle.version
+  }
+}
+
+function newCycle(type: CertificationType, primary = false): EditableCycle {
+  return {
+    key: `new-${type}-${crypto.randomUUID()}`,
+    type,
+    technologyPublicId: null,
+    certificationLevel: type === 'TECHNOLOGICAL' ? 'JR' : null,
+    primary: type === 'TECHNOLOGICAL' && primary,
+    trackingStatus: 'PENDING',
+    scheduledDate: null,
+    applicationDate: null,
+    approved: null,
+    actionsToTake: null,
+    softtekManagement: null,
+    observations: null,
+    active: true,
+    version: null,
+    processType: undefined,
+    deadlineDate: null,
+    expirationDate: null,
+    validityStatus: 'NOT_OBTAINED',
+    attemptCount: 0,
+    latestScore: null
+  }
+}
+
+function blankAttempt(): CertificationAttemptPayload {
+  return {
+    scheduledDate: null,
+    applicationDate: null,
+    examStatus: 'NOT_SCHEDULED',
+    score: null,
+    approved: null,
+    result: null,
+    observations: null,
+    version: null
+  }
+}
+
+function supportsAttempts(type: CertificationType) {
+  return type === 'TECHNOLOGICAL' || type === 'DEVELOPMENT_SECURITY' || type === 'NORMATIVE_TESTING'
+}
+
+function hasExpiration(type: CertificationType) {
+  return type === 'TECHNOLOGICAL' || type === 'DEVELOPMENT_SECURITY' || type === 'NORMATIVE_TESTING'
+}
+
 export function StudentCertificationsPage() {
-  const { publicId } = useParams()
+  const { publicId = '' } = useParams()
   const navigate = useNavigate()
-  const completeSave = useSaveNavigation('/admin/students')
-  const [catalogs, setCatalogs] = useState<CertificationCatalogs | null>(null)
-  const [detail, setDetail] = useState<StudentCertificationDetail | null>(null)
-  const [profile, setProfile] = useState<ProfileModel>(() => blankProfile())
-  const [requirements, setRequirements] = useState<CertificationRequirementPayload[]>([])
-  const [attempts, setAttempts] = useState<Record<CertificationType, AttemptDraft>>(() => ({
-    DEVELOPMENT_SECURITY: blankAttempt('DEVELOPMENT_SECURITY'),
-    TECHNOLOGICAL: blankAttempt('TECHNOLOGICAL'),
-    ONE: blankAttempt('ONE'),
-    NORMATIVE_TESTING: blankAttempt('NORMATIVE_TESTING'),
-    AGILE: blankAttempt('AGILE')
-  }))
+  const toast = useToast()
+  const [catalogs, setCatalogs] = useState<CertificationCatalogs>()
+  const [detail, setDetail] = useState<StudentCertificationDetail>()
+  const [applicability, setApplicability] = useState<CertificationApplicability>({
+    technological: false,
+    developmentSecurity: false,
+    normativeTesting: false,
+    one: false,
+    agile: false
+  })
+  const [cycles, setCycles] = useState<EditableCycle[]>([])
+  const [attemptDrafts, setAttemptDrafts] = useState<Record<string, CertificationAttemptPayload | undefined>>({})
+  const [activeTab, setActiveTab] = useState<TabId>('SUMMARY')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const [selectedAttemptCycle, setSelectedAttemptCycle] = useState('')
+  const [attempts, setAttempts] = useState<PagedResponse<CertificationAttemptView>>({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
   const [attemptsPage, setAttemptsPage] = useState(0)
   const [attemptsSize, setAttemptsSize] = useState<PageSize>(10)
-  const attemptsData = useClientPagination(detail?.attempts ?? [], attemptsPage, attemptsSize)
+  const [attemptsLoading, setAttemptsLoading] = useState(false)
+
+  const [history, setHistory] = useState<PagedResponse<CertificationHistoryView>>({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
+  const [historyPage, setHistoryPage] = useState(0)
+  const [historySize, setHistorySize] = useState<PageSize>(10)
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  async function loadWorkspace() {
+    const [catalogResponse, detailResponse] = await Promise.all([
+      getCertificationCatalogs(publicId),
+      getStudentCertifications(publicId)
+    ])
+    setCatalogs(catalogResponse)
+    setDetail(detailResponse)
+    setApplicability(detailResponse.applicability)
+    setCycles(detailResponse.cycles.map(cycleFromView))
+    setAttemptDrafts({})
+    setDirty(false)
+    const firstAttemptCycle = detailResponse.cycles.find((cycle) => supportsAttempts(cycle.type))?.publicId ?? ''
+    setSelectedAttemptCycle((current) => current || firstAttemptCycle)
+    return detailResponse
+  }
+
   useEffect(() => {
-    if (!publicId) return
     let active = true
     setLoading(true)
-    Promise.all([getCertificationCatalogs(), getStudentCertifications(publicId)])
+    setError('')
+    Promise.all([getCertificationCatalogs(publicId), getStudentCertifications(publicId)])
       .then(([catalogResponse, detailResponse]) => {
         if (!active) return
         setCatalogs(catalogResponse)
         setDetail(detailResponse)
-        setRequirements(requirementFromDetail(detailResponse))
-        if (detailResponse.profile) {
-          setProfile({
-            professionalProfilePublicId: detailResponse.profile.professionalProfilePublicId,
-            certificationTechnologyPublicId: detailResponse.profile.certificationTechnologyPublicId,
-            enrollmentDate: detailResponse.profile.enrollmentDate,
-            technologicalProfile: detailResponse.profile.technologicalProfile,
-            profileVersion: detailResponse.profile.version
-          })
-        }
-        const nextAttempts = { ...attempts }
-        detailResponse.requirements.forEach((requirement) => {
-          const highest = detailResponse.attempts
-            .filter((attempt) => attempt.type === requirement.type)
-            .reduce((value, attempt) => Math.max(value, attempt.attemptNumber), 0)
-          nextAttempts[requirement.type] = {
-            ...blankAttempt(requirement.type),
-            attemptNumber: highest + 1
-          }
-        })
-        setAttempts(nextAttempts)
+        setApplicability(detailResponse.applicability)
+        setCycles(detailResponse.cycles.map(cycleFromView))
+        setSelectedAttemptCycle(detailResponse.cycles.find((cycle) => supportsAttempts(cycle.type))?.publicId ?? '')
       })
-      .catch((requestError: unknown) => {
+      .catch((requestError) => {
         if (active) setError(requestError instanceof ApiRequestError
           ? requestError.message
-          : 'No fue posible cargar la gestión de certificaciones.')
+          : 'No fue posible cargar la administración de certificaciones.')
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicId])
 
-  const nextDeadline = useMemo(() => {
-    const values = detail?.requirements
-      .filter((item) => item.applies && item.effectiveDeadline)
-      .map((item) => item.effectiveDeadline!)
-      .sort()
-    return values?.[0] ?? null
-  }, [detail])
+  useEffect(() => {
+    if (!selectedAttemptCycle || activeTab !== 'ATTEMPTS') return
+    let active = true
+    setAttemptsLoading(true)
+    getStudentCertificationAttempts(publicId, selectedAttemptCycle, attemptsPage, attemptsSize)
+      .then((response) => { if (active) setAttempts({ ...response, content: response.content ?? [] }) })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible cargar los intentos.')
+      })
+      .finally(() => { if (active) setAttemptsLoading(false) })
+    return () => { active = false }
+  }, [activeTab, attemptsPage, attemptsSize, publicId, selectedAttemptCycle])
 
-  const completed = detail?.requirements.filter((item) => item.certificationStatus === 'CERTIFIED').length ?? 0
-  const pending = detail?.requirements.filter((item) => item.applies && item.certificationStatus !== 'CERTIFIED').length ?? 0
+  useEffect(() => {
+    if (activeTab !== 'HISTORY') return
+    let active = true
+    setHistoryLoading(true)
+    getStudentCertificationHistory(publicId, historyPage, historySize)
+      .then((response) => { if (active) setHistory({ ...response, content: response.content ?? [] }) })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible cargar el historial de certificaciones.')
+      })
+      .finally(() => { if (active) setHistoryLoading(false) })
+    return () => { active = false }
+  }, [activeTab, historyPage, historySize, publicId])
 
-  function updateRequirement(type: CertificationType, changes: Partial<CertificationRequirementPayload>) {
-    setRequirements((current) => current.map((item) => item.type === type ? { ...item, ...changes } : item))
+  const visibleTabs = useMemo(() => TABS.filter((tab) => {
+    if (!Object.prototype.hasOwnProperty.call(TYPE_LABELS, tab.id)) return true
+    const type = tab.id as CertificationType
+    const flag = FLAG_OPTIONS.find((item) => item.type === type)
+    return flag ? applicability[flag.key] : false
+  }), [applicability])
+
+  const expirationCycles = useMemo(() => cycles.filter((cycle) => hasExpiration(cycle.type)
+    && (cycle.expirationDate || cycle.validityStatus === 'EXPIRED' || cycle.validityStatus === 'EXPIRING_SOON')),
+  [cycles])
+
+  const attemptCycles = useMemo(() => cycles.filter((cycle) => Boolean(cycle.publicId) && supportsAttempts(cycle.type)), [cycles])
+
+  function updateApplicability(key: keyof CertificationApplicability, value: boolean) {
+    const type = FLAG_OPTIONS.find((item) => item.key === key)?.type
+    if (!value && type && cycles.some((cycle) => cycle.type === type && Boolean(cycle.publicId))) {
+      const accepted = window.confirm('Esta certificación ya tiene información de seguimiento registrada. Al desactivarla dejará de aplicar para nuevos seguimientos, pero se conservarán sus intentos, resultados e historial.')
+      if (!accepted) return
+    }
+    setApplicability((current) => ({ ...current, [key]: value }))
+    setDirty(true)
+    if (!value && type && activeTab === type) setActiveTab('APPLICABILITY')
   }
 
-  function updateAttempt(type: CertificationType, changes: Partial<AttemptDraft>) {
-    setAttempts((current) => ({ ...current, [type]: { ...current[type], ...changes } }))
+  function updateCycle(key: string, changes: Partial<EditableCycle>) {
+    setCycles((current) => current.map((cycle) => cycle.key === key ? { ...cycle, ...changes } : cycle))
+    setDirty(true)
+    setFieldErrors((current) => {
+      const next = { ...current }
+      Object.keys(changes).forEach((name) => delete next[`${key}.${name}`])
+      return next
+    })
+  }
+
+  function addCycle(type: CertificationType, primary = false) {
+    const created = newCycle(type, primary)
+    if (type === 'TECHNOLOGICAL' && primary) {
+      setCycles((current) => [...current.map((cycle) => cycle.type === 'TECHNOLOGICAL' ? { ...cycle, primary: false } : cycle), created])
+    } else {
+      setCycles((current) => [...current, created])
+    }
+    setDirty(true)
+    setActiveTab(type)
+  }
+
+  function removeUnsavedCycle(key: string) {
+    setCycles((current) => current.filter((cycle) => cycle.key !== key))
+    setAttemptDrafts((current) => {
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+    setDirty(true)
+  }
+
+  function setPrimary(key: string) {
+    setCycles((current) => current.map((cycle) => cycle.type === 'TECHNOLOGICAL'
+      ? { ...cycle, primary: cycle.key === key }
+      : cycle))
+    setDirty(true)
+  }
+
+  function toggleAttemptDraft(cycle: EditableCycle, enabled: boolean) {
+    setAttemptDrafts((current) => ({ ...current, [cycle.key]: enabled ? (current[cycle.key] ?? blankAttempt()) : undefined }))
+    setDirty(true)
+  }
+
+  function updateAttemptDraft(key: string, changes: Partial<CertificationAttemptPayload>) {
+    setAttemptDrafts((current) => ({ ...current, [key]: { ...(current[key] ?? blankAttempt()), ...changes } }))
+    setDirty(true)
+  }
+
+  function editAttempt(attempt: CertificationAttemptView) {
+    const cycle = cycles.find((item) => item.publicId === attempt.cyclePublicId)
+    if (!cycle) return
+    setAttemptDrafts((current) => ({
+      ...current,
+      [cycle.key]: {
+        publicId: attempt.publicId,
+        scheduledDate: attempt.scheduledDate,
+        applicationDate: attempt.applicationDate,
+        examStatus: attempt.examStatus,
+        score: attempt.score,
+        approved: attempt.approved,
+        result: attempt.result,
+        observations: attempt.observations,
+        version: attempt.version
+      }
+    }))
+    setActiveTab(cycle.type)
+    setDirty(true)
   }
 
   function validate() {
     const next: Record<string, string> = {}
-    if (!profile.professionalProfilePublicId) next.professionalProfilePublicId = 'Selecciona un perfil.'
-    if (!profile.certificationTechnologyPublicId) next.certificationTechnologyPublicId = 'Selecciona una tecnología.'
-    if (!profile.enrollmentDate) next.enrollmentDate = 'La fecha de alta es obligatoria.'
-    if (!profile.technologicalProfile) next.technologicalProfile = 'Selecciona un perfil tecnológico.'
-    requirements.forEach((item) => {
-      if (item.score !== null && (item.score < 0 || item.score > 100)) {
-        next[`${item.type}.score`] = 'El promedio debe estar entre 0 y 100.'
+    cycles.filter((cycle) => {
+      const flag = FLAG_OPTIONS.find((item) => item.type === cycle.type)
+      return flag ? applicability[flag.key] : false
+    }).forEach((cycle) => {
+      if (cycle.type === 'TECHNOLOGICAL') {
+        if (!cycle.technologyPublicId) next[`${cycle.key}.technologyPublicId`] = 'Selecciona una tecnología.'
+        if (!cycle.certificationLevel) next[`${cycle.key}.certificationLevel`] = 'Selecciona JR, STD o SR.'
       }
-      if (item.currentAttempt !== null && item.currentAttempt < 1) {
-        next[`${item.type}.currentAttempt`] = 'El intento debe iniciar en 1.'
+      if (cycle.approved === true && !cycle.applicationDate) {
+        next[`${cycle.key}.applicationDate`] = 'La fecha de aplicación es obligatoria para aprobar.'
       }
-      if (item.manualDeadline && !item.deadlineOverrideReason?.trim()) {
-        next[`${item.type}.deadlineOverrideReason`] = 'Indica el motivo del ajuste manual.'
-      }
-    })
-    Object.values(attempts).filter((item) => item.enabled).forEach((item) => {
-      if (item.attemptNumber < 1) next[`${item.type}.newAttempt`] = 'El intento debe iniciar en 1.'
-      if (item.score !== null && (item.score < 0 || item.score > 100)) {
-        next[`${item.type}.newAttemptScore`] = 'El promedio debe estar entre 0 y 100.'
+      const attempt = attemptDrafts[cycle.key]
+      if (attempt) {
+        if (attempt.score !== null && attempt.score !== undefined && (attempt.score < 0 || attempt.score > 100)) {
+          next[`${cycle.key}.attempt.score`] = 'El promedio debe estar entre 0 y 100.'
+        }
+        if (attempt.approved === true && !attempt.applicationDate) {
+          next[`${cycle.key}.attempt.applicationDate`] = 'La fecha de aplicación es obligatoria para aprobar el intento.'
+        }
       }
     })
     setFieldErrors(next)
+    const errorKeys = Object.keys(next)
+    if (errorKeys.length > 0) {
+      const firstKey = errorKeys[0]
+      if (firstKey) {
+        const cycleKey = firstKey.split('.')[0]
+        const cycle = cycles.find((item) => item.key === cycleKey)
+        if (cycle) setActiveTab(cycle.type)
+      }
+      setError('Revisa los campos marcados antes de guardar.')
+    }
     return Object.keys(next).length === 0
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!publicId || saving || !validate()) {
-      if (!saving) setError('Revisa los campos marcados antes de guardar.')
-      return
-    }
+    if (saving || !validate()) return
     setSaving(true)
     setError('')
+    setFieldErrors({})
+    const applicableCycles = cycles.filter((cycle) => {
+      const flag = FLAG_OPTIONS.find((item) => item.type === cycle.type)
+      return flag ? applicability[flag.key] : false
+    })
     try {
       await saveStudentCertifications(publicId, {
-        professionalProfilePublicId: profile.professionalProfilePublicId,
-        certificationTechnologyPublicId: profile.certificationTechnologyPublicId,
-        enrollmentDate: profile.enrollmentDate,
-        technologicalProfile: profile.technologicalProfile,
-        profileVersion: profile.profileVersion,
-        requirements,
-        newAttempts: Object.values(attempts)
-          .filter((item) => item.enabled)
-          .map(({ enabled: _enabled, ...item }) => item)
+        applicability,
+        cycles: applicableCycles.map((cycle) => ({
+          ...(cycle.publicId ? { publicId: cycle.publicId } : {}),
+          type: cycle.type,
+          technologyPublicId: cycle.type === 'TECHNOLOGICAL' ? cycle.technologyPublicId : null,
+          certificationLevel: cycle.type === 'TECHNOLOGICAL' ? cycle.certificationLevel : null,
+          primary: cycle.type === 'TECHNOLOGICAL' && cycle.primary,
+          trackingStatus: cycle.trackingStatus,
+          scheduledDate: cycle.scheduledDate || null,
+          applicationDate: cycle.applicationDate || null,
+          approved: cycle.approved,
+          actionsToTake: cycle.actionsToTake?.trim() || null,
+          softtekManagement: cycle.softtekManagement?.trim() || null,
+          observations: cycle.observations?.trim() || null,
+          active: cycle.active !== false,
+          version: cycle.version,
+          attempts: attemptDrafts[cycle.key] ? [attemptDrafts[cycle.key]!] : []
+        }))
       })
-      completeSave({
-        title: 'Certificaciones actualizadas correctamente.',
-        message: 'El seguimiento y los intentos quedaron guardados.'
-      })
-    } catch (requestError: unknown) {
+      await loadWorkspace()
+      if (activeTab === 'ATTEMPTS' && selectedAttemptCycle) {
+        const response = await getStudentCertificationAttempts(publicId, selectedAttemptCycle, attemptsPage, attemptsSize)
+        setAttempts({ ...response, content: response.content ?? [] })
+      }
+      toast.success('Certificaciones actualizadas', 'Los cambios se guardaron de forma transaccional.')
+    } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
         setError(requestError.message)
         setFieldErrors(requestError.fieldErrors ?? {})
       } else {
-        setError('No fue posible guardar las certificaciones.')
+        setError('No fue posible guardar la administración de certificaciones.')
       }
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
-    return <main className="content-page"><section className="ns-loading-card">Cargando certificaciones…</section></main>
+  if (loading) return <LoadingScreen />
+  if (!detail || !catalogs) {
+    return <main className="content-page"><BackButton fallback="/admin/students" />
+      <div className="error-message" role="alert">{error || 'No fue posible consultar las certificaciones.'}</div></main>
   }
 
   return (
-    <main className="content-page certification-page">
-      <button className="ns-back-button" type="button" onClick={() => navigate('/admin/students')}>
-        ← Volver a estudiantes
-      </button>
-
+    <main className="content-page certification-page certification-workspace">
+      <BackButton fallback="/admin/students" />
       <header className="ns-page-header">
         <div>
-          <p className="eyebrow">Estudiantes</p>
+          <p className="eyebrow">Estudiantes · Certificaciones</p>
           <h1>Administrar certificaciones</h1>
-          <p className="muted">Seguimiento independiente del perfil, requisitos e intentos de certificación.</p>
+          <p className="muted">Los datos generales son de solo lectura. El tipo Certificación o Recertificación, las fechas límite y los vencimientos se calculan en backend.</p>
         </div>
       </header>
 
-      {error && (
-        <section className="inline-error-panel" role="alert">
-          <div className="inline-error-icon"><Icon name="error" size={20} /></div>
-          <div><strong>No fue posible completar la operación</strong><p>{error}</p></div>
-        </section>
-      )}
+      {error && <div className="error-message" role="alert">{error}</div>}
 
-      {detail && (
-        <section className="certification-summary">
-          <div><small>Estudiante</small><strong>{detail.studentName}</strong></div>
-          <div><small>Organización</small><strong>{detail.organizationName}</strong></div>
-          <div><small>Perfil</small><strong>{detail.profile?.professionalProfileName ?? 'Pendiente de configurar'}</strong></div>
-          <div><small>Tecnología</small><strong>{detail.profile?.certificationTechnologyName ?? 'Sin definir'}</strong></div>
-          <div><small>Fecha de alta</small><strong>{formatDate(detail.profile?.enrollmentDate)}</strong></div>
-          <div><small>Próxima fecha límite</small><strong>{formatDate(nextDeadline)}</strong></div>
-          <div><small>Pendientes</small><strong>{pending}</strong></div>
-          <div><small>Completadas</small><strong>{completed}</strong></div>
-        </section>
-      )}
+      <section className="ns-card certification-student-summary">
+        <div><span>Estudiante</span><strong>{detail.student.displayName}</strong></div>
+        <div><span>Organización</span><strong>{detail.student.organizationName}</strong></div>
+        <div><span>Estado</span><strong>{detail.student.status}</strong></div>
+        <div><span>Inicio de vigencia</span><strong>{formatDate(detail.student.validFrom)}</strong></div>
+        <div><span>Vencimiento de acceso</span><strong>{formatDate(detail.student.expiresAt)}</strong></div>
+        <div><span>Fecha de alta</span><strong>{formatDate(detail.student.admissionDate)}</strong></div>
+        <div><span>Perfil</span><strong>{detail.student.professionalProfile?.name ?? 'Sin perfil'}</strong></div>
+        <div><span>Perfil tecnológico</span><strong>{detail.student.technologicalProfile?.name ?? 'Sin perfil tecnológico'}</strong></div>
+      </section>
+
+      <nav className="certification-tabs" aria-label="Secciones de certificaciones">
+        {visibleTabs.map((tab) => (
+          <button key={tab.id} type="button" className={activeTab === tab.id ? 'is-active' : ''}
+            aria-current={activeTab === tab.id ? 'page' : undefined} onClick={() => setActiveTab(tab.id)}>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
       <form className="certification-form" onSubmit={submit} noValidate>
         <fieldset disabled={saving}>
-          <section className="ns-card">
-            <div className="ns-card-heading">
-              <div><span className="ns-step">1</span><h2>Perfil de certificación</h2></div>
-              <p>Información base utilizada para los cálculos de fechas.</p>
-            </div>
-            <div className="certification-grid">
-              <label className="ns-field">
-                <span>Perfil <b>*</b></span>
-                <select value={profile.professionalProfilePublicId}
-                  onChange={(event) => setProfile((current) => ({ ...current, professionalProfilePublicId: event.target.value }))}>
-                  <option value="">Seleccionar perfil</option>
-                  {catalogs?.profiles.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}
-                </select>
-                {fieldErrors.professionalProfilePublicId && <small className="org-field-error">{fieldErrors.professionalProfilePublicId}</small>}
-              </label>
-              <label className="ns-field">
-                <span>Fecha de alta <b>*</b></span>
-                <input type="date" value={profile.enrollmentDate}
-                  onChange={(event) => setProfile((current) => ({ ...current, enrollmentDate: event.target.value }))} />
-                {fieldErrors.enrollmentDate && <small className="org-field-error">{fieldErrors.enrollmentDate}</small>}
-              </label>
-              <label className="ns-field">
-                <span>Tecnología en la que se certifica <b>*</b></span>
-                <select value={profile.certificationTechnologyPublicId}
-                  onChange={(event) => setProfile((current) => ({ ...current, certificationTechnologyPublicId: event.target.value }))}>
-                  <option value="">Seleccionar tecnología</option>
-                  {catalogs?.technologies.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}
-                </select>
-                {fieldErrors.certificationTechnologyPublicId && <small className="org-field-error">{fieldErrors.certificationTechnologyPublicId}</small>}
-              </label>
-              <label className="ns-field">
-                <span>Perfil tecnológico <b>*</b></span>
-                <select value={profile.technologicalProfile}
-                  onChange={(event) => setProfile((current) => ({ ...current, technologicalProfile: event.target.value }))}>
-                  <option value="">Seleccionar perfil tecnológico</option>
-                  {catalogs?.technologicalProfiles.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-                {fieldErrors.technologicalProfile && <small className="org-field-error">{fieldErrors.technologicalProfile}</small>}
-              </label>
-            </div>
-          </section>
+          {activeTab === 'SUMMARY' && (
+            <section className="certification-panel">
+              <div className="certification-metrics">
+                <Metric label="Áreas aplicables" value={detail.metrics.applicableAreas} />
+                <Metric label="Pendientes" value={detail.metrics.pending} />
+                <Metric label="Programadas" value={detail.metrics.scheduled} />
+                <Metric label="Aprobadas" value={detail.metrics.approved} />
+                <Metric label="No aprobadas" value={detail.metrics.notApproved} />
+                <Metric label="Vigentes" value={detail.metrics.valid} />
+                <Metric label="Próximas a vencer" value={detail.metrics.expiringSoon} />
+                <Metric label="Vencidas" value={detail.metrics.expired} />
+                <Metric label="Recertificaciones pendientes" value={detail.metrics.pendingRecertifications} />
+              </div>
+              <div className="ns-card certification-summary-note">
+                <h2>Seguimientos sin vencimiento</h2>
+                <p>ONE y Agile conservan estado, fechas operativas, observaciones e historial, pero no generan vencimiento ni recertificación.</p>
+              </div>
+            </section>
+          )}
 
-          <section className="certification-sections">
-            {requirements.map((item, index) => {
-              const attempt = attempts[item.type]
-              const showExamFields = item.type === 'DEVELOPMENT_SECURITY'
-                || item.type === 'TECHNOLOGICAL'
-                || item.type === 'NORMATIVE_TESTING'
-              return (
-                <details className="ns-card certification-section" key={item.type} open={index === 0}>
-                  <summary>
-                    <div>
-                      <strong>{TYPE_LABELS[item.type]}</strong>
-                      <span>{item.applies ? 'Aplica' : 'No aplica'}</span>
-                    </div>
-                    <Icon name="chevronDown" size={18} />
-                  </summary>
-                  <div className="certification-section-body">
-                    <label className="certification-toggle">
-                      <input type="checkbox" checked={item.applies}
-                        onChange={(event) => updateRequirement(item.type, {
-                          applies: event.target.checked,
-                          certificationStatus: event.target.checked ? 'PENDING' : 'NOT_APPLICABLE',
-                          examStatus: event.target.checked ? item.examStatus : 'NOT_SCHEDULED'
-                        })} />
-                      ¿Aplica {TYPE_LABELS[item.type]}?
-                    </label>
+          {activeTab === 'APPLICABILITY' && (
+            <section className="ns-card certification-panel">
+              <div className="ns-card-heading"><div><h2>Certificaciones aplicables</h2><p className="muted">Los cambios se persisten únicamente al usar Guardar cambios.</p></div></div>
+              <div className="certification-applicability-grid">
+                {FLAG_OPTIONS.map((option) => (
+                  <label className="certification-toggle-card" key={option.key}>
+                    <input type="checkbox" checked={applicability[option.key]}
+                      onChange={(event) => updateApplicability(option.key, event.target.checked)} />
+                    <span><strong>{option.label}</strong><small>{applicability[option.key] ? 'Seguimiento habilitado' : 'No aplica actualmente'}</small></span>
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
 
-                    {item.applies && (
-                      <>
-                        <div className="certification-grid">
-                          <label className="ns-field">
-                            <span>Estatus de certificación</span>
-                            <select value={item.certificationStatus}
-                              onChange={(event) => updateRequirement(item.type, { certificationStatus: event.target.value as CertificationStatus })}>
-                              {catalogs?.certificationStatuses.filter((option) => option.value !== 'NOT_APPLICABLE')
-                                .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                            </select>
-                          </label>
-                          {showExamFields && (
-                            <label className="ns-field">
-                              <span>Estatus del examen</span>
-                              <select value={item.examStatus}
-                                onChange={(event) => updateRequirement(item.type, { examStatus: event.target.value as CertificationExamStatus })}>
-                                {catalogs?.examStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                              </select>
-                            </label>
-                          )}
-                          <label className="ns-field">
-                            <span>Fecha límite calculada</span>
-                            <input disabled type="date" value={detail?.requirements.find((value) => value.type === item.type)?.calculatedDeadline ?? ''} />
-                          </label>
-                          <label className="ns-field">
-                            <span>Fecha límite ajustada</span>
-                            <input type="date" value={item.manualDeadline ?? ''}
-                              onChange={(event) => updateRequirement(item.type, { manualDeadline: event.target.value || null })} />
-                          </label>
-                          {item.manualDeadline && (
-                            <label className="ns-field certification-wide">
-                              <span>Motivo del ajuste <b>*</b></span>
-                              <input maxLength={500} value={item.deadlineOverrideReason ?? ''}
-                                onChange={(event) => updateRequirement(item.type, { deadlineOverrideReason: event.target.value })} />
-                              {fieldErrors[`${item.type}.deadlineOverrideReason`] && <small className="org-field-error">{fieldErrors[`${item.type}.deadlineOverrideReason`]}</small>}
-                            </label>
-                          )}
-                          {showExamFields && (
-                            <>
-                              <label className="ns-field">
-                                <span>Fecha de aplicación</span>
-                                <input type="date" value={item.applicationDate ?? ''}
-                                  onChange={(event) => updateRequirement(item.type, { applicationDate: event.target.value || null })} />
-                              </label>
-                              <label className="ns-field">
-                                <span>Promedio</span>
-                                <input min="0" max="100" step="0.01" type="number" value={item.score ?? ''}
-                                  onChange={(event) => updateRequirement(item.type, { score: event.target.value === '' ? null : Number(event.target.value) })} />
-                                {fieldErrors[`${item.type}.score`] && <small className="org-field-error">{fieldErrors[`${item.type}.score`]}</small>}
-                              </label>
-                              <label className="ns-field">
-                                <span>Intento actual</span>
-                                <input min="1" step="1" type="number" value={item.currentAttempt ?? ''}
-                                  onChange={(event) => updateRequirement(item.type, { currentAttempt: event.target.value === '' ? null : Number(event.target.value) })} />
-                              </label>
-                            </>
-                          )}
-                          {item.type === 'NORMATIVE_TESTING' && (
-                            <label className="ns-field certification-wide">
-                              <span>Acciones a realizar Normativa</span>
-                              <textarea maxLength={1000} value={item.actionsToTake ?? ''}
-                                onChange={(event) => updateRequirement(item.type, { actionsToTake: event.target.value })} />
-                            </label>
-                          )}
-                          <label className="ns-field certification-wide">
-                            <span>Observaciones</span>
-                            <textarea maxLength={1000} value={item.observations ?? ''}
-                              onChange={(event) => updateRequirement(item.type, { observations: event.target.value })} />
-                          </label>
-                        </div>
+          {FLAG_OPTIONS.map((option) => activeTab === option.type && applicability[option.key] ? (
+            <CertificationSection key={option.type} type={option.type} cycles={cycles.filter((cycle) => cycle.type === option.type)}
+              catalogs={catalogs} attemptDrafts={attemptDrafts} fieldErrors={fieldErrors}
+              onAdd={addCycle} onUpdate={updateCycle} onRemove={removeUnsavedCycle}
+              onSetPrimary={setPrimary} onToggleAttempt={toggleAttemptDraft} onUpdateAttempt={updateAttemptDraft} />
+          ) : null)}
 
-                        {showExamFields && (
-                          <div className="attempt-draft">
-                            <label className="certification-toggle">
-                              <input type="checkbox" checked={attempt.enabled}
-                                onChange={(event) => updateAttempt(item.type, { enabled: event.target.checked })} />
-                              Registrar un nuevo intento al guardar
-                            </label>
-                            {attempt.enabled && (
-                              <div className="certification-grid">
-                                <label className="ns-field"><span>Número de intento</span><input min="1" type="number" value={attempt.attemptNumber} onChange={(event) => updateAttempt(item.type, { attemptNumber: Number(event.target.value) })} /></label>
-                                <label className="ns-field"><span>Fecha programada</span><input type="date" value={attempt.scheduledDate ?? ''} onChange={(event) => updateAttempt(item.type, { scheduledDate: event.target.value || null })} /></label>
-                                <label className="ns-field"><span>Fecha de aplicación</span><input type="date" value={attempt.applicationDate ?? ''} onChange={(event) => updateAttempt(item.type, { applicationDate: event.target.value || null })} /></label>
-                                <label className="ns-field"><span>Estado del examen</span><select value={attempt.examStatus} onChange={(event) => updateAttempt(item.type, { examStatus: event.target.value as CertificationExamStatus })}>{catalogs?.examStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                                <label className="ns-field"><span>Promedio</span><input min="0" max="100" step="0.01" type="number" value={attempt.score ?? ''} onChange={(event) => updateAttempt(item.type, { score: event.target.value === '' ? null : Number(event.target.value) })} /></label>
-                                <label className="ns-field certification-wide"><span>Observaciones</span><input maxLength={1000} value={attempt.observations ?? ''} onChange={(event) => updateAttempt(item.type, { observations: event.target.value })} /></label>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </details>
-              )
-            })}
-          </section>
+          {activeTab === 'ATTEMPTS' && (
+            <section className="ns-card certification-panel">
+              <div className="ns-card-heading"><div><h2>Intentos</h2><p className="muted">Los intentos se consultan con paginación de servidor. Para editar uno, cárgalo en la sección de su certificación y guarda todos los cambios juntos.</p></div></div>
+              {attemptCycles.length === 0 ? <p className="muted">Todavía no existen ciclos que admitan intentos.</p> : (
+                <>
+                  <label className="ns-field certification-attempt-cycle-select"><span>Ciclo</span>
+                    <select value={selectedAttemptCycle} onChange={(event) => { setSelectedAttemptCycle(event.target.value); setAttemptsPage(0) }}>
+                      {attemptCycles.map((cycle) => <option key={cycle.publicId} value={cycle.publicId}>{TYPE_LABELS[cycle.type]} · {cycle.technologyName ?? cycle.processType ?? 'Ciclo'}</option>)}
+                    </select>
+                  </label>
+                  <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Intento</th><th>Programada</th><th>Aplicación</th><th>Examen</th><th>Promedio</th><th>Resultado</th><th>Acciones</th></tr></thead><tbody>
+                    {attemptsLoading && <tr><td colSpan={7} className="ns-table-empty">Cargando intentos…</td></tr>}
+                    {!attemptsLoading && attempts.content.length === 0 && <tr><td colSpan={7} className="ns-table-empty">Todavía no existen intentos registrados.</td></tr>}
+                    {!attemptsLoading && attempts.content.map((attempt) => <tr key={attempt.publicId}>
+                      <td>{attempt.attemptNumber}</td><td>{formatDate(attempt.scheduledDate)}</td><td>{formatDate(attempt.applicationDate)}</td>
+                      <td>{EXAM_LABELS[attempt.examStatus]}</td><td>{attempt.score ?? '—'}</td><td>{attempt.result ?? '—'}</td>
+                      <td><button className="secondary-button" type="button" onClick={() => editAttempt(attempt)}>Editar</button></td>
+                    </tr>)}
+                  </tbody></table></div>
+                  <TablePagination compact currentPage={attempts.page} pageSize={attempts.size}
+                    totalElements={attempts.totalElements} totalPages={attempts.totalPages} isLoading={attemptsLoading}
+                    onPageChange={setAttemptsPage}
+                    onPageSizeChange={(size) => { setAttemptsSize(size); setAttemptsPage(0) }} />
+                </>
+              )}
+            </section>
+          )}
 
-          <section className="ns-card">
-            <div className="ns-card-heading"><div><h2>Historial de intentos</h2></div></div>
-            <div className="ns-data-table-wrap">
-              <table className="ns-data-table">
-                <thead><tr><th>Certificación</th><th>Intento</th><th>Aplicación</th><th>Estado</th><th>Promedio</th></tr></thead>
-                <tbody>
-                  {detail?.attempts.length === 0 && <tr><td colSpan={5} className="ns-table-empty">Todavía no existen intentos registrados.</td></tr>}
-                  {attemptsData.content.map((attempt) => (
-                    <tr key={attempt.publicId}>
-                      <td>{TYPE_LABELS[attempt.type]}</td>
-                      <td>{attempt.attemptNumber}</td>
-                      <td>{formatDate(attempt.applicationDate)}</td>
-                      <td>{attempt.examStatus}</td>
-                      <td>{attempt.score ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>            </div>
-            <TablePagination compact currentPage={attemptsData.page} pageSize={attemptsData.size} totalElements={attemptsData.totalElements} totalPages={attemptsData.totalPages} onPageChange={setAttemptsPage} onPageSizeChange={(nextSize) => { setAttemptsSize(nextSize); setAttemptsPage(0) }} />
-          </section>
-          <section className="ns-card">
-            <div className="ns-card-heading"><div><h2>Historial de cambios</h2></div></div>
-            <div className="certification-history">
-              {detail?.history.length === 0 && <p className="muted">Todavía no existen cambios registrados.</p>}
-              {detail?.history.map((entry) => (
-                <article key={entry.publicId}>
-                  <strong>{entry.eventType}</strong>
-                  <span>{new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.changedAt))}</span>
-                </article>
-              ))}
-            </div>
-          </section>
+          {activeTab === 'EXPIRATIONS' && (
+            <section className="ns-card certification-panel">
+              <div className="ns-card-heading"><div><h2>Vencimientos</h2><p className="muted">Solo incluye Tecnológica, Desarrollo Seguro y Normativa y Testing.</p></div></div>
+              <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Área</th><th>Tecnología / nivel</th><th>Aplicación</th><th>Vencimiento</th><th>Vigencia</th></tr></thead><tbody>
+                {expirationCycles.length === 0 && <tr><td colSpan={5} className="ns-table-empty">No existen certificaciones aprobadas con vencimiento.</td></tr>}
+                {expirationCycles.map((cycle) => <tr key={cycle.key}><td>{TYPE_LABELS[cycle.type]}</td>
+                  <td>{cycle.type === 'TECHNOLOGICAL' ? `${cycle.technologyName ?? 'Tecnología'} · ${cycle.certificationLevel ?? 'Sin nivel'}` : '—'}</td>
+                  <td>{formatDate(cycle.applicationDate)}</td><td>{formatDate(cycle.expirationDate)}</td>
+                  <td>{cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'}</td></tr>)}
+              </tbody></table></div>
+            </section>
+          )}
+
+          {activeTab === 'HISTORY' && (
+            <section className="ns-card certification-panel">
+              <div className="ns-card-heading"><div><h2>Historial de certificaciones</h2></div></div>
+              <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Evento</th><th>Motivo</th><th>Fecha</th></tr></thead><tbody>
+                {historyLoading && <tr><td colSpan={3} className="ns-table-empty">Cargando historial…</td></tr>}
+                {!historyLoading && history.content.length === 0 && <tr><td colSpan={3} className="ns-table-empty">Todavía no existen cambios registrados.</td></tr>}
+                {!historyLoading && history.content.map((item) => <tr key={item.publicId}><td>{item.eventType}</td><td>{item.reason ?? '—'}</td><td>{formatDateTime(item.changedAt)}</td></tr>)}
+              </tbody></table></div>
+              <TablePagination compact currentPage={history.page} pageSize={history.size}
+                totalElements={history.totalElements} totalPages={history.totalPages} isLoading={historyLoading}
+                onPageChange={setHistoryPage}
+                onPageSizeChange={(size) => { setHistorySize(size); setHistoryPage(0) }} />
+            </section>
+          )}
         </fieldset>
 
         <footer className="certification-actions">
           <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/students')}>Cancelar</button>
-          <button className="primary-button" type="submit" disabled={saving}>
+          <button className="primary-button" type="submit" disabled={saving || !dirty}>
             {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </footer>
       </form>
     </main>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>
+}
+
+function CertificationSection({
+  type,
+  cycles,
+  catalogs,
+  attemptDrafts,
+  fieldErrors,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onSetPrimary,
+  onToggleAttempt,
+  onUpdateAttempt
+}: {
+  type: CertificationType
+  cycles: EditableCycle[]
+  catalogs: CertificationCatalogs
+  attemptDrafts: Record<string, CertificationAttemptPayload | undefined>
+  fieldErrors: Record<string, string>
+  onAdd: (type: CertificationType, primary?: boolean) => void
+  onUpdate: (key: string, changes: Partial<EditableCycle>) => void
+  onRemove: (key: string) => void
+  onSetPrimary: (key: string) => void
+  onToggleAttempt: (cycle: EditableCycle, enabled: boolean) => void
+  onUpdateAttempt: (key: string, changes: Partial<CertificationAttemptPayload>) => void
+}) {
+  const technological = type === 'TECHNOLOGICAL'
+  const primaryExists = cycles.some((cycle) => cycle.primary && cycle.active !== false)
+  return (
+    <section className="certification-panel certification-cycle-section">
+      <div className="ns-card certification-section-heading">
+        <div><p className="eyebrow">Seguimiento</p><h2>{TYPE_LABELS[type]}</h2></div>
+        <div className="student-management-actions">
+          {technological && !primaryExists && <button className="primary-button" type="button" onClick={() => onAdd(type, true)}>Configurar principal</button>}
+          <button className="secondary-button" type="button" onClick={() => onAdd(type, false)}>{technological ? 'Agregar certificación secundaria' : 'Agregar ciclo'}</button>
+        </div>
+      </div>
+      {cycles.length === 0 && (
+        <div className="ns-card certification-empty-cycle">
+          <p>{technological
+            ? 'La certificación tecnológica está habilitada, pero todavía no se ha configurado una certificación principal.'
+            : 'El seguimiento está habilitado, pero todavía no existe un ciclo configurado.'}</p>
+        </div>
+      )}
+      <div className="certification-cycle-list">
+        {cycles.map((cycle, index) => {
+          const attempt = attemptDrafts[cycle.key]
+          return (
+            <article className="ns-card certification-cycle-card" key={cycle.key}>
+              <header>
+                <div>
+                  <p className="eyebrow">{technological ? cycle.primary ? 'Certificación principal' : `Certificación secundaria ${index + 1}` : `Ciclo ${index + 1}`}</p>
+                  <h3>{cycle.processType === 'RECERTIFICATION' ? 'Recertificación' : cycle.processType === 'CERTIFICATION' ? 'Certificación' : 'Tipo calculado al guardar'}</h3>
+                  <small>El tipo se determina automáticamente a partir del historial aprobado equivalente.</small>
+                </div>
+                <div className="certification-cycle-header-actions">
+                  {technological && !cycle.primary && <button className="secondary-button" type="button" onClick={() => onSetPrimary(cycle.key)}>Hacer principal</button>}
+                  {!cycle.publicId && <button className="danger-button" type="button" onClick={() => onRemove(cycle.key)}>Retirar</button>}
+                </div>
+              </header>
+
+              <div className="certification-grid">
+                {technological && (
+                  <>
+                    <label className="ns-field"><span>Tecnología <b>*</b></span>
+                      <select value={cycle.technologyPublicId ?? ''}
+                        onChange={(event) => onUpdate(cycle.key, { technologyPublicId: event.target.value || null })}
+                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.technologyPublicId`])}>
+                        <option value="">Seleccionar tecnología</option>
+                        {catalogs.technologies.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}
+                      </select>
+                      {fieldErrors[`${cycle.key}.technologyPublicId`] && <small className="field-error">{fieldErrors[`${cycle.key}.technologyPublicId`]}</small>}
+                    </label>
+                    <label className="ns-field"><span>Nivel de certificación <b>*</b></span>
+                      <select value={cycle.certificationLevel ?? ''}
+                        onChange={(event) => onUpdate(cycle.key, { certificationLevel: event.target.value as CertificationLevel })}
+                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.certificationLevel`])}>
+                        {catalogs.levels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      {fieldErrors[`${cycle.key}.certificationLevel`] && <small className="field-error">{fieldErrors[`${cycle.key}.certificationLevel`]}</small>}
+                    </label>
+                  </>
+                )}
+                <label className="ns-field"><span>Tipo de proceso</span><input disabled value={cycle.processType === 'RECERTIFICATION' ? 'Recertificación' : cycle.processType === 'CERTIFICATION' ? 'Certificación' : 'Se calculará al guardar'} /></label>
+                <label className="ns-field"><span>Estado de seguimiento</span>
+                  <select value={cycle.trackingStatus}
+                    onChange={(event) => onUpdate(cycle.key, { trackingStatus: event.target.value as CertificationTrackingStatus })}>
+                    {catalogs.trackingStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="ns-field"><span>Fecha límite de aplicación</span><input disabled type="date" value={cycle.deadlineDate ?? ''} /></label>
+                <label className="ns-field"><span>Fecha programada</span><input type="date" value={cycle.scheduledDate ?? ''} onChange={(event) => onUpdate(cycle.key, { scheduledDate: event.target.value || null })} /></label>
+                <label className="ns-field"><span>Fecha de aplicación</span><input type="date" value={cycle.applicationDate ?? ''}
+                  onChange={(event) => onUpdate(cycle.key, { applicationDate: event.target.value || null })}
+                  aria-invalid={Boolean(fieldErrors[`${cycle.key}.applicationDate`])} />
+                  {fieldErrors[`${cycle.key}.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.applicationDate`]}</small>}
+                </label>
+                {type !== 'ONE' && type !== 'AGILE' && (
+                  <label className="ns-field"><span>Aprobación</span>
+                    <select value={cycle.approved === null || cycle.approved === undefined ? '' : cycle.approved ? 'true' : 'false'}
+                      onChange={(event) => onUpdate(cycle.key, { approved: event.target.value === '' ? null : event.target.value === 'true' })}>
+                      <option value="">Pendiente</option><option value="true">Aprobada</option><option value="false">No aprobada</option>
+                    </select>
+                  </label>
+                )}
+                {hasExpiration(type) && (
+                  <>
+                    <label className="ns-field"><span>Fecha de vencimiento</span><input disabled type="date" value={cycle.expirationDate ?? ''} /></label>
+                    <label className="ns-field"><span>Estado de vigencia</span><input disabled value={cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'} /></label>
+                  </>
+                )}
+                {type === 'DEVELOPMENT_SECURITY' && (
+                  <label className="ns-field certification-wide"><span>Gestión Softtek</span><textarea maxLength={1000} value={cycle.softtekManagement ?? ''} onChange={(event) => onUpdate(cycle.key, { softtekManagement: event.target.value })} /></label>
+                )}
+                {type === 'NORMATIVE_TESTING' && (
+                  <label className="ns-field certification-wide"><span>Acciones a realizar</span><textarea maxLength={1000} value={cycle.actionsToTake ?? ''} onChange={(event) => onUpdate(cycle.key, { actionsToTake: event.target.value })} /></label>
+                )}
+                <label className="ns-field certification-wide"><span>Observaciones</span><textarea maxLength={1000} value={cycle.observations ?? ''} onChange={(event) => onUpdate(cycle.key, { observations: event.target.value })} /></label>
+              </div>
+
+              {supportsAttempts(type) && (
+                <div className="attempt-draft">
+                  <label className="certification-toggle">
+                    <input type="checkbox" checked={Boolean(attempt)} onChange={(event) => onToggleAttempt(cycle, event.target.checked)} />
+                    <span>{attempt?.publicId ? 'Editar el intento seleccionado al guardar' : 'Registrar un nuevo intento al guardar'}</span>
+                  </label>
+                  {attempt && (
+                    <div className="certification-grid">
+                      <label className="ns-field"><span>Fecha programada</span><input type="date" value={attempt.scheduledDate ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { scheduledDate: event.target.value || null })} /></label>
+                      <label className="ns-field"><span>Fecha de aplicación</span><input type="date" value={attempt.applicationDate ?? ''}
+                        onChange={(event) => onUpdateAttempt(cycle.key, { applicationDate: event.target.value || null })}
+                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.attempt.applicationDate`])} />
+                        {fieldErrors[`${cycle.key}.attempt.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.attempt.applicationDate`]}</small>}
+                      </label>
+                      <label className="ns-field"><span>Estado del examen</span><select value={attempt.examStatus}
+                        onChange={(event) => onUpdateAttempt(cycle.key, { examStatus: event.target.value as CertificationExamStatus })}>
+                        {catalogs.examStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select></label>
+                      <label className="ns-field"><span>Promedio</span><input type="number" min="0" max="100" step="0.01" value={attempt.score ?? ''}
+                        onChange={(event) => onUpdateAttempt(cycle.key, { score: event.target.value === '' ? null : Number(event.target.value) })}
+                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.attempt.score`])} />
+                        {fieldErrors[`${cycle.key}.attempt.score`] && <small className="field-error">{fieldErrors[`${cycle.key}.attempt.score`]}</small>}
+                      </label>
+                      <label className="ns-field"><span>Resultado</span><input maxLength={1000} value={attempt.result ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { result: event.target.value })} /></label>
+                      <label className="ns-field"><span>Aprobado</span><select value={attempt.approved === null || attempt.approved === undefined ? '' : attempt.approved ? 'true' : 'false'} onChange={(event) => onUpdateAttempt(cycle.key, { approved: event.target.value === '' ? null : event.target.value === 'true' })}><option value="">Pendiente</option><option value="true">Sí</option><option value="false">No</option></select></label>
+                      <label className="ns-field certification-wide"><span>Observaciones</span><textarea maxLength={1000} value={attempt.observations ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { observations: event.target.value })} /></label>
+                    </div>
+                  )}
+                </div>
+              )}
+            </article>
+          )
+        })}
+      </div>
+    </section>
   )
 }

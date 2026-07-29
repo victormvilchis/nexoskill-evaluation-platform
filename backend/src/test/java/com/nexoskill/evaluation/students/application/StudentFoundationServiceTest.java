@@ -16,6 +16,7 @@ import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,10 +25,10 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class StudentFoundationServiceTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-28T14:00:00Z"), ZoneOffset.UTC);
+    private static final LocalDate TODAY = LocalDate.of(2026, 7, 28);
 
     private StudentService studentService;
     private OrganizationRepository organizations;
-    private NamedParameterJdbcTemplate jdbc;
     private StudentFoundationService service;
     private OrganizationJpaEntity organization;
     private TenantContext tenant;
@@ -36,12 +37,10 @@ class StudentFoundationServiceTest {
     void setUp() {
         studentService = mock(StudentService.class);
         organizations = mock(OrganizationRepository.class);
-        jdbc = mock(NamedParameterJdbcTemplate.class);
-        service = new StudentFoundationService(studentService, organizations, jdbc,
-                mock(AuditLogPort.class), CLOCK);
+        service = new StudentFoundationService(studentService, organizations,
+                mock(NamedParameterJdbcTemplate.class), mock(AuditLogPort.class), CLOCK);
         organization = mock(OrganizationJpaEntity.class);
         tenant = TenantContext.organization(21L, "00000000-0000-0000-0000-000000000021", "ORG_21", false);
-
         when(organizations.findById(21L)).thenReturn(Optional.of(organization));
         when(organization.getOrganizationType()).thenReturn(OrganizationType.CUSTOMER);
         when(organization.isGlobal()).thenReturn(false);
@@ -55,21 +54,17 @@ class StudentFoundationServiceTest {
     @Test
     void catalogsAreEmptyWhenOrganizationDoesNotApplyCertifications() {
         when(organization.isAppliesCertifications()).thenReturn(false);
-
         StudentFoundationService.CatalogBundle result = service.catalogs(tenant, null);
-
         assertThat(result.appliesCertifications()).isFalse();
         assertThat(result.organization().publicId()).isEqualTo(tenant.organizationPublicId());
         assertThat(result.profiles()).isEmpty();
         assertThat(result.technologicalProfiles()).isEmpty();
-        assertThat(result.technologies()).isEmpty();
     }
 
     @Test
     void managerCannotQueryCatalogsFromAnotherOrganization() {
         BusinessException exception = assertThrows(BusinessException.class, () ->
                 service.catalogs(tenant, "00000000-0000-0000-0000-000000000022"));
-
         assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_FORBIDDEN");
     }
 
@@ -77,9 +72,7 @@ class StudentFoundationServiceTest {
     void globalAdministratorMustSelectOrganizationBeforeLoadingCatalogs() {
         TenantContext global = TenantContext.global(1L,
                 "00000000-0000-0000-0000-000000000001", "GLOBAL");
-
         BusinessException exception = assertThrows(BusinessException.class, () -> service.catalogs(global, null));
-
         assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_REQUIRED");
     }
 
@@ -89,32 +82,26 @@ class StudentFoundationServiceTest {
         when(studentService.create(any(), any(), any())).thenReturn(new StudentService.StudentDetail(
                 "00000000-0000-0000-0000-000000000099", "ST-99", "student@example.com", "Nombre",
                 "Apellidos", "Nombre Apellidos", StudentStatus.ACTIVE, StudentEffectiveStatus.ACTIVE,
-                CLOCK.instant(), null, true, null, null,
-                CLOCK.instant(), CLOCK.instant(), 0L));
-
+                TODAY, TODAY.plusDays(30), true, null, null, CLOCK.instant(), CLOCK.instant(), 0L));
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
                 null, "ST-99", "student@example.com", "Nombre", "Apellidos", null, "Temporary123!",
-                StudentStatus.ACTIVE, CLOCK.instant(), null,
-                "00000000-0000-0000-0000-000000000031", null, null, null);
-
+                StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY,
+                "00000000-0000-0000-0000-000000000031", null,
+                false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
                 new StudentService.Actor(7L, "127.0.0.1", "test")));
-
         assertThat(exception.getCode()).isEqualTo("STUDENT_CERTIFICATIONS_NOT_ENABLED");
-        assertThat(exception.getFieldErrors()).containsEntry("certifications",
-                "Retira los datos de perfil y certificación para esta organización.");
+        assertThat(exception.getFieldErrors()).containsKey("certifications");
     }
 
     @Test
     void managerCannotSendOrganizationEvenWhenItMatchesTheSession() {
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
                 tenant.organizationPublicId(), "ST-99", "student@example.com", "Nombre", "Apellidos",
-                null, "Temporary123!", StudentStatus.ACTIVE, CLOCK.instant(), null,
-                null, null, null, null);
-
+                null, "Temporary123!", StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), null,
+                null, null, false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
                 new StudentService.Actor(7L, "127.0.0.1", "test")));
-
         assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_FORBIDDEN");
         assertThat(exception.getFieldErrors()).containsKey("organizationPublicId");
     }

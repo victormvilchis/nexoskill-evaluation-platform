@@ -17,6 +17,7 @@ import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepos
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionRepository;
 import com.nexoskill.evaluation.users.application.service.PasswordPolicy;
+import com.nexoskill.evaluation.users.application.service.SecureTemporaryPasswordGenerator;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,33 +41,46 @@ public class StudentService {
     private final OrganizationRepository organizationRepository;
     private final PasswordHasher passwordHasher;
     private final PasswordPolicy passwordPolicy;
+    private final SecureTemporaryPasswordGenerator passwordGenerator;
     private final AppProperties properties;
     private final AuditLogPort auditLogPort;
     private final Clock clock;
 
+    @Autowired
     public StudentService(StudentRepository studentRepository, StudentSessionRepository sessionRepository,
             OrganizationRepository organizationRepository, PasswordHasher passwordHasher,
-            PasswordPolicy passwordPolicy, AppProperties properties, AuditLogPort auditLogPort, Clock clock) {
+            PasswordPolicy passwordPolicy, SecureTemporaryPasswordGenerator passwordGenerator,
+            AppProperties properties, AuditLogPort auditLogPort, Clock clock) {
         this.studentRepository = studentRepository;
         this.sessionRepository = sessionRepository;
         this.organizationRepository = organizationRepository;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
+        this.passwordGenerator = passwordGenerator;
         this.properties = properties;
         this.auditLogPort = auditLogPort;
         this.clock = clock;
     }
 
+    /** Constructor conservado para pruebas/unitarios anteriores. */
+    public StudentService(StudentRepository studentRepository, StudentSessionRepository sessionRepository,
+            OrganizationRepository organizationRepository, PasswordHasher passwordHasher,
+            PasswordPolicy passwordPolicy, AppProperties properties, AuditLogPort auditLogPort, Clock clock) {
+        this(studentRepository, sessionRepository, organizationRepository, passwordHasher, passwordPolicy,
+                new SecureTemporaryPasswordGenerator(), properties, auditLogPort, clock);
+    }
+
     @Transactional(readOnly = true)
-    public PageResult search(TenantContext tenant, String query, StudentEffectiveStatus status, boolean ignoredIncludeDeleted,
-            int page, int size) {
+    public PageResult search(TenantContext tenant, String query, StudentEffectiveStatus status,
+            boolean ignoredIncludeDeleted, int page, int size) {
         Long organizationId = requireOrganization(tenant);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "updatedAt"));
         if (!studentRepository.existsByOrganizationId(organizationId)) return PageResult.empty(safePage, safeSize);
+        LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
-        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, now, pageable);
+        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, today, pageable);
         List<StudentSummary> content = result.getContent() == null ? List.of()
                 : result.getContent().stream().map(entity -> summary(entity, now)).toList();
         return new PageResult(content, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
@@ -86,21 +101,17 @@ public class StudentService {
             throw fieldError("STUDENT_INITIAL_STATUS_INVALID", "El estado inicial no es válido.",
                     "status", "El estudiante debe crearse como activo o desactivado.");
         }
+        LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
-        if (initialStatus == StudentStatus.ACTIVE && command.validFrom().isAfter(now)) {
+        if (initialStatus == StudentStatus.ACTIVE && command.validFrom().isAfter(today)) {
             throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
-                    "validFrom", "La fecha de inicio de un estudiante activo no puede ser futura.");
+                    "validFrom", "El inicio de vigencia de un estudiante activo no puede ser futuro.");
         }
-        if (initialStatus == StudentStatus.ACTIVE && command.expiresAt() != null && !command.expiresAt().isAfter(now)) {
+        if (initialStatus == StudentStatus.ACTIVE && command.expiresAt().isBefore(today)) {
             throw fieldError("STUDENT_EXPIRED", "No se puede crear un estudiante activo vencido.",
-                    "expiresAt", "La fecha de vencimiento debe ser posterior a la fecha actual.");
+                    "expiresAt", "La fecha de vencimiento debe ser igual o posterior a la fecha actual.");
         }
-        try {
-            passwordPolicy.validate(command.temporaryPassword(), command.email());
-        } catch (BusinessException exception) {
-            throw new BusinessException(exception.getCode(), exception.getMessage(),
-                    Map.of("temporaryPassword", exception.getMessage()));
-        }
+        validateTemporaryPassword(command.temporaryPassword(), command.email());
         String normalizedEmail = EmailNormalizer.normalize(command.email());
         String code = normalizeCode(command.studentCode());
         if (studentRepository.existsByOrganizationIdAndNormalizedEmail(organizationId, normalizedEmail)) {
@@ -143,14 +154,21 @@ public class StudentService {
                             "email", "Ya existe un estudiante con este correo dentro de la organización.");
                 });
         Instant now = clock.instant();
+        LocalDate previousValidFrom = student.getValidFrom();
+        LocalDate previousExpiresAt = student.getExpiresAt();
         student.updateProfile(command.email().trim(), normalizedEmail, command.firstName().trim(),
                 command.lastName().trim(), displayName(command.displayName(), command.firstName(), command.lastName()),
                 command.validFrom(), command.expiresAt(), actor.userId(), now);
         student = studentRepository.save(student);
-        if (student.effectiveStatusAt(now) != StudentEffectiveStatus.ACTIVE) {
-            revokeSessions(student.getId(), revocationReason(student.effectiveStatusAt(now)), now);
+        StudentEffectiveStatus effectiveStatus = student.effectiveStatusOn(LocalDate.now(clock));
+        if (effectiveStatus != StudentEffectiveStatus.ACTIVE) {
+            revokeSessions(student.getId(), revocationReason(effectiveStatus), now);
         }
-        audit(actor, "STUDENT_UPDATED", student, Map.of(), now);
+        audit(actor, "STUDENT_UPDATED", student,
+                Map.of("previousValidFrom", String.valueOf(previousValidFrom),
+                        "newValidFrom", String.valueOf(command.validFrom()),
+                        "previousExpiresAt", String.valueOf(previousExpiresAt),
+                        "newExpiresAt", String.valueOf(command.expiresAt())), now);
         return detail(student, now);
     }
 
@@ -158,18 +176,21 @@ public class StudentService {
     public StudentDetail activate(TenantContext tenant, String publicId, Actor actor) {
         requireOperationalOrganization(tenant);
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
+        LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
-        if (student.getStatus() == StudentStatus.EXPIRED || (student.getExpiresAt() != null && !student.getExpiresAt().isAfter(now))) {
-            throw fieldError("STUDENT_RENEWAL_REQUIRED", "El estudiante está vencido.",
-                    "expiresAt", "Captura una nueva fecha de vencimiento válida para renovarlo.");
-        }
-        if (student.getStatus() != StudentStatus.INACTIVE) {
-            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID",
-                    "Solamente un estudiante desactivado puede activarse directamente.");
-        }
-        if (student.getValidFrom() != null && student.getValidFrom().isAfter(now)) {
+        if (student.getValidFrom() == null || student.getValidFrom().isAfter(today)) {
             throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
-                    "validFrom", "La fecha de inicio debe ser anterior o igual a la fecha actual.");
+                    "validFrom", "El inicio de vigencia debe ser igual o anterior a la fecha actual.");
+        }
+        if (student.getExpiresAt() == null || student.getExpiresAt().isBefore(today)) {
+            throw fieldError("STUDENT_ACCESS_DATES_INVALID", "La vigencia no permite activar al estudiante.",
+                    "expiresAt", "Actualiza la fecha de vencimiento desde Editar estudiante antes de activarlo.");
+        }
+        if (student.getStatus() == StudentStatus.ACTIVE) {
+            throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El estudiante ya está activo.");
+        }
+        if (student.getStatus() != StudentStatus.INACTIVE && student.getStatus() != StudentStatus.EXPIRED) {
+            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID", "El estado actual no permite activar al estudiante.");
         }
         student.activate(actor.userId(), now);
         studentRepository.save(student);
@@ -184,6 +205,9 @@ public class StudentService {
         if (student.getStatus() == StudentStatus.INACTIVE) {
             throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El estudiante ya está desactivado.");
         }
+        if (student.getStatus() == StudentStatus.DELETED) {
+            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID", "El estudiante ya no está disponible.");
+        }
         student.deactivate(actor.userId(), now);
         studentRepository.save(student);
         revokeSessions(student.getId(), StudentSessionRevocationReason.DEACTIVATED, now);
@@ -192,36 +216,17 @@ public class StudentService {
     }
 
     @Transactional
-    public StudentDetail renew(TenantContext tenant, String publicId, Instant expiresAt, Long version, Actor actor) {
-        requireOperationalOrganization(tenant);
+    public PasswordResetResult resetPassword(TenantContext tenant, String publicId, Actor actor) {
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
-        validateVersion(student, version);
-        Instant now = clock.instant();
-        if (student.effectiveStatusAt(now) != StudentEffectiveStatus.EXPIRED) {
-            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID",
-                    "Solamente un estudiante vencido puede renovarse.");
-        }
-        if (expiresAt == null || !expiresAt.isAfter(now) || (student.getValidFrom() != null && !expiresAt.isAfter(student.getValidFrom()))) {
-            throw fieldError("STUDENT_RENEWAL_DATE_INVALID", "La fecha de renovación no es válida.",
-                    "expiresAt", "La nueva fecha de vencimiento debe ser posterior a la fecha actual y al inicio de vigencia.");
-        }
-        student.renew(expiresAt, actor.userId(), now);
-        studentRepository.save(student);
-        audit(actor, "STUDENT_RENEWED", student, Map.of("expiresAt", expiresAt.toString()), now);
-        return detail(student, now);
-    }
-
-    @Transactional
-    public StudentDetail resetPassword(TenantContext tenant, String publicId, String temporaryPassword, Actor actor) {
-        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
-        passwordPolicy.validate(temporaryPassword, student.getEmail());
+        String temporaryPassword = passwordGenerator.generate();
+        validateTemporaryPassword(temporaryPassword, student.getEmail());
         Instant now = clock.instant();
         student.resetPassword(passwordHasher.encode(temporaryPassword),
                 now.plus(properties.getSecurity().getTemporaryPasswordDuration()), actor.userId(), now);
         studentRepository.save(student);
         revokeSessions(student.getId(), StudentSessionRevocationReason.PASSWORD_RESET, now);
-        audit(actor, "STUDENT_PASSWORD_RESET", student, Map.of(), now);
-        return detail(student, now);
+        audit(actor, "STUDENT_PASSWORD_RESET", student, Map.of("oneTimeDisplay", true), now);
+        return new PasswordResetResult(detail(student, now), temporaryPassword);
     }
 
     @Transactional(readOnly = true)
@@ -257,6 +262,10 @@ public class StudentService {
                 .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
     }
 
+    StudentJpaEntity findScopedEntity(TenantContext tenant, String publicId) {
+        return findScoped(tenant, publicId);
+    }
+
     private void revokeSessions(Long studentId, StudentSessionRevocationReason reason, Instant now) {
         sessionRepository.revokeActive(studentId, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED, reason, now);
     }
@@ -273,7 +282,7 @@ public class StudentService {
                 .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
     }
 
-    private Long requireOrganization(TenantContext tenant) {
+    Long requireOrganization(TenantContext tenant) {
         if (tenant == null || !tenant.hasOrganization()) {
             throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización para administrar estudiantes.",
                     Map.of("organizationPublicId", "Debes seleccionar una organización."));
@@ -311,11 +320,21 @@ public class StudentService {
         if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
     }
 
-    private void validateDates(Instant validFrom, Instant expiresAt) {
-        if (validFrom == null) throw fieldError("STUDENT_VALID_FROM_REQUIRED", "La fecha de inicio es obligatoria.", "validFrom", "La fecha de inicio es obligatoria.");
-        if (expiresAt != null && !expiresAt.isAfter(validFrom)) {
+    private void validateDates(LocalDate validFrom, LocalDate expiresAt) {
+        if (validFrom == null) throw fieldError("STUDENT_VALID_FROM_REQUIRED", "El inicio de vigencia es obligatorio.", "validFrom", "El inicio de vigencia es obligatorio.");
+        if (expiresAt == null) throw fieldError("STUDENT_EXPIRES_AT_REQUIRED", "La fecha de vencimiento es obligatoria.", "expiresAt", "La fecha de vencimiento es obligatoria.");
+        if (expiresAt.isBefore(validFrom)) {
             throw fieldError("STUDENT_DATES_INVALID", "Las fechas de vigencia no son válidas.",
-                    "expiresAt", "La fecha de vencimiento debe ser posterior a la fecha de inicio.");
+                    "expiresAt", "La fecha de vencimiento no puede ser anterior al inicio de vigencia.");
+        }
+    }
+
+    private void validateTemporaryPassword(String password, String email) {
+        try {
+            passwordPolicy.validate(password, email);
+        } catch (BusinessException exception) {
+            throw new BusinessException(exception.getCode(), exception.getMessage(),
+                    Map.of("temporaryPassword", exception.getMessage()));
         }
     }
 
@@ -351,16 +370,16 @@ public class StudentService {
 
     private StudentSummary summary(StudentJpaEntity student, Instant now) {
         return new StudentSummary(student.getPublicId(), student.getStudentCode(), student.getEmail(), student.getDisplayName(),
-                student.getStatus(), student.effectiveStatusAt(now), student.getValidFrom(), student.getExpiresAt(),
+                student.getStatus(), student.effectiveStatusOn(LocalDate.now(clock)), student.getValidFrom(), student.getExpiresAt(),
                 student.getLastLoginAt(), student.getUpdatedAt(), student.getVersion());
     }
 
     private StudentDetail detail(StudentJpaEntity student, Instant now) {
         return new StudentDetail(student.getPublicId(), student.getStudentCode(), student.getEmail(), student.getFirstName(),
-                student.getLastName(), student.getDisplayName(), student.getStatus(), student.effectiveStatusAt(now),
+                student.getLastName(), student.getDisplayName(), student.getStatus(), student.effectiveStatusOn(LocalDate.now(clock)),
                 student.getValidFrom(), student.getExpiresAt(), student.isPasswordChangeRequired(),
-                student.getTemporaryPasswordExpiresAt(), student.getLastLoginAt(),
-                student.getCreatedAt(), student.getUpdatedAt(), student.getVersion());
+                student.getTemporaryPasswordExpiresAt(), student.getLastLoginAt(), student.getCreatedAt(),
+                student.getUpdatedAt(), student.getVersion());
     }
 
     private SessionView sessionView(StudentSessionJpaEntity session) {
@@ -371,16 +390,17 @@ public class StudentService {
 
     public record Actor(Long userId, String ipAddress, String userAgent) {}
     public record CreateCommand(String studentCode, String email, String firstName, String lastName,
-            String displayName, String temporaryPassword, StudentStatus status, Instant validFrom, Instant expiresAt) {}
+            String displayName, String temporaryPassword, StudentStatus status, LocalDate validFrom, LocalDate expiresAt) {}
     public record UpdateCommand(String email, String firstName, String lastName, String displayName,
-            Instant validFrom, Instant expiresAt, Long version) {}
+            LocalDate validFrom, LocalDate expiresAt, Long version) {}
     public record StudentSummary(String publicId, String studentCode, String email, String displayName,
-            StudentStatus status, StudentEffectiveStatus effectiveStatus, Instant validFrom, Instant expiresAt,
+            StudentStatus status, StudentEffectiveStatus effectiveStatus, LocalDate validFrom, LocalDate expiresAt,
             Instant lastLoginAt, Instant updatedAt, Long version) {}
     public record StudentDetail(String publicId, String studentCode, String email, String firstName, String lastName,
-            String displayName, StudentStatus status, StudentEffectiveStatus effectiveStatus, Instant validFrom,
-            Instant expiresAt, boolean passwordChangeRequired, Instant temporaryPasswordExpiresAt,
+            String displayName, StudentStatus status, StudentEffectiveStatus effectiveStatus, LocalDate validFrom,
+            LocalDate expiresAt, boolean passwordChangeRequired, Instant temporaryPasswordExpiresAt,
             Instant lastLoginAt, Instant createdAt, Instant updatedAt, Long version) {}
+    public record PasswordResetResult(StudentDetail student, String temporaryPassword) {}
     public record SessionView(String publicId, StudentSessionStatus status, String ipAddress, String userAgent,
             Instant createdAt, Instant lastActivityAt, Instant expiresAt, Instant revokedAt, String revocationReason) {}
     public record PageResult(List<StudentSummary> content, int page, int size, long totalElements, int totalPages) {

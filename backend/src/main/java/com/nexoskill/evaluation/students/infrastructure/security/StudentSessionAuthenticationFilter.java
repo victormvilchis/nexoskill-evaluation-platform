@@ -115,8 +115,9 @@ public class StudentSessionAuthenticationFilter extends OncePerRequestFilter {
 			return publicRequest(request)
 					|| reject(response, "STUDENT_TEMP_PASSWORD_EXPIRED", "La contraseña temporal ha expirado.");
 		}
-		StudentEffectiveStatus status = student.effectiveStatusAt(now);
-		if (!student.canAuthenticateAt(now)) {
+		LocalDate today = LocalDate.now(clock);
+		StudentEffectiveStatus status = student.effectiveStatusOn(today);
+		if (!student.canAuthenticateOn(today, now)) {
 			session.revoke(revocationReason(status), now);
 			sessionRepository.save(session);
 			clearCookie(response);

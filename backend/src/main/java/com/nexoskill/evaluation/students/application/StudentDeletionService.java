@@ -65,8 +65,23 @@ public class StudentDeletionService {
                 .addValue("studentId", student.getId())
                 .addValue("organizationId", student.getOrganizationId());
 
-        // El historial referencia tanto al estudiante como al requisito: se elimina primero.
+        // El historial referencia requisitos, ciclos e intentos: se elimina primero.
         jdbc.update("DELETE FROM STUDENT_CERTIFICATION_HISTORY WHERE STUDENT_ID = :studentId", params);
+        jdbc.update("""
+            DELETE FROM STUDENT_CERTIFICATION_CYCLE_ATTEMPT
+             WHERE STUDENT_CERTIFICATION_CYCLE_ID IN (
+                   SELECT STUDENT_CERTIFICATION_CYCLE_ID
+                     FROM STUDENT_CERTIFICATION_CYCLE
+                    WHERE STUDENT_ID = :studentId
+             )
+            """, params);
+        // Rompe primero la autorreferencia de recertificación y después elimina los ciclos.
+        jdbc.update("""
+            UPDATE STUDENT_CERTIFICATION_CYCLE
+               SET PREVIOUS_APPROVED_CYCLE_ID = NULL
+             WHERE STUDENT_ID = :studentId
+            """, params);
+        jdbc.update("DELETE FROM STUDENT_CERTIFICATION_CYCLE WHERE STUDENT_ID = :studentId", params);
         jdbc.update("""
             DELETE FROM STUDENT_CERTIFICATION_ATTEMPT
              WHERE STUDENT_CERT_REQUIREMENT_ID IN (

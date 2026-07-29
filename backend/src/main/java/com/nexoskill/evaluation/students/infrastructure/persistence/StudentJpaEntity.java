@@ -12,143 +12,172 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "STUDENT")
 public class StudentJpaEntity {
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "STUDENT_ID")
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "STUDENT_ID")
+    private Long id;
 
-	@Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
-	private String publicId;
+    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+    private String publicId;
 
-	@Column(name = "ORGANIZATION_ID", nullable = false)
-	private Long organizationId;
+    @Column(name = "ORGANIZATION_ID", nullable = false)
+    private Long organizationId;
 
-	@Column(name = "STUDENT_CODE", nullable = false, length = 80)
-	private String studentCode;
+    @Column(name = "STUDENT_CODE", nullable = false, length = 80)
+    private String studentCode;
 
-	@Column(name = "EMAIL", nullable = false, length = 254)
-	private String email;
+    @Column(name = "EMAIL", nullable = false, length = 254)
+    private String email;
 
-	@Column(name = "NORMALIZED_EMAIL", nullable = false, length = 254)
-	private String normalizedEmail;
+    @Column(name = "NORMALIZED_EMAIL", nullable = false, length = 254)
+    private String normalizedEmail;
 
-	@Column(name = "PASSWORD_HASH", nullable = false, length = 255)
-	private String passwordHash;
+    @Column(name = "PASSWORD_HASH", nullable = false, length = 255)
+    private String passwordHash;
 
-	@Column(name = "FIRST_NAME", nullable = false, length = 100)
-	private String firstName;
+    @Column(name = "FIRST_NAME", nullable = false, length = 100)
+    private String firstName;
 
-	@Column(name = "LAST_NAME", nullable = false, length = 150)
-	private String lastName;
+    @Column(name = "LAST_NAME", nullable = false, length = 150)
+    private String lastName;
 
-	@Column(name = "DISPLAY_NAME", nullable = false, length = 250)
-	private String displayName;
+    @Column(name = "DISPLAY_NAME", nullable = false, length = 250)
+    private String displayName;
 
-	@Enumerated(EnumType.STRING)
-	@Column(name = "STATUS", nullable = false, length = 30)
-	private StudentStatus status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "STATUS", nullable = false, length = 30)
+    private StudentStatus status;
 
-	@Column(name = "VALID_FROM", nullable = false)
-	private Instant validFrom;
+    /** Columnas legadas conservadas para compatibilidad con instalaciones anteriores. */
+    @Column(name = "VALID_FROM", nullable = false)
+    private Instant legacyValidFrom;
 
-	@Column(name = "EXPIRES_AT")
-	private Instant expiresAt;
+    @Column(name = "EXPIRES_AT")
+    private Instant legacyExpiresAt;
 
-	@Column(name = "FAILED_LOGIN_ATTEMPTS", nullable = false)
-	private int failedLoginAttempts;
+    /** Fechas de calendario que controlan el acceso desde V042. */
+    @Column(name = "ACCESS_VALID_FROM", nullable = false)
+    private LocalDate validFrom;
 
-	@Column(name = "LOCKED_UNTIL")
-	private Instant lockedUntil;
+    @Column(name = "ACCESS_EXPIRES_ON")
+    private LocalDate expiresAt;
 
-	@Column(name = "LAST_LOGIN_AT")
-	private Instant lastLoginAt;
+    @Column(name = "ADMISSION_DATE")
+    private LocalDate admissionDate;
 
-	@Column(name = "PASSWORD_CHANGED_AT")
-	private Instant passwordChangedAt;
+    @Column(name = "FAILED_LOGIN_ATTEMPTS", nullable = false)
+    private int failedLoginAttempts;
 
-	@Column(name = "PASSWORD_CHANGE_REQUIRED", nullable = false)
-	private boolean passwordChangeRequired;
+    @Column(name = "LOCKED_UNTIL")
+    private Instant lockedUntil;
 
-	@Column(name = "TEMP_PASSWORD_EXPIRES_AT")
-	private Instant temporaryPasswordExpiresAt;
+    @Column(name = "LAST_LOGIN_AT")
+    private Instant lastLoginAt;
 
-	@Column(name = "ARCHIVED_AT")
-	private Instant archivedAt;
+    @Column(name = "PASSWORD_CHANGED_AT")
+    private Instant passwordChangedAt;
 
-	@Column(name = "DELETED_AT")
-	private Instant deletedAt;
+    @Column(name = "PASSWORD_CHANGE_REQUIRED", nullable = false)
+    private boolean passwordChangeRequired;
 
-	@Column(name = "DELETED_BY")
-	private Long deletedBy;
+    @Column(name = "TEMP_PASSWORD_EXPIRES_AT")
+    private Instant temporaryPasswordExpiresAt;
 
-	@Column(name = "DELETION_REASON", length = 500)
-	private String deletionReason;
+    @Column(name = "ARCHIVED_AT")
+    private Instant archivedAt;
 
-	@Column(name = "CREATED_BY", nullable = false)
-	private Long createdBy;
+    @Column(name = "DELETED_AT")
+    private Instant deletedAt;
 
-	@Column(name = "UPDATED_BY")
-	private Long updatedBy;
+    @Column(name = "DELETED_BY")
+    private Long deletedBy;
 
-	@Column(name = "CREATED_AT", nullable = false)
-	private Instant createdAt;
+    @Column(name = "DELETION_REASON", length = 500)
+    private String deletionReason;
 
-	@Column(name = "UPDATED_AT", nullable = false)
-	private Instant updatedAt;
+    @Column(name = "CREATED_BY", nullable = false)
+    private Long createdBy;
 
-	@Version
-	@Column(name = "VERSION_NO", nullable = false)
-	private Long version;
+    @Column(name = "UPDATED_BY")
+    private Long updatedBy;
 
-	protected StudentJpaEntity() {
-	}
+    @Column(name = "CREATED_AT", nullable = false)
+    private Instant createdAt;
 
-	public static StudentJpaEntity create(String publicId, Long organizationId, String studentCode, String email,
-			String normalizedEmail, String passwordHash, String firstName, String lastName, String displayName,
-			StudentStatus status, Instant validFrom, Instant expiresAt, Instant temporaryPasswordExpiresAt,
-			Long actorId, Instant now) {
-		StudentJpaEntity entity = new StudentJpaEntity();
-		entity.publicId = publicId;
-		entity.organizationId = organizationId;
-		entity.studentCode = studentCode;
-		entity.email = email;
-		entity.normalizedEmail = normalizedEmail;
-		entity.passwordHash = passwordHash;
-		entity.firstName = firstName;
-		entity.lastName = lastName;
-		entity.displayName = displayName;
-		entity.status = status;
-		entity.validFrom = validFrom;
-		entity.expiresAt = expiresAt;
-		entity.failedLoginAttempts = 0;
-		entity.passwordChangeRequired = true;
-		entity.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
-		entity.createdBy = actorId;
-		entity.updatedBy = actorId;
-		entity.createdAt = now;
-		entity.updatedAt = now;
-		entity.version = 0L;
-		return entity;
-	}
+    @Column(name = "UPDATED_AT", nullable = false)
+    private Instant updatedAt;
 
-	public StudentEffectiveStatus effectiveStatusAt(Instant now) {
+    @Version
+    @Column(name = "VERSION_NO", nullable = false)
+    private Long version;
+
+    protected StudentJpaEntity() {
+    }
+
+    public static StudentJpaEntity create(String publicId, Long organizationId, String studentCode, String email,
+            String normalizedEmail, String passwordHash, String firstName, String lastName, String displayName,
+            StudentStatus status, LocalDate validFrom, LocalDate expiresAt, Instant temporaryPasswordExpiresAt,
+            Long actorId, Instant now) {
+        StudentJpaEntity entity = new StudentJpaEntity();
+        entity.publicId = publicId;
+        entity.organizationId = organizationId;
+        entity.studentCode = studentCode;
+        entity.email = email;
+        entity.normalizedEmail = normalizedEmail;
+        entity.passwordHash = passwordHash;
+        entity.firstName = firstName;
+        entity.lastName = lastName;
+        entity.displayName = displayName;
+        entity.status = status;
+        entity.setAccessDates(validFrom, expiresAt);
+        entity.failedLoginAttempts = 0;
+        entity.passwordChangeRequired = true;
+        entity.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
+        entity.createdBy = actorId;
+        entity.updatedBy = actorId;
+        entity.createdAt = now;
+        entity.updatedAt = now;
+        entity.version = 0L;
+        return entity;
+    }
+
+    public StudentEffectiveStatus effectiveStatusOn(LocalDate today) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
         if (status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
-        if (status == StudentStatus.EXPIRED || (expiresAt != null && !now.isBefore(expiresAt))) {
+        if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) {
             return StudentEffectiveStatus.EXPIRED;
         }
         return StudentEffectiveStatus.ACTIVE;
     }
 
-    public boolean canAuthenticateAt(Instant now) {
+    public StudentEffectiveStatus effectiveStatusAt(Instant now) {
+        return effectiveStatusOn(LocalDate.ofInstant(now, ZoneOffset.UTC));
+    }
+
+    public boolean canAuthenticateOn(LocalDate today, Instant now) {
         return status == StudentStatus.ACTIVE
-                && (validFrom == null || !now.isBefore(validFrom))
-                && (expiresAt == null || now.isBefore(expiresAt))
+                && validFrom != null && !today.isBefore(validFrom)
+                && expiresAt != null && !today.isAfter(expiresAt)
                 && (lockedUntil == null || !lockedUntil.isAfter(now));
+    }
+
+    public boolean canAuthenticateAt(Instant now) {
+        return canAuthenticateOn(LocalDate.ofInstant(now, ZoneOffset.UTC), now);
+    }
+
+    public Instant accessExpirationInstant(ZoneId zoneId) {
+        return expiresAt == null ? null : expiresAt.plusDays(1).atStartOfDay(zoneId).toInstant();
+    }
+
+    public Instant accessExpirationInstant() {
+        return accessExpirationInstant(ZoneOffset.UTC);
     }
 
     public boolean isTemporaryPasswordExpiredAt(Instant now) {
@@ -172,15 +201,15 @@ public class StudentJpaEntity {
     }
 
     public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
-            String displayName, Instant validFrom, Instant expiresAt, Long actorId, Instant now) {
+            String displayName, LocalDate validFrom, LocalDate expiresAt, Long actorId, Instant now) {
         this.email = email;
         this.normalizedEmail = normalizedEmail;
         this.firstName = firstName;
         this.lastName = lastName;
         this.displayName = displayName;
-        this.validFrom = validFrom;
-        this.expiresAt = expiresAt;
-        if (this.status == StudentStatus.ACTIVE && expiresAt != null && !expiresAt.isAfter(now)) {
+        setAccessDates(validFrom, expiresAt);
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        if (this.status == StudentStatus.ACTIVE && expiresAt != null && today.isAfter(expiresAt)) {
             this.status = StudentStatus.EXPIRED;
         }
         touch(actorId, now);
@@ -205,12 +234,6 @@ public class StudentJpaEntity {
         touch(actorId, now);
     }
 
-    public void renew(Instant newExpiresAt, Long actorId, Instant now) {
-        this.expiresAt = newExpiresAt;
-        this.status = StudentStatus.ACTIVE;
-        touch(actorId, now);
-    }
-
     /** Estado transitorio que bloquea operaciones dentro de la transacción de purga. */
     public void markDeleting(Long actorId, Instant now) {
         this.status = StudentStatus.DELETED;
@@ -220,132 +243,66 @@ public class StudentJpaEntity {
         touch(actorId, now);
     }
 
-	public void resetPassword(String passwordHash, Instant temporaryPasswordExpiresAt, Long actorId, Instant now) {
-		this.passwordHash = passwordHash;
-		this.passwordChangeRequired = true;
-		this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
-		this.passwordChangedAt = now;
-		this.failedLoginAttempts = 0;
-		this.lockedUntil = null;
-		touch(actorId, now);
-	}
+    public void resetPassword(String passwordHash, Instant temporaryPasswordExpiresAt, Long actorId, Instant now) {
+        this.passwordHash = passwordHash;
+        this.passwordChangeRequired = true;
+        this.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
+        this.passwordChangedAt = now;
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
+        touch(actorId, now);
+    }
 
-	public void changePassword(String passwordHash, Instant now) {
-		this.passwordHash = passwordHash;
-		this.passwordChangeRequired = false;
-		this.temporaryPasswordExpiresAt = null;
-		this.passwordChangedAt = now;
-		this.failedLoginAttempts = 0;
-		this.lockedUntil = null;
-		this.updatedAt = now;
-	}
+    public void changePassword(String passwordHash, Instant now) {
+        this.passwordHash = passwordHash;
+        this.passwordChangeRequired = false;
+        this.temporaryPasswordExpiresAt = null;
+        this.passwordChangedAt = now;
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
+        this.updatedAt = now;
+    }
 
-	private void touch(Long actorId, Instant now) {
-		this.updatedBy = actorId;
-		this.updatedAt = now;
-	}
+    private void setAccessDates(LocalDate validFrom, LocalDate expiresAt) {
+        this.validFrom = validFrom;
+        this.expiresAt = expiresAt;
+        this.legacyValidFrom = validFrom == null ? null : validFrom.atStartOfDay(ZoneOffset.UTC).toInstant();
+        this.legacyExpiresAt = expiresAt == null ? null
+                : expiresAt.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    }
 
-	public Long getId() {
-		return id;
-	}
+    private void touch(Long actorId, Instant now) {
+        this.updatedBy = actorId;
+        this.updatedAt = now;
+    }
 
-	public String getPublicId() {
-		return publicId;
-	}
-
-	public Long getOrganizationId() {
-		return organizationId;
-	}
-
-	public String getStudentCode() {
-		return studentCode;
-	}
-
-	public String getEmail() {
-		return email;
-	}
-
-	public String getNormalizedEmail() {
-		return normalizedEmail;
-	}
-
-	public String getPasswordHash() {
-		return passwordHash;
-	}
-
-	public String getFirstName() {
-		return firstName;
-	}
-
-	public String getLastName() {
-		return lastName;
-	}
-
-	public String getDisplayName() {
-		return displayName;
-	}
-
-	public StudentStatus getStatus() {
-		return status;
-	}
-
-	public Instant getValidFrom() {
-		return validFrom;
-	}
-
-	public Instant getExpiresAt() {
-		return expiresAt;
-	}
-
-	public int getFailedLoginAttempts() {
-		return failedLoginAttempts;
-	}
-
-	public Instant getLockedUntil() {
-		return lockedUntil;
-	}
-
-	public Instant getLastLoginAt() {
-		return lastLoginAt;
-	}
-
-	public Instant getPasswordChangedAt() {
-		return passwordChangedAt;
-	}
-
-	public boolean isPasswordChangeRequired() {
-		return passwordChangeRequired;
-	}
-
-	public Instant getTemporaryPasswordExpiresAt() {
-		return temporaryPasswordExpiresAt;
-	}
-
-	public Instant getArchivedAt() {
-		return archivedAt;
-	}
-
-	public Instant getDeletedAt() {
-		return deletedAt;
-	}
-
-	public String getDeletionReason() {
-		return deletionReason;
-	}
-
-	public Instant getCreatedAt() {
-		return createdAt;
-	}
-
-	public Instant getUpdatedAt() {
-		return updatedAt;
-	}
-
-	public Long getUpdatedBy() {
-		return updatedBy;
-	}
-
-	public Long getVersion() {
-		return version;
-	}
+    public Long getId() { return id; }
+    public String getPublicId() { return publicId; }
+    public Long getOrganizationId() { return organizationId; }
+    public String getStudentCode() { return studentCode; }
+    public String getEmail() { return email; }
+    public String getNormalizedEmail() { return normalizedEmail; }
+    public String getPasswordHash() { return passwordHash; }
+    public String getFirstName() { return firstName; }
+    public String getLastName() { return lastName; }
+    public String getDisplayName() { return displayName; }
+    public StudentStatus getStatus() { return status; }
+    public LocalDate getValidFrom() { return validFrom; }
+    public LocalDate getExpiresAt() { return expiresAt; }
+    public LocalDate getAdmissionDate() { return admissionDate; }
+    public int getFailedLoginAttempts() { return failedLoginAttempts; }
+    public Instant getLockedUntil() { return lockedUntil; }
+    public Instant getLastLoginAt() { return lastLoginAt; }
+    public Instant getPasswordChangedAt() { return passwordChangedAt; }
+    public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
+    public Instant getTemporaryPasswordExpiresAt() { return temporaryPasswordExpiresAt; }
+    public Instant getArchivedAt() { return archivedAt; }
+    public Instant getDeletedAt() { return deletedAt; }
+    public Long getDeletedBy() { return deletedBy; }
+    public String getDeletionReason() { return deletionReason; }
+    public Long getCreatedBy() { return createdBy; }
+    public Long getUpdatedBy() { return updatedBy; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+    public Long getVersion() { return version; }
 }

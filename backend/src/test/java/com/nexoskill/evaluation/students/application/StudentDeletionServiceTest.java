@@ -21,6 +21,7 @@ import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessi
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,7 +79,7 @@ class StudentDeletionServiceTest {
         verify(students).saveAndFlush(student);
         verify(sessions).revokeActive(30L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
                 StudentSessionRevocationReason.DELETED, NOW);
-        verify(jdbc, times(6)).update(anyString(), any(MapSqlParameterSource.class));
+        verify(jdbc, times(9)).update(anyString(), any(MapSqlParameterSource.class));
         verify(audit).record(any(), org.mockito.ArgumentMatchers.eq("STUDENT_PERMANENTLY_DELETED"),
                 org.mockito.ArgumentMatchers.eq("STUDENTS"), anyString(), any(), any(), any(),
                 org.mockito.ArgumentMatchers.eq(NOW));
@@ -87,7 +88,7 @@ class StudentDeletionServiceTest {
     private StudentJpaEntity student() {
         StudentJpaEntity student = StudentJpaEntity.create("student-public", 20L, "ST-001",
                 "student@example.com", "student@example.com", "hash", "Nombre", "Apellidos",
-                "Nombre Apellidos", StudentStatus.ACTIVE, NOW.minusSeconds(3600), NOW.plusSeconds(3600),
+                "Nombre Apellidos", StudentStatus.ACTIVE, LocalDate.of(2026, 7, 28), LocalDate.of(2026, 8, 29),
                 NOW.plusSeconds(7200), 1L, NOW.minusSeconds(3600));
         setId(student, 30L);
         return student;

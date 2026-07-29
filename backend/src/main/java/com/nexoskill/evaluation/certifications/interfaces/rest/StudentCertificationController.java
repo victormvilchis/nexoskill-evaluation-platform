@@ -3,18 +3,32 @@ package com.nexoskill.evaluation.certifications.interfaces.rest;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.certifications.application.CertificationModels.*;
 import com.nexoskill.evaluation.certifications.application.StudentCertificationService;
+import com.nexoskill.evaluation.certifications.domain.CertificationExamStatus;
+import com.nexoskill.evaluation.certifications.domain.CertificationLevel;
+import com.nexoskill.evaluation.certifications.domain.CertificationTrackingStatus;
+import com.nexoskill.evaluation.certifications.domain.CertificationType;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -37,9 +51,11 @@ public class StudentCertificationController {
 
     @GetMapping("/certification-catalogs")
     @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_CATALOG_VIEW')")
-    public Catalogs catalogs(HttpServletRequest request,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return service.catalogs(tenantContextResolver.resolve(request), actor);
+    public Catalogs catalogs(@RequestParam(required = false) String studentPublicId,
+            HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
+        TenantContext tenant = tenantContextResolver.resolve(request);
+        return studentPublicId == null || studentPublicId.isBlank()
+                ? service.catalogs(tenant, actor) : service.catalogs(tenant, studentPublicId, actor);
     }
 
     @GetMapping("/students/{studentPublicId}/certifications")
@@ -54,65 +70,121 @@ public class StudentCertificationController {
     public StudentCertificationDetail save(@PathVariable String studentPublicId,
             @Valid @RequestBody SaveRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
-        TenantContext tenant = tenantContextResolver.resolve(request);
-        return service.save(tenant, studentPublicId, body.toCommand(), actor,
+        return service.save(tenantContextResolver.resolve(request), studentPublicId, body.toCommand(), actor,
                 request.getRemoteAddr(), request.getHeader("User-Agent"));
     }
 
-    public record SaveRequest(
-            @NotBlank(message = "Selecciona el perfil de certificación.")
-            String professionalProfilePublicId,
-            @NotBlank(message = "Selecciona la tecnología de certificación.")
-            String certificationTechnologyPublicId,
-            @NotNull(message = "La fecha de alta es obligatoria.")
-            LocalDate enrollmentDate,
-            @NotBlank(message = "Selecciona el perfil tecnológico.")
-            String technologicalProfile,
-            Long profileVersion,
-            List<RequirementRequest> requirements,
-            List<AttemptRequest> newAttempts) {
+    @PostMapping("/students/{studentPublicId}/certifications")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public CycleView createCycle(@PathVariable String studentPublicId, @Valid @RequestBody CycleRequest body,
+            HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.createCycle(tenantContextResolver.resolve(request), studentPublicId, body.toCommand(), actor,
+                request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @PutMapping("/students/{studentPublicId}/certifications/{certificationId}")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public CycleView updateCycle(@PathVariable String studentPublicId, @PathVariable String certificationId,
+            @Valid @RequestBody CycleRequest body, HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.updateCycle(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                body.toCommand(), actor, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/make-primary")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public CycleView makePrimary(@PathVariable String studentPublicId, @PathVariable String certificationId,
+            HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.makePrimary(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                actor, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/cancel")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public CycleView cancel(@PathVariable String studentPublicId, @PathVariable String certificationId,
+            @RequestBody(required = false) CancelRequest body, HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.cancel(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                body == null ? null : body.reason(), actor, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @GetMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public PageResult<AttemptView> attempts(@PathVariable String studentPublicId,
+            @PathVariable String certificationId, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size, HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser actor) {
+        PaginationParameters.validate(page, size);
+        return service.attempts(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                page, size, actor);
+    }
+
+    @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public AttemptView addAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
+            @Valid @RequestBody AttemptRequest body, HttpServletRequest request,
+            @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.addAttempt(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                body.toCommand(), actor, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @PutMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts/{attemptId}")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public AttemptView updateAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
+            @PathVariable String attemptId, @Valid @RequestBody AttemptRequest body,
+            HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
+        return service.updateAttempt(tenantContextResolver.resolve(request), studentPublicId, certificationId,
+                attemptId, body.toCommand(), actor, request.getRemoteAddr(), request.getHeader("User-Agent"));
+    }
+
+    @GetMapping("/students/{studentPublicId}/certifications/history")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    public PageResult<HistoryView> history(@PathVariable String studentPublicId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
+        PaginationParameters.validate(page, size);
+        return service.history(tenantContextResolver.resolve(request), studentPublicId, page, size, actor);
+    }
+
+    public record SaveRequest(@NotNull(message = "La configuración de aplicabilidad es obligatoria.")
+            ApplicabilityRequest applicability, List<CycleRequest> cycles) {
         SaveCommand toCommand() {
-            return new SaveCommand(professionalProfilePublicId, certificationTechnologyPublicId,
-                    enrollmentDate, technologicalProfile, profileVersion,
-                    requirements == null ? List.of() : requirements.stream().map(RequirementRequest::toCommand).toList(),
-                    newAttempts == null ? List.of() : newAttempts.stream().map(AttemptRequest::toCommand).toList());
+            return new SaveCommand(applicability.toModel(), cycles == null ? List.of()
+                    : cycles.stream().map(CycleRequest::toCommand).toList());
         }
     }
 
-    public record RequirementRequest(
-            @NotNull(message = "El tipo de certificación es obligatorio.")
-            com.nexoskill.evaluation.certifications.domain.CertificationType type,
-            boolean applies,
-            com.nexoskill.evaluation.certifications.domain.CertificationStatus certificationStatus,
-            com.nexoskill.evaluation.certifications.domain.CertificationExamStatus examStatus,
-            LocalDate manualDeadline,
-            String deadlineOverrideReason,
-            LocalDate applicationDate,
-            BigDecimal score,
-            Integer currentAttempt,
-            String actionsToTake,
-            String observations,
-            Long version) {
-        RequirementCommand toCommand() {
-            return new RequirementCommand(type, applies, certificationStatus, examStatus,
-                    manualDeadline, deadlineOverrideReason, applicationDate, score,
-                    currentAttempt, actionsToTake, observations, version);
+    public record ApplicabilityRequest(boolean technological, boolean developmentSecurity,
+            boolean normativeTesting, boolean one, boolean agile) {
+        Applicability toModel() { return new Applicability(technological, developmentSecurity, normativeTesting, one, agile); }
+    }
+
+    public record CycleRequest(String publicId,
+            @NotNull(message = "El tipo de certificación es obligatorio.") CertificationType type,
+            String technologyPublicId, CertificationLevel certificationLevel, boolean primary,
+            CertificationTrackingStatus trackingStatus, LocalDate scheduledDate, LocalDate applicationDate,
+            Boolean approved, @Size(max = 1000) String actionsToTake,
+            @Size(max = 1000) String softtekManagement, @Size(max = 1000) String observations,
+            Boolean active, Long version, List<AttemptRequest> attempts) {
+        CycleCommand toCommand() {
+            return new CycleCommand(publicId, type, technologyPublicId, certificationLevel, primary,
+                    trackingStatus, scheduledDate, applicationDate, approved, actionsToTake,
+                    softtekManagement, observations, active == null || active, version,
+                    attempts == null ? List.of() : attempts.stream().map(AttemptRequest::toCommand).toList());
         }
     }
 
-    public record AttemptRequest(
-            @NotNull(message = "El tipo de certificación es obligatorio.")
-            com.nexoskill.evaluation.certifications.domain.CertificationType type,
-            int attemptNumber,
-            LocalDate scheduledDate,
-            LocalDate applicationDate,
-            com.nexoskill.evaluation.certifications.domain.CertificationExamStatus examStatus,
-            BigDecimal score,
-            String result,
-            String observations) {
+    public record AttemptRequest(String publicId, LocalDate scheduledDate, LocalDate applicationDate,
+            CertificationExamStatus examStatus,
+            @DecimalMin(value = "0.0", message = "El promedio no puede ser negativo.")
+            @DecimalMax(value = "100.0", message = "El promedio no puede superar 100.") BigDecimal score,
+            Boolean approved, @Size(max = 1000) String result,
+            @Size(max = 1000) String observations, Long version) {
         AttemptCommand toCommand() {
-            return new AttemptCommand(type, attemptNumber, scheduledDate, applicationDate,
-                    examStatus, score, result, observations);
+            return new AttemptCommand(publicId, scheduledDate, applicationDate, examStatus, score, approved,
+                    result, observations, version);
         }
     }
+
+    public record CancelRequest(@Size(max = 500) String reason) {}
 }
