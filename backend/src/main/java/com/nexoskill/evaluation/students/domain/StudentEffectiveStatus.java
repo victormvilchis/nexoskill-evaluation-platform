@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.students.domain;
 
+/** Estados operativos expuestos por la API y la interfaz. */
 public enum StudentEffectiveStatus {
-	PENDING, ACTIVE, INACTIVE, SUSPENDED, EXPIRED, ARCHIVED, DELETED
+    ACTIVE, INACTIVE, EXPIRED, DELETED
 }

@@ -3,15 +3,18 @@ import { useAuth } from '../../features/authentication/context/AuthContext'
 import { LoadingScreen } from './LoadingScreen'
 
 interface PermissionRouteProps {
-  permission: string
+  permission?: string
+  anyOf?: string[]
 }
 
-export function PermissionRoute({ permission }: PermissionRouteProps) {
+export function PermissionRoute({ permission, anyOf = [] }: PermissionRouteProps) {
   const { user, loading } = useAuth()
 
   if (loading) return <LoadingScreen />
 
-  if (!user?.permissions.includes(permission)) {
+  const required = permission ? [permission] : anyOf
+  const authorized = required.length > 0 && required.some((item) => user?.permissions.includes(item))
+  if (!authorized) {
     return <Navigate to="/dashboard" replace />
   }
 

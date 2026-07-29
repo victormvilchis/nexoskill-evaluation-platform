@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionTagView;
+import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionTagNormalizer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -166,9 +167,18 @@ public class QuestionTagStore {
     }
 
     private MapSqlParameterSource ownership(ContentScope scope, Long ownerOrganizationId) {
+        if (scope == null) {
+            throw new BusinessException("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
+                    "No fue posible determinar el alcance de las etiquetas de la pregunta.");
+        }
+        Long effectiveOwner = scope == ContentScope.GLOBAL ? null : ownerOrganizationId;
+        if (scope == ContentScope.ORGANIZATION && effectiveOwner == null) {
+            throw new BusinessException("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
+                    "La pregunta organizacional no tiene un propietario válido para copiar sus etiquetas.");
+        }
         return new MapSqlParameterSource()
                 .addValue("scope", scope.name())
-                .addValue("ownerOrganizationId", ownerOrganizationId);
+                .addValue("ownerOrganizationId", effectiveOwner);
     }
 
     private QuestionTagView mapView(ResultSet rs) throws SQLException {

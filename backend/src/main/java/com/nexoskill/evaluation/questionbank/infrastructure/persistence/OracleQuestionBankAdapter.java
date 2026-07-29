@@ -16,6 +16,7 @@ import com.nexoskill.evaluation.shared.domain.*;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.*;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -192,56 +193,69 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     @Override
     public QuestionDetail duplicate(String id, Long actor) {
 
-        var source = find(id);
+        var source = lockedForDuplicate(id);
         assertReadable(source);
         if (source.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "No se puede duplicar una pregunta eliminada.");
         }
         assertEditable(source);
+        if (source.getCategories() == null || source.getCategories().isEmpty()) {
+            throw error("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
+                    "No fue posible duplicar la pregunta porque no tiene categorías válidas.");
+        }
+        if (source.getType() == null || source.getDifficulty() == null) {
+            throw error("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
+                    "No fue posible duplicar la pregunta porque su clasificación está incompleta.");
+        }
         var ownership = new GlobalContentAccessPolicy.Ownership(
                 source.getContentScope(), source.getOwnerOrganizationId());
-        var entity = QuestionJpaEntity.create(
-                UUID.randomUUID().toString(),
-                source.getType(),
-                source.getDifficulty(),
-                source.getTechnology(),
-                source.getLevelCode(),
-                new LinkedHashSet<>(source.getCategories()),
-                source.getStatement() + " (copia)",
-                source.getExplanation(),
-                source.getPromptMedia(),
-                javaLanguage(source.getCodeContent()),
-                source.getCodeContent(),
-                source.getAcceptedAnswersJson(),
-                source.isCaseSensitive(),
-                source.isManualReview(),
-                null,
-                null,
-                null,
-                source.getResponseMaxLength(),
-                actor,
-                clock.instant());
-        entity.assignOwnership(ownership.scope(), ownership.organizationId());
-        for (var option : source.getOptions()) {
-            entity.addOption(QuestionOptionJpaEntity.create(
-                    entity,
+        try {
+            var entity = QuestionJpaEntity.create(
                     UUID.randomUUID().toString(),
-                    option.getOptionOrder(),
-                    option.getText(),
-                    option.getMedia(),
-                    option.getMatchText(),
-                    option.getMatchMedia(),
-                    option.isCorrect(),
-                    option.getFeedback(),
-                    clock.instant()));
+                    source.getType(),
+                    source.getDifficulty(),
+                    source.getTechnology(),
+                    source.getLevelCode(),
+                    new LinkedHashSet<>(source.getCategories()),
+                    source.getStatement(),
+                    source.getExplanation(),
+                    source.getPromptMedia(),
+                    javaLanguage(source.getCodeContent()),
+                    source.getCodeContent(),
+                    source.getAcceptedAnswersJson(),
+                    source.isCaseSensitive(),
+                    source.isManualReview(),
+                    null,
+                    null,
+                    null,
+                    source.getResponseMaxLength(),
+                    actor,
+                    clock.instant());
+            entity.assignOwnership(ownership.scope(), ownership.organizationId());
+            for (var option : source.getOptions()) {
+                entity.addOption(QuestionOptionJpaEntity.create(
+                        entity,
+                        UUID.randomUUID().toString(),
+                        option.getOptionOrder(),
+                        option.getText(),
+                        option.getMedia(),
+                        option.getMatchText(),
+                        option.getMatchMedia(),
+                        option.isCorrect(),
+                        option.getFeedback(),
+                        clock.instant()));
+            }
+            QuestionJpaEntity saved = questions.saveAndFlush(entity);
+            tagStore.copy(source.getId(), saved.getId(), saved.getContentScope(),
+                    saved.getOwnerOrganizationId(), actor, clock.instant());
+            copyAvailability(source, saved, actor);
+            auditQuestion(actor, "QUESTION_DUPLICATED", saved,
+                    Map.of("sourceQuestionPublicId", source.getPublicId()));
+            return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
+        } catch (DataIntegrityViolationException exception) {
+            throw error("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
+                    "No fue posible duplicar la pregunta porque contiene una configuración incompatible.");
         }
-        QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        tagStore.copy(source.getId(), saved.getId(), saved.getContentScope(),
-                saved.getOwnerOrganizationId(), actor, clock.instant());
-        copyAvailability(source, saved, actor);
-        auditQuestion(actor, "QUESTION_DUPLICATED", saved,
-                Map.of("sourceQuestionPublicId", source.getPublicId()));
-        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
     @Override
     public QuestionDetail changeStatus(String id, QuestionStatus status, long expected, Long actor) {
@@ -421,6 +435,14 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 "La pregunta indicada no es válida.");
         return questions.findByPublicIdForUpdate(normalized)
                 .orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
+    }
+
+    private QuestionJpaEntity lockedForDuplicate(String id) {
+        String normalized = PublicIdNormalizer.requiredUuid(id, "QUESTION_ID_INVALID",
+                "La pregunta indicada no es válida.");
+        return questions.findByPublicIdForUpdate(normalized)
+                .orElseThrow(() -> error("QUESTION_DUPLICATE_SOURCE_NOT_FOUND",
+                        "La pregunta que intentas duplicar no existe."));
     }
 
     private void assertReadable(QuestionJpaEntity entity) {

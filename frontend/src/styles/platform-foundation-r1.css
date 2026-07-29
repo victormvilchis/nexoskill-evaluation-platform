@@ -314,3 +314,65 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Validación contextual del alta de estudiantes. */
+.student-editor-foundation .form-field input[aria-invalid='true'],
+.student-editor-foundation .form-field select[aria-invalid='true'] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(190, 39, 39, .1);
+}
+
+.student-delete-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  border: 1px solid #f0c3c3;
+  border-radius: 10px;
+  background: #fff7f7;
+  padding: .85rem;
+  color: #7f1d1d;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.student-delete-confirmation input {
+  width: 18px !important;
+  height: 18px;
+  margin-top: .1rem;
+  flex: 0 0 auto;
+}
+
+.student-management-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+.student-management-summary > div {
+  display: grid;
+  gap: .25rem;
+}
+.student-management-summary span,
+.student-session-list small {
+  color: var(--text-muted, #64748b);
+}
+.student-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+.student-session-list {
+  display: grid;
+  gap: .75rem;
+}
+.student-session-list article {
+  align-items: center;
+  border-top: 1px solid var(--border-color, #dbe3ef);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: .75rem;
+}
+.student-session-list article > div {
+  display: grid;
+  gap: .2rem;
+}

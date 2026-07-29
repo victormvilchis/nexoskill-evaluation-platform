@@ -141,8 +141,6 @@ public class StudentSessionAuthenticationFilter extends OncePerRequestFilter {
 	private StudentSessionRevocationReason revocationReason(StudentEffectiveStatus status) {
 		return switch (status) {
 		case EXPIRED -> StudentSessionRevocationReason.EXPIRED;
-		case SUSPENDED -> StudentSessionRevocationReason.SUSPENDED;
-		case ARCHIVED -> StudentSessionRevocationReason.ARCHIVED;
 		case DELETED -> StudentSessionRevocationReason.DELETED;
 		default -> StudentSessionRevocationReason.DEACTIVATED;
 		};

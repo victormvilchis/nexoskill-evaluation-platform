@@ -1,6 +1,6 @@
 import { apiRequest } from '../../../shared/api/apiClient'
 import type {
-  CreateStudentPayload, StudentCatalogs, StudentDetail, StudentEffectiveStatus, StudentIdentity,
+  CreateStudentPayload, StudentCatalogs, StudentDeletionResult, StudentDetail, StudentEffectiveStatus, StudentIdentity,
   StudentPage, StudentSession, UpdateStudentPayload
 } from '../../../shared/types/students'
 import type { SortDirection } from '../../../shared/types/pagination'
@@ -8,7 +8,6 @@ import type { SortDirection } from '../../../shared/types/pagination'
 export function searchStudents(params: {
   query?: string
   status?: StudentEffectiveStatus | 'ALL'
-  includeDeleted?: boolean
   organizationPublicId?: string
   profilePublicId?: string
   technologicalProfilePublicId?: string
@@ -22,7 +21,7 @@ export function searchStudents(params: {
 } = {}) {
   const search = new URLSearchParams({
     page: String(params.page ?? 0), size: String(params.size ?? 10),
-    includeDeleted: String(params.includeDeleted ?? false), sort: params.sort ?? 'updatedAt',
+    sort: params.sort ?? 'updatedAt',
     direction: params.direction ?? 'DESC'
   })
   if (params.query?.trim()) search.set('query', params.query.trim())
@@ -52,10 +51,8 @@ export function createStudent(payload: CreateStudentPayload) { return apiRequest
 export function updateStudent(publicId: string, payload: UpdateStudentPayload) { return apiRequest<StudentDetail>(`/admin/students/${publicId}`, { method: 'PUT', body: JSON.stringify(payload) }) }
 export function activateStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/activate`, { method: 'POST' }) }
 export function deactivateStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/deactivate`, { method: 'POST' }) }
-export function suspendStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/suspend`, { method: 'POST' }) }
-export function archiveStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/archive`, { method: 'POST' }) }
-export function deleteStudent(publicId: string, reason: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/delete`, { method: 'POST', body: JSON.stringify({ reason }) }) }
-export function restoreStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/restore`, { method: 'POST' }) }
+export function renewStudent(publicId: string, expiresAt: string, version: number) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/renew`, { method: 'POST', body: JSON.stringify({ expiresAt, version }) }) }
+export function permanentlyDeleteStudent(publicId: string) { return apiRequest<StudentDeletionResult>(`/admin/students/${publicId}/permanent-delete`, { method: 'POST', body: JSON.stringify({ confirmed: true }) }) }
 export function resetStudentPassword(publicId: string, temporaryPassword: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}/reset-password`, { method: 'POST', body: JSON.stringify({ temporaryPassword }) }) }
 export function getStudentSessions(publicId: string) { return apiRequest<StudentSession[]>(`/admin/students/${publicId}/sessions`) }
 export function revokeStudentSession(publicId: string, sessionPublicId: string) { return apiRequest<void>(`/admin/students/${publicId}/sessions/${sessionPublicId}/revoke`, { method: 'POST' }) }

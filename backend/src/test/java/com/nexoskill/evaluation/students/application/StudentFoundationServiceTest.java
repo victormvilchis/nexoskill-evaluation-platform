@@ -89,7 +89,7 @@ class StudentFoundationServiceTest {
         when(studentService.create(any(), any(), any())).thenReturn(new StudentService.StudentDetail(
                 "00000000-0000-0000-0000-000000000099", "ST-99", "student@example.com", "Nombre",
                 "Apellidos", "Nombre Apellidos", StudentStatus.ACTIVE, StudentEffectiveStatus.ACTIVE,
-                CLOCK.instant(), null, true, null, null, null, null, null,
+                CLOCK.instant(), null, true, null, null,
                 CLOCK.instant(), CLOCK.instant(), 0L));
 
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
@@ -101,5 +101,21 @@ class StudentFoundationServiceTest {
                 new StudentService.Actor(7L, "127.0.0.1", "test")));
 
         assertThat(exception.getCode()).isEqualTo("STUDENT_CERTIFICATIONS_NOT_ENABLED");
+        assertThat(exception.getFieldErrors()).containsEntry("certifications",
+                "Retira los datos de perfil y certificación para esta organización.");
+    }
+
+    @Test
+    void managerCannotSendOrganizationEvenWhenItMatchesTheSession() {
+        StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
+                tenant.organizationPublicId(), "ST-99", "student@example.com", "Nombre", "Apellidos",
+                null, "Temporary123!", StudentStatus.ACTIVE, CLOCK.instant(), null,
+                null, null, null, null);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
+                new StudentService.Actor(7L, "127.0.0.1", "test")));
+
+        assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_FORBIDDEN");
+        assertThat(exception.getFieldErrors()).containsKey("organizationPublicId");
     }
 }

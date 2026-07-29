@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.students.infrastructure.persistence;
 
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
+import com.nexoskill.evaluation.students.domain.StudentStatus;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
@@ -17,6 +18,11 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     Optional<StudentJpaEntity> findByOrganizationIdAndPublicId(Long organizationId, String publicId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.publicId = :publicId")
+    Optional<StudentJpaEntity> findByOrganizationIdAndPublicIdForUpdate(@Param("organizationId") Long organizationId,
+            @Param("publicId") String publicId);
+
     Optional<StudentJpaEntity> findByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
 
     boolean existsByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
@@ -25,7 +31,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     boolean existsByOrganizationId(Long organizationId);
 
-    long countByOrganizationIdAndStatusNot(Long organizationId, com.nexoskill.evaluation.students.domain.StudentStatus status);
+    long countByOrganizationIdAndStatusNot(Long organizationId, StudentStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.normalizedEmail = :normalizedEmail")
@@ -35,7 +41,6 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from StudentJpaEntity s where s.id = :id")
     Optional<StudentJpaEntity> findByIdForUpdate(@Param("id") Long id);
-
 
     @Query("""
         select s.id from StudentJpaEntity s
@@ -48,28 +53,18 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     @Query("""
         select s from StudentJpaEntity s
         where s.organizationId = :organizationId
-          and (:includeDeleted = true
-               or :status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.DELETED
-               or s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED)
+          and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
           and (
                :status is null
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
                    and s.validFrom <= :now and (s.expiresAt is null or s.expiresAt > :now))
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.PENDING
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.validFrom > :now)
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.expiresAt is not null and s.expiresAt <= :now)
+                   and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
+                        or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+                            and s.expiresAt is not null and s.expiresAt <= :now)))
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE)
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.SUSPENDED
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.SUSPENDED)
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ARCHIVED
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ARCHIVED)
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.DELETED
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.DELETED)
           )
           and (:query is null
                or lower(s.displayName) like lower(concat('%', :query, '%'))
@@ -79,7 +74,6 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId,
             @Param("query") String query,
             @Param("status") StudentEffectiveStatus status,
-            @Param("includeDeleted") boolean includeDeleted,
             @Param("now") Instant now,
             Pageable pageable);
 }

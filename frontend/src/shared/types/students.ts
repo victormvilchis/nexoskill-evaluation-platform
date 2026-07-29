@@ -1,5 +1,5 @@
-export type StudentStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'DELETED'
-export type StudentEffectiveStatus = 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'EXPIRED' | 'ARCHIVED' | 'DELETED'
+export type StudentStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'DELETED'
+export type StudentEffectiveStatus = StudentStatus
 export type StudentSessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
 export interface StudentCatalogRef { publicId: string; code: string; name: string }
 export interface StudentOrganizationRef { publicId: string; code: string; name: string; appliesCertifications: boolean }
@@ -16,6 +16,7 @@ export interface StudentSummary {
   expiresAt: string | null
   lastLoginAt: string | null
   updatedAt: string
+  version: number
   organization?: StudentOrganizationRef
   professionalProfile?: StudentCatalogRef | null
   technologicalProfile?: StudentCatalogRef | null
@@ -28,9 +29,6 @@ export interface StudentDetail extends StudentSummary {
   lastName: string
   passwordChangeRequired: boolean
   temporaryPasswordExpiresAt: string | null
-  archivedAt: string | null
-  deletedAt: string | null
-  deletionReason: string | null
   createdAt: string
   version: number
 }
@@ -60,7 +58,7 @@ export interface CreateStudentPayload {
   professionalProfilePublicId?: string
   technologicalProfilePublicId?: string
   technologyPublicId?: string
-  certificationEnrollmentDate?: string | null
+  certificationEnrollmentDate?: string
 }
 export interface UpdateStudentPayload {
   email: string
@@ -72,9 +70,10 @@ export interface UpdateStudentPayload {
   professionalProfilePublicId?: string
   technologicalProfilePublicId?: string
   technologyPublicId?: string
-  certificationEnrollmentDate?: string | null
+  certificationEnrollmentDate?: string
   version: number
 }
+export interface StudentDeletionResult { publicId: string; operationReference: string; deletedAt: string }
 export interface StudentIdentity {
   publicId: string; organizationPublicId: string; organizationCode: string; organizationName: string
   studentCode: string; email: string; firstName: string; lastName: string; displayName: string

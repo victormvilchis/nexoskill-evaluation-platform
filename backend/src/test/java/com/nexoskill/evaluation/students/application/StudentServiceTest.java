@@ -3,7 +3,6 @@ package com.nexoskill.evaluation.students.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -79,13 +78,13 @@ class StudentServiceTest {
         assertThat(result.page()).isZero();
         assertThat(result.size()).isEqualTo(20);
         verify(students, times(1)).existsByOrganizationId(20L);
-        verify(students, never()).search(any(), any(), any(), anyBoolean(), any(), any());
+        verify(students, never()).search(any(), any(), any(), any(), any());
     }
 
     @Test
     void shouldKeepTheResponseEmptyWhenTheRepositoryReturnsAnEmptyPage() {
         when(students.existsByOrganizationId(20L)).thenReturn(true);
-        when(students.search(any(), any(), any(), anyBoolean(), any(), any()))
+        when(students.search(any(), any(), any(), any(), any()))
                 .thenReturn(Page.empty(PageRequest.of(0, 20)));
 
         StudentService.PageResult result = service.search(TENANT, null,
@@ -112,7 +111,7 @@ class StudentServiceTest {
     @Test
     void shouldRevokeTheActiveSessionWhenDeactivated() {
         StudentJpaEntity student = student(StudentStatus.ACTIVE, NOW.plusSeconds(3600));
-        when(students.findByOrganizationIdAndPublicId(20L, "student-public")).thenReturn(Optional.of(student));
+        when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public")).thenReturn(Optional.of(student));
         when(students.save(student)).thenReturn(student);
 
         StudentService.StudentDetail updated = service.deactivate(TENANT, "student-public",
@@ -126,12 +125,12 @@ class StudentServiceTest {
     @Test
     void shouldRejectActivationWhenValidityAlreadyExpired() {
         StudentJpaEntity student = student(StudentStatus.INACTIVE, NOW.minusSeconds(1));
-        when(students.findByOrganizationIdAndPublicId(20L, "student-public")).thenReturn(Optional.of(student));
+        when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public")).thenReturn(Optional.of(student));
 
         assertThatThrownBy(() -> service.activate(TENANT, "student-public",
                 new StudentService.Actor(1L, "127.0.0.1", "browser")))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_EXPIRED"));
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_RENEWAL_REQUIRED"));
     }
 
     private StudentJpaEntity student(StudentStatus status, Instant expiresAt) {

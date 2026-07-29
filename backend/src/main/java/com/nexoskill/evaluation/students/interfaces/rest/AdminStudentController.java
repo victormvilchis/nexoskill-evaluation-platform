@@ -3,14 +3,17 @@ package com.nexoskill.evaluation.students.interfaces.rest;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
+import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
 import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
+import com.nexoskill.evaluation.students.application.StudentDeletionService;
 import com.nexoskill.evaluation.students.application.StudentFoundationService;
 import com.nexoskill.evaluation.students.application.StudentService;
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -39,18 +42,26 @@ public class AdminStudentController {
     private final StudentService service;
     private final TenantContextResolver tenantResolver;
     private final StudentFoundationService foundation;
+    private final StudentDeletionService deletion;
 
     /** Constructor conservado para pruebas unitarias existentes. */
     public AdminStudentController(StudentService service, TenantContextResolver tenantResolver) {
-        this(service, tenantResolver, null);
+        this(service, tenantResolver, null, null);
+    }
+
+    /** Constructor conservado para pruebas que no ejercen la purga física. */
+    public AdminStudentController(StudentService service, TenantContextResolver tenantResolver,
+            StudentFoundationService foundation) {
+        this(service, tenantResolver, foundation, null);
     }
 
     @Autowired
     public AdminStudentController(StudentService service, TenantContextResolver tenantResolver,
-            StudentFoundationService foundation) {
+            StudentFoundationService foundation, StudentDeletionService deletion) {
         this.service = service;
         this.tenantResolver = tenantResolver;
         this.foundation = foundation;
+        this.deletion = deletion;
     }
 
     @GetMapping
@@ -69,11 +80,10 @@ public class AdminStudentController {
             @RequestParam(defaultValue = "10") int size) {
         PaginationParameters.validate(page, size);
         TenantContext tenant = tenant(request);
-        if (foundation == null) {
-            return service.search(tenant, query, parseStatus(status), includeDeleted, page, size);
-        }
-        return foundation.search(tenant, new StudentFoundationService.SearchCriteria(query, parseStatus(status),
-                includeDeleted, organizationPublicId, profilePublicId, technologicalProfilePublicId,
+        StudentEffectiveStatus parsedStatus = parseStatus(status);
+        if (foundation == null) return service.search(tenant, query, parsedStatus, false, page, size);
+        return foundation.search(tenant, new StudentFoundationService.SearchCriteria(query, parsedStatus,
+                false, organizationPublicId, profilePublicId, technologicalProfilePublicId,
                 technologyPublicId, certificationsEnabled, sort, direction), page, size);
     }
 
@@ -87,8 +97,7 @@ public class AdminStudentController {
     @GetMapping("/{publicId}")
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public Object get(@PathVariable String publicId, HttpServletRequest request) {
-        return foundation == null ? service.get(tenant(request), publicId)
-                : foundation.get(tenant(request), publicId);
+        return foundation == null ? service.get(tenant(request), publicId) : foundation.get(tenant(request), publicId);
     }
 
     @PostMapping
@@ -99,16 +108,16 @@ public class AdminStudentController {
             StudentService.StudentDetail created = service.create(tenant(request),
                     new StudentService.CreateCommand(body.studentCode(), body.email(), body.firstName(),
                             body.lastName(), body.displayName(), body.temporaryPassword(),
-                            body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(),
-                            body.expiresAt()), actor(actor, request));
+                            body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(), body.expiresAt()),
+                    actor(actor, request));
             return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId())).body(created);
         }
         StudentFoundationService.StudentView created = foundation.create(tenant(request),
-                new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.studentCode(),
-                        body.email(), body.firstName(), body.lastName(), body.displayName(), body.temporaryPassword(),
-                        body.status(), body.validFrom(), body.expiresAt(), body.professionalProfilePublicId(),
-                        body.technologicalProfilePublicId(), body.technologyPublicId(),
-                        body.certificationEnrollmentDate()), actor(actor, request));
+                new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.studentCode(), body.email(),
+                        body.firstName(), body.lastName(), body.displayName(), body.temporaryPassword(), body.status(),
+                        body.validFrom(), body.expiresAt(), body.professionalProfilePublicId(),
+                        body.technologicalProfilePublicId(), body.technologyPublicId(), body.certificationEnrollmentDate()),
+                actor(actor, request));
         return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId())).body(created);
     }
 
@@ -118,67 +127,61 @@ public class AdminStudentController {
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
         if (foundation == null) {
             return service.update(tenant(request), publicId,
-                    new StudentService.UpdateCommand(body.email(), body.firstName(), body.lastName(),
-                            body.displayName(), body.validFrom(), body.expiresAt(), body.version()),
-                    actor(actor, request));
+                    new StudentService.UpdateCommand(body.email(), body.firstName(), body.lastName(), body.displayName(),
+                            body.validFrom(), body.expiresAt(), body.version()), actor(actor, request));
         }
         return foundation.update(tenant(request), publicId,
-                new StudentFoundationService.UpdateCommand(body.email(), body.firstName(), body.lastName(),
-                        body.displayName(), body.validFrom(), body.expiresAt(),
-                        body.professionalProfilePublicId(), body.technologicalProfilePublicId(),
-                        body.technologyPublicId(), body.certificationEnrollmentDate(), body.version()),
-                actor(actor, request));
+                new StudentFoundationService.UpdateCommand(body.email(), body.firstName(), body.lastName(), body.displayName(),
+                        body.validFrom(), body.expiresAt(), body.professionalProfilePublicId(),
+                        body.technologicalProfilePublicId(), body.technologyPublicId(),
+                        body.certificationEnrollmentDate(), body.version()), actor(actor, request));
     }
 
     @PostMapping("/{publicId}/activate")
     @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail activate(@PathVariable String publicId,
+    public Object activate(@PathVariable String publicId,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.activate(effectiveTenant(request, publicId), publicId, actor(actor, request));
+        StudentService.StudentDetail updated = service.activate(effectiveTenant(request, publicId), publicId,
+                actor(actor, request));
+        return enriched(request, publicId, updated);
     }
 
     @PostMapping("/{publicId}/deactivate")
     @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail deactivate(@PathVariable String publicId,
+    public Object deactivate(@PathVariable String publicId,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.deactivate(effectiveTenant(request, publicId), publicId, actor(actor, request));
+        StudentService.StudentDetail updated = service.deactivate(effectiveTenant(request, publicId), publicId,
+                actor(actor, request));
+        return enriched(request, publicId, updated);
     }
 
-    @PostMapping("/{publicId}/suspend")
+    @PostMapping("/{publicId}/renew")
     @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail suspend(@PathVariable String publicId,
+    public Object renew(@PathVariable String publicId, @Valid @RequestBody RenewRequest body,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.suspend(effectiveTenant(request, publicId), publicId, actor(actor, request));
+        StudentService.StudentDetail updated = service.renew(effectiveTenant(request, publicId), publicId,
+                body.expiresAt(), body.version(), actor(actor, request));
+        return enriched(request, publicId, updated);
     }
 
-    @PostMapping("/{publicId}/archive")
-    @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail archive(@PathVariable String publicId,
+    @PostMapping("/{publicId}/permanent-delete")
+    @PreAuthorize("hasAuthority('STUDENT_DELETE')")
+    public StudentDeletionService.DeletionResult deletePermanently(@PathVariable String publicId,
+            @Valid @RequestBody PermanentDeleteRequest body,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.archive(effectiveTenant(request, publicId), publicId, actor(actor, request));
-    }
-
-    @PostMapping("/{publicId}/delete")
-    @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail delete(@PathVariable String publicId, @Valid @RequestBody DeleteRequest body,
-            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.delete(effectiveTenant(request, publicId), publicId, body.reason(), actor(actor, request));
-    }
-
-    @PostMapping("/{publicId}/restore")
-    @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
-    public StudentService.StudentDetail restore(@PathVariable String publicId,
-            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.restore(effectiveTenant(request, publicId), publicId, actor(actor, request));
+        if (deletion == null) throw new IllegalStateException("StudentDeletionService no está disponible.");
+        return deletion.deletePermanently(effectiveTenant(request, publicId), publicId,
+                Boolean.TRUE.equals(body.confirmed()), actor(actor, request));
     }
 
     @PostMapping("/{publicId}/reset-password")
     @PreAuthorize("hasAuthority('STUDENT_PASSWORD_RESET')")
-    public StudentService.StudentDetail resetPassword(@PathVariable String publicId,
+    public Object resetPassword(@PathVariable String publicId,
             @Valid @RequestBody ResetPasswordRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
             HttpServletRequest request) {
-        return service.resetPassword(effectiveTenant(request, publicId), publicId, body.temporaryPassword(),
-                actor(actor, request));
+        StudentService.StudentDetail updated = service.resetPassword(effectiveTenant(request, publicId), publicId,
+                body.temporaryPassword(), actor(actor, request));
+        return enriched(request, publicId, updated);
     }
 
     @GetMapping("/{publicId}/sessions")
@@ -203,63 +206,81 @@ public class AdminStudentController {
         return ResponseEntity.noContent().build();
     }
 
-    private TenantContext tenant(HttpServletRequest request) {
-        return tenantResolver.resolve(request);
-    }
-
+    private TenantContext tenant(HttpServletRequest request) { return tenantResolver.resolve(request); }
     private TenantContext effectiveTenant(HttpServletRequest request, String publicId) {
         TenantContext resolved = tenant(request);
         return foundation == null ? resolved : foundation.effectiveTenantForStudent(resolved, publicId);
     }
-
     private StudentFoundationService requireFoundation() {
         if (foundation == null) throw new IllegalStateException("StudentFoundationService no está disponible.");
         return foundation;
     }
-
+    private Object enriched(HttpServletRequest request, String publicId, StudentService.StudentDetail fallback) {
+        return foundation == null ? fallback : foundation.get(tenant(request), publicId);
+    }
     private StudentService.Actor actor(AuthenticatedUser actor, HttpServletRequest request) {
-        return new StudentService.Actor(actor.internalId(), ClientRequestInfo.ipAddress(request),
-                ClientRequestInfo.userAgent(request));
+        return new StudentService.Actor(actor.internalId(), ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request));
     }
 
     public record CreateRequest(String organizationPublicId,
-            @NotBlank @Size(max = 80) String studentCode,
-            @NotBlank @Email @Size(max = 254) String email,
-            @NotBlank @Size(max = 100) String firstName,
-            @NotBlank @Size(max = 150) String lastName,
-            @Size(max = 250) String displayName,
-            @NotBlank @Size(min = 10, max = 128) String temporaryPassword,
+            @NotBlank(message = "El código del estudiante es obligatorio.")
+            @Size(max = 80, message = "El código no puede superar 80 caracteres.") String studentCode,
+            @NotBlank(message = "El correo electrónico es obligatorio.")
+            @Email(message = "El correo electrónico no tiene un formato válido.")
+            @Size(max = 254, message = "El correo no puede superar 254 caracteres.") String email,
+            @NotBlank(message = "El nombre es obligatorio.")
+            @Size(max = 100, message = "El nombre no puede superar 100 caracteres.") String firstName,
+            @NotBlank(message = "Los apellidos son obligatorios.")
+            @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
+            @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
+            @NotBlank(message = "La contraseña temporal es obligatoria.")
+            @Size(min = 10, max = 128, message = "La contraseña temporal debe tener entre 10 y 128 caracteres.") String temporaryPassword,
             StudentStatus status,
-            @NotNull Instant validFrom,
+            @NotNull(message = "La fecha de inicio es obligatoria.") Instant validFrom,
             Instant expiresAt,
             String professionalProfilePublicId,
             String technologicalProfilePublicId,
             String technologyPublicId,
             LocalDate certificationEnrollmentDate) {}
 
-    public record UpdateRequest(@NotBlank @Email @Size(max = 254) String email,
-            @NotBlank @Size(max = 100) String firstName,
-            @NotBlank @Size(max = 150) String lastName,
-            @Size(max = 250) String displayName,
-            @NotNull Instant validFrom,
+    public record UpdateRequest(
+            @NotBlank(message = "El correo electrónico es obligatorio.")
+            @Email(message = "El correo electrónico no tiene un formato válido.")
+            @Size(max = 254, message = "El correo no puede superar 254 caracteres.") String email,
+            @NotBlank(message = "El nombre es obligatorio.")
+            @Size(max = 100, message = "El nombre no puede superar 100 caracteres.") String firstName,
+            @NotBlank(message = "Los apellidos son obligatorios.")
+            @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
+            @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
+            @NotNull(message = "La fecha de inicio es obligatoria.") Instant validFrom,
             Instant expiresAt,
             String professionalProfilePublicId,
             String technologicalProfilePublicId,
             String technologyPublicId,
             LocalDate certificationEnrollmentDate,
-            @NotNull Long version) {}
+            @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
 
-    public record DeleteRequest(@NotBlank @Size(max = 500) String reason) {}
-    public record ResetPasswordRequest(@NotBlank @Size(min = 10, max = 128) String temporaryPassword) {}
+    public record RenewRequest(
+            @NotNull(message = "La nueva fecha de vencimiento es obligatoria.") Instant expiresAt,
+            @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
+
+    public record PermanentDeleteRequest(
+            @NotNull(message = "Debes confirmar la eliminación permanente.")
+            @AssertTrue(message = "Debes confirmar que comprendes que la eliminación es permanente.") Boolean confirmed) {}
+
+    public record ResetPasswordRequest(
+            @NotBlank(message = "La contraseña temporal es obligatoria.")
+            @Size(min = 10, max = 128, message = "La contraseña temporal debe tener entre 10 y 128 caracteres.") String temporaryPassword) {}
 
     private StudentEffectiveStatus parseStatus(String value) {
         if (value == null || value.isBlank() || "ACTIVE".equalsIgnoreCase(value)) return StudentEffectiveStatus.ACTIVE;
         if ("ALL".equalsIgnoreCase(value)) return null;
         try {
-            return StudentEffectiveStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            StudentEffectiveStatus parsed = StudentEffectiveStatus.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            if (parsed == StudentEffectiveStatus.DELETED) throw new IllegalArgumentException();
+            return parsed;
         } catch (IllegalArgumentException exception) {
-            throw new com.nexoskill.evaluation.shared.domain.BusinessException("STUDENT_STATUS_INVALID",
-                    "El estado indicado no es válido.");
+            throw new BusinessException("STUDENT_STATUS_INVALID", "El estado indicado no es válido.");
         }
     }
 }

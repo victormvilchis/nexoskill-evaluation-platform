@@ -19,6 +19,7 @@ import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessi
 import com.nexoskill.evaluation.users.application.service.PasswordPolicy;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -56,88 +57,90 @@ public class StudentService {
     }
 
     @Transactional(readOnly = true)
-    public PageResult search(TenantContext tenant, String query, StudentEffectiveStatus status, boolean includeDeleted,
+    public PageResult search(TenantContext tenant, String query, StudentEffectiveStatus status, boolean ignoredIncludeDeleted,
             int page, int size) {
         Long organizationId = requireOrganization(tenant);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "updatedAt"));
-
-        // Una organización válida sin estudiantes es un resultado normal. Evitamos
-        // ejecutar consultas de filtrado innecesarias y devolvemos una página vacía estable.
-        if (!studentRepository.existsByOrganizationId(organizationId)) {
-            return PageResult.empty(safePage, safeSize);
-        }
-
+        if (!studentRepository.existsByOrganizationId(organizationId)) return PageResult.empty(safePage, safeSize);
         Instant now = clock.instant();
-        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status,
-                includeDeleted, now, pageable);
-        List<StudentSummary> content = result.getContent() == null
-                ? List.of()
+        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, now, pageable);
+        List<StudentSummary> content = result.getContent() == null ? List.of()
                 : result.getContent().stream().map(entity -> summary(entity, now)).toList();
-        return new PageResult(content, result.getNumber(), result.getSize(), result.getTotalElements(),
-                result.getTotalPages());
+        return new PageResult(content, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional(readOnly = true)
     public StudentDetail get(TenantContext tenant, String publicId) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        return detail(student, clock.instant());
+        return detail(findScoped(tenant, publicId), clock.instant());
     }
 
     @Transactional
     public StudentDetail create(TenantContext tenant, CreateCommand command, Actor actor) {
-        Long organizationId = requireOrganization(tenant);
+        Long organizationId = requireOperationalOrganization(tenant);
+        validateRequired(command);
         validateDates(command.validFrom(), command.expiresAt());
-        if (command.status() != StudentStatus.ACTIVE && command.status() != StudentStatus.INACTIVE) {
-            throw new BusinessException("STUDENT_INITIAL_STATUS_INVALID",
-                    "El estudiante debe crearse como activo o inactivo.");
+        StudentStatus initialStatus = command.status() == null ? StudentStatus.ACTIVE : command.status();
+        if (initialStatus != StudentStatus.ACTIVE && initialStatus != StudentStatus.INACTIVE) {
+            throw fieldError("STUDENT_INITIAL_STATUS_INVALID", "El estado inicial no es válido.",
+                    "status", "El estudiante debe crearse como activo o desactivado.");
         }
         Instant now = clock.instant();
-        if (command.status() == StudentStatus.ACTIVE && command.expiresAt() != null
-                && !command.expiresAt().isAfter(now)) {
-            throw new BusinessException("STUDENT_EXPIRED", "No se puede crear como activo un estudiante vencido.");
+        if (initialStatus == StudentStatus.ACTIVE && command.validFrom().isAfter(now)) {
+            throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
+                    "validFrom", "La fecha de inicio de un estudiante activo no puede ser futura.");
         }
-        passwordPolicy.validate(command.temporaryPassword(), command.email());
+        if (initialStatus == StudentStatus.ACTIVE && command.expiresAt() != null && !command.expiresAt().isAfter(now)) {
+            throw fieldError("STUDENT_EXPIRED", "No se puede crear un estudiante activo vencido.",
+                    "expiresAt", "La fecha de vencimiento debe ser posterior a la fecha actual.");
+        }
+        try {
+            passwordPolicy.validate(command.temporaryPassword(), command.email());
+        } catch (BusinessException exception) {
+            throw new BusinessException(exception.getCode(), exception.getMessage(),
+                    Map.of("temporaryPassword", exception.getMessage()));
+        }
         String normalizedEmail = EmailNormalizer.normalize(command.email());
         String code = normalizeCode(command.studentCode());
         if (studentRepository.existsByOrganizationIdAndNormalizedEmail(organizationId, normalizedEmail)) {
-            throw new BusinessException("STUDENT_EMAIL_EXISTS",
-                    "Ya existe un estudiante con ese correo en la organización.");
+            throw fieldError("STUDENT_EMAIL_EXISTS", "El correo ya está registrado.",
+                    "email", "Ya existe un estudiante con este correo dentro de la organización.");
         }
         if (studentRepository.existsByOrganizationIdAndStudentCode(organizationId, code)) {
-            throw new BusinessException("STUDENT_CODE_EXISTS",
-                    "Ya existe un estudiante con ese código en la organización.");
+            throw fieldError("STUDENT_CODE_EXISTS", "El código ya está registrado.",
+                    "studentCode", "Ya existe un estudiante con este código dentro de la organización.");
         }
         StudentJpaEntity student = StudentJpaEntity.create(UUID.randomUUID().toString(), organizationId, code,
                 command.email().trim(), normalizedEmail, passwordHasher.encode(command.temporaryPassword()),
-                command.firstName().trim(), command.lastName().trim(), displayName(command.displayName(),
-                        command.firstName(), command.lastName()), command.status(), command.validFrom(),
-                command.expiresAt(), now.plus(properties.getSecurity().getTemporaryPasswordDuration()),
-                actor.userId(), now);
+                command.firstName().trim(), command.lastName().trim(),
+                displayName(command.displayName(), command.firstName(), command.lastName()), initialStatus,
+                command.validFrom(), command.expiresAt(),
+                now.plus(properties.getSecurity().getTemporaryPasswordDuration()), actor.userId(), now);
         try {
             student = studentRepository.saveAndFlush(student);
         } catch (DataIntegrityViolationException exception) {
             throw new BusinessException("STUDENT_CONFLICT",
-                    "El correo o código del estudiante ya está registrado en la organización.");
+                    "El correo o código del estudiante ya está registrado en la organización.",
+                    Map.of("email", "Verifica que el correo y el código no estén registrados."));
         }
-        audit(actor, "STUDENT_CREATED", student, Map.of("initialStatus", command.status().name()), now);
+        audit(actor, "STUDENT_CREATED", student, Map.of("initialStatus", initialStatus.name()), now);
         return detail(student, now);
     }
 
     @Transactional
     public StudentDetail update(TenantContext tenant, String publicId, UpdateCommand command, Actor actor) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        ensureEditable(student);
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
         validateVersion(student, command.version());
+        validateUpdateRequired(command);
         validateDates(command.validFrom(), command.expiresAt());
         String normalizedEmail = EmailNormalizer.normalize(command.email());
-        Long studentId = student.getId();
+        Long currentStudentId = student.getId();
         studentRepository.findByOrganizationIdAndNormalizedEmail(student.getOrganizationId(), normalizedEmail)
-                .filter(existing -> !existing.getId().equals(studentId))
+                .filter(existing -> !existing.getId().equals(currentStudentId))
                 .ifPresent(existing -> {
-                    throw new BusinessException("STUDENT_EMAIL_EXISTS",
-                            "Ya existe un estudiante con ese correo en la organización.");
+                    throw fieldError("STUDENT_EMAIL_EXISTS", "El correo ya está registrado.",
+                            "email", "Ya existe un estudiante con este correo dentro de la organización.");
                 });
         Instant now = clock.instant();
         student.updateProfile(command.email().trim(), normalizedEmail, command.firstName().trim(),
@@ -153,14 +156,20 @@ public class StudentService {
 
     @Transactional
     public StudentDetail activate(TenantContext tenant, String publicId, Actor actor) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() == StudentStatus.DELETED) {
-            throw new BusinessException("STUDENT_RESTORE_REQUIRED",
-                    "Primero restaura al estudiante antes de activarlo.");
-        }
+        requireOperationalOrganization(tenant);
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
         Instant now = clock.instant();
-        if (student.getExpiresAt() != null && !student.getExpiresAt().isAfter(now)) {
-            throw new BusinessException("STUDENT_EXPIRED", "No se puede activar un estudiante vencido.");
+        if (student.getStatus() == StudentStatus.EXPIRED || (student.getExpiresAt() != null && !student.getExpiresAt().isAfter(now))) {
+            throw fieldError("STUDENT_RENEWAL_REQUIRED", "El estudiante está vencido.",
+                    "expiresAt", "Captura una nueva fecha de vencimiento válida para renovarlo.");
+        }
+        if (student.getStatus() != StudentStatus.INACTIVE) {
+            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID",
+                    "Solamente un estudiante desactivado puede activarse directamente.");
+        }
+        if (student.getValidFrom() != null && student.getValidFrom().isAfter(now)) {
+            throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
+                    "validFrom", "La fecha de inicio debe ser anterior o igual a la fecha actual.");
         }
         student.activate(actor.userId(), now);
         studentRepository.save(student);
@@ -170,69 +179,41 @@ public class StudentService {
 
     @Transactional
     public StudentDetail deactivate(TenantContext tenant, String publicId, Actor actor) {
-        return changeStatus(tenant, publicId, actor, StudentStatus.INACTIVE,
-                StudentSessionRevocationReason.DEACTIVATED, "STUDENT_DEACTIVATED");
-    }
-
-    @Transactional
-    public StudentDetail suspend(TenantContext tenant, String publicId, Actor actor) {
-        return changeStatus(tenant, publicId, actor, StudentStatus.SUSPENDED,
-                StudentSessionRevocationReason.SUSPENDED, "STUDENT_SUSPENDED");
-    }
-
-    @Transactional
-    public StudentDetail archive(TenantContext tenant, String publicId, Actor actor) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() == StudentStatus.DELETED) {
-            throw new BusinessException("STUDENT_RESTORE_REQUIRED", "El estudiante está eliminado.");
-        }
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
         Instant now = clock.instant();
-        student.archive(actor.userId(), now);
+        if (student.getStatus() == StudentStatus.INACTIVE) {
+            throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El estudiante ya está desactivado.");
+        }
+        student.deactivate(actor.userId(), now);
         studentRepository.save(student);
-        revokeSessions(student.getId(), StudentSessionRevocationReason.ARCHIVED, now);
-        audit(actor, "STUDENT_ARCHIVED", student, Map.of(), now);
+        revokeSessions(student.getId(), StudentSessionRevocationReason.DEACTIVATED, now);
+        audit(actor, "STUDENT_DEACTIVATED", student, Map.of(), now);
         return detail(student, now);
     }
 
     @Transactional
-    public StudentDetail delete(TenantContext tenant, String publicId, String reason, Actor actor) {
-        if (reason == null || reason.isBlank()) {
-            throw new BusinessException("STUDENT_DELETION_REASON_REQUIRED",
-                    "El motivo de eliminación es obligatorio.");
-        }
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() == StudentStatus.DELETED) {
-            throw new BusinessException("STUDENT_ALREADY_DELETED", "El estudiante ya está eliminado.");
-        }
+    public StudentDetail renew(TenantContext tenant, String publicId, Instant expiresAt, Long version, Actor actor) {
+        requireOperationalOrganization(tenant);
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
+        validateVersion(student, version);
         Instant now = clock.instant();
-        student.softDelete(actor.userId(), reason.trim(), now);
-        studentRepository.save(student);
-        revokeSessions(student.getId(), StudentSessionRevocationReason.DELETED, now);
-        audit(actor, "STUDENT_DELETED", student, Map.of("reason", reason.trim()), now);
-        return detail(student, now);
-    }
-
-    @Transactional
-    public StudentDetail restore(TenantContext tenant, String publicId, Actor actor) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() != StudentStatus.DELETED && student.getStatus() != StudentStatus.ARCHIVED) {
-            throw new BusinessException("STUDENT_RESTORE_NOT_ALLOWED",
-                    "Solo se pueden restaurar estudiantes archivados o eliminados.");
+        if (student.effectiveStatusAt(now) != StudentEffectiveStatus.EXPIRED) {
+            throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID",
+                    "Solamente un estudiante vencido puede renovarse.");
         }
-        Instant now = clock.instant();
-        student.restore(actor.userId(), now);
+        if (expiresAt == null || !expiresAt.isAfter(now) || (student.getValidFrom() != null && !expiresAt.isAfter(student.getValidFrom()))) {
+            throw fieldError("STUDENT_RENEWAL_DATE_INVALID", "La fecha de renovación no es válida.",
+                    "expiresAt", "La nueva fecha de vencimiento debe ser posterior a la fecha actual y al inicio de vigencia.");
+        }
+        student.renew(expiresAt, actor.userId(), now);
         studentRepository.save(student);
-        audit(actor, "STUDENT_RESTORED", student, Map.of(), now);
+        audit(actor, "STUDENT_RENEWED", student, Map.of("expiresAt", expiresAt.toString()), now);
         return detail(student, now);
     }
 
     @Transactional
     public StudentDetail resetPassword(TenantContext tenant, String publicId, String temporaryPassword, Actor actor) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() == StudentStatus.DELETED || student.getStatus() == StudentStatus.ARCHIVED) {
-            throw new BusinessException("STUDENT_RESTORE_REQUIRED",
-                    "Restaura al estudiante antes de restablecer su contraseña.");
-        }
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
         passwordPolicy.validate(temporaryPassword, student.getEmail());
         Instant now = clock.instant();
         student.resetPassword(passwordHasher.encode(temporaryPassword),
@@ -246,8 +227,7 @@ public class StudentService {
     @Transactional(readOnly = true)
     public List<SessionView> sessions(TenantContext tenant, String publicId) {
         StudentJpaEntity student = findScoped(tenant, publicId);
-        return sessionRepository.findByStudentIdOrderByCreatedAtDesc(student.getId()).stream()
-                .map(this::sessionView).toList();
+        return sessionRepository.findByStudentIdOrderByCreatedAtDesc(student.getId()).stream().map(this::sessionView).toList();
     }
 
     @Transactional
@@ -271,19 +251,10 @@ public class StudentService {
         audit(actor, "STUDENT_SESSIONS_REVOKED", student, Map.of(), now);
     }
 
-    private StudentDetail changeStatus(TenantContext tenant, String publicId, Actor actor, StudentStatus status,
-            StudentSessionRevocationReason reason, String event) {
-        StudentJpaEntity student = findScoped(tenant, publicId);
-        if (student.getStatus() == StudentStatus.DELETED) {
-            throw new BusinessException("STUDENT_RESTORE_REQUIRED", "El estudiante está eliminado.");
-        }
-        Instant now = clock.instant();
-        if (status == StudentStatus.SUSPENDED) student.suspend(actor.userId(), now);
-        else student.deactivate(actor.userId(), now);
-        studentRepository.save(student);
-        revokeSessions(student.getId(), reason, now);
-        audit(actor, event, student, Map.of(), now);
-        return detail(student, now);
+    StudentJpaEntity findScopedForUpdate(TenantContext tenant, String publicId) {
+        return studentRepository.findByOrganizationIdAndPublicIdForUpdate(requireOrganization(tenant), publicId)
+                .filter(student -> student.getStatus() != StudentStatus.DELETED)
+                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
     }
 
     private void revokeSessions(Long studentId, StudentSessionRevocationReason reason, Instant now) {
@@ -291,74 +262,84 @@ public class StudentService {
     }
 
     private StudentSessionRevocationReason revocationReason(StudentEffectiveStatus status) {
-        return switch (status) {
-            case EXPIRED -> StudentSessionRevocationReason.EXPIRED;
-            case SUSPENDED -> StudentSessionRevocationReason.SUSPENDED;
-            case ARCHIVED -> StudentSessionRevocationReason.ARCHIVED;
-            case DELETED -> StudentSessionRevocationReason.DELETED;
-            default -> StudentSessionRevocationReason.DEACTIVATED;
-        };
+        return status == StudentEffectiveStatus.EXPIRED ? StudentSessionRevocationReason.EXPIRED
+                : status == StudentEffectiveStatus.DELETED ? StudentSessionRevocationReason.DELETED
+                : StudentSessionRevocationReason.DEACTIVATED;
     }
 
     private StudentJpaEntity findScoped(TenantContext tenant, String publicId) {
         return studentRepository.findByOrganizationIdAndPublicId(requireOrganization(tenant), publicId)
+                .filter(student -> student.getStatus() != StudentStatus.DELETED)
                 .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
     }
 
     private Long requireOrganization(TenantContext tenant) {
         if (tenant == null || !tenant.hasOrganization()) {
-            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
-                    "Selecciona una organización para administrar estudiantes.");
+            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización para administrar estudiantes.",
+                    Map.of("organizationPublicId", "Debes seleccionar una organización."));
         }
         OrganizationJpaEntity organization = organizationRepository.findById(tenant.organizationId())
-                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe.",
+                        Map.of("organizationPublicId", "La organización seleccionada no existe.")));
         return organization.getId();
     }
 
-    private void validateDates(Instant validFrom, Instant expiresAt) {
-        if (validFrom == null) {
-            throw new BusinessException("STUDENT_VALID_FROM_REQUIRED", "La fecha de inicio es obligatoria.");
+    private Long requireOperationalOrganization(TenantContext tenant) {
+        Long organizationId = requireOrganization(tenant);
+        OrganizationJpaEntity organization = organizationRepository.findById(organizationId)
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+        if (!organization.isOperational(LocalDate.now(clock))) {
+            throw new BusinessException("ORGANIZATION_NOT_OPERATIONAL",
+                    "La organización debe estar activa y vigente para activar estudiantes.",
+                    Map.of("organizationPublicId", "Selecciona una organización comercial activa y vigente."));
         }
-        if (expiresAt != null && !expiresAt.isAfter(validFrom)) {
-            throw new BusinessException("STUDENT_DATES_INVALID",
-                    "La fecha de vencimiento debe ser posterior a la fecha de inicio.");
-        }
+        return organizationId;
     }
 
-    private void ensureEditable(StudentJpaEntity student) {
-        if (student.getStatus() == StudentStatus.DELETED || student.getStatus() == StudentStatus.ARCHIVED) {
-            throw new BusinessException("STUDENT_RESTORE_REQUIRED",
-                    "Restaura al estudiante antes de modificar sus datos.");
+    private void validateRequired(CreateCommand command) {
+        if (command == null) throw new BusinessException("VALIDATION_ERROR", "La solicitud contiene datos inválidos.");
+        if (blank(command.firstName())) throw fieldError("STUDENT_FIRST_NAME_REQUIRED", "El nombre es obligatorio.", "firstName", "El nombre es obligatorio.");
+        if (blank(command.lastName())) throw fieldError("STUDENT_LAST_NAME_REQUIRED", "Los apellidos son obligatorios.", "lastName", "Los apellidos son obligatorios.");
+        if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
+        if (blank(command.temporaryPassword())) throw fieldError("STUDENT_PASSWORD_REQUIRED", "La contraseña temporal es obligatoria.", "temporaryPassword", "La contraseña temporal es obligatoria.");
+    }
+
+    private void validateUpdateRequired(UpdateCommand command) {
+        if (command == null) throw new BusinessException("VALIDATION_ERROR", "La solicitud contiene datos inválidos.");
+        if (blank(command.firstName())) throw fieldError("STUDENT_FIRST_NAME_REQUIRED", "El nombre es obligatorio.", "firstName", "El nombre es obligatorio.");
+        if (blank(command.lastName())) throw fieldError("STUDENT_LAST_NAME_REQUIRED", "Los apellidos son obligatorios.", "lastName", "Los apellidos son obligatorios.");
+        if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
+    }
+
+    private void validateDates(Instant validFrom, Instant expiresAt) {
+        if (validFrom == null) throw fieldError("STUDENT_VALID_FROM_REQUIRED", "La fecha de inicio es obligatoria.", "validFrom", "La fecha de inicio es obligatoria.");
+        if (expiresAt != null && !expiresAt.isAfter(validFrom)) {
+            throw fieldError("STUDENT_DATES_INVALID", "Las fechas de vigencia no son válidas.",
+                    "expiresAt", "La fecha de vencimiento debe ser posterior a la fecha de inicio.");
         }
     }
 
     private void validateVersion(StudentJpaEntity student, Long version) {
         if (version == null || !version.equals(student.getVersion())) {
-            throw new BusinessException("STUDENT_VERSION_CONFLICT",
-                    "El estudiante fue modificado por otra operación. Actualiza la página.");
+            throw new BusinessException("STUDENT_VERSION_CONFLICT", "El estudiante fue modificado por otra operación. Actualiza la página.");
         }
     }
 
     private String normalizeCode(String code) {
-        if (code == null || code.isBlank()) {
-            throw new BusinessException("STUDENT_CODE_REQUIRED", "El código del estudiante es obligatorio.");
-        }
-        String normalized = code.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_")
-                .replaceAll("_+", "_");
-        if (normalized.length() > 80) {
-            throw new BusinessException("STUDENT_CODE_INVALID", "El código no puede superar 80 caracteres.");
-        }
+        if (blank(code)) throw fieldError("STUDENT_CODE_REQUIRED", "El código es obligatorio.", "studentCode", "El código del estudiante es obligatorio.");
+        String normalized = code.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_").replaceAll("_+", "_");
+        if (normalized.length() > 80) throw fieldError("STUDENT_CODE_INVALID", "El código es demasiado largo.", "studentCode", "El código no puede superar 80 caracteres.");
         return normalized;
     }
 
-    private String normalizeQuery(String query) {
-        return query == null || query.isBlank() ? null : query.trim();
+    private BusinessException fieldError(String code, String message, String field, String fieldMessage) {
+        return new BusinessException(code, message, Map.of(field, fieldMessage));
     }
 
+    private boolean blank(String value) { return value == null || value.isBlank(); }
+    private String normalizeQuery(String query) { return blank(query) ? null : query.trim(); }
     private String displayName(String displayName, String firstName, String lastName) {
-        return displayName == null || displayName.isBlank()
-                ? firstName.trim() + " " + lastName.trim()
-                : displayName.trim();
+        return blank(displayName) ? firstName.trim() + " " + lastName.trim() : displayName.trim();
     }
 
     private void audit(Actor actor, String event, StudentJpaEntity student, Map<String, Object> extra, Instant now) {
@@ -369,24 +350,23 @@ public class StudentService {
     }
 
     private StudentSummary summary(StudentJpaEntity student, Instant now) {
-        return new StudentSummary(student.getPublicId(), student.getStudentCode(), student.getEmail(),
-                student.getDisplayName(), student.getStatus(), student.effectiveStatusAt(now), student.getValidFrom(),
-                student.getExpiresAt(), student.getLastLoginAt(), student.getUpdatedAt());
+        return new StudentSummary(student.getPublicId(), student.getStudentCode(), student.getEmail(), student.getDisplayName(),
+                student.getStatus(), student.effectiveStatusAt(now), student.getValidFrom(), student.getExpiresAt(),
+                student.getLastLoginAt(), student.getUpdatedAt(), student.getVersion());
     }
 
     private StudentDetail detail(StudentJpaEntity student, Instant now) {
-        return new StudentDetail(student.getPublicId(), student.getStudentCode(), student.getEmail(),
-                student.getFirstName(), student.getLastName(), student.getDisplayName(), student.getStatus(),
-                student.effectiveStatusAt(now), student.getValidFrom(), student.getExpiresAt(),
-                student.isPasswordChangeRequired(), student.getTemporaryPasswordExpiresAt(), student.getLastLoginAt(),
-                student.getArchivedAt(), student.getDeletedAt(), student.getDeletionReason(), student.getCreatedAt(),
-                student.getUpdatedAt(), student.getVersion());
+        return new StudentDetail(student.getPublicId(), student.getStudentCode(), student.getEmail(), student.getFirstName(),
+                student.getLastName(), student.getDisplayName(), student.getStatus(), student.effectiveStatusAt(now),
+                student.getValidFrom(), student.getExpiresAt(), student.isPasswordChangeRequired(),
+                student.getTemporaryPasswordExpiresAt(), student.getLastLoginAt(),
+                student.getCreatedAt(), student.getUpdatedAt(), student.getVersion());
     }
 
     private SessionView sessionView(StudentSessionJpaEntity session) {
-        return new SessionView(session.getPublicId(), session.getStatus(), session.getIpAddress(),
-                session.getUserAgent(), session.getCreatedAt(), session.getLastActivityAt(), session.getExpiresAt(),
-                session.getRevokedAt(), session.getRevocationReason() == null ? null : session.getRevocationReason().name());
+        return new SessionView(session.getPublicId(), session.getStatus(), session.getIpAddress(), session.getUserAgent(),
+                session.getCreatedAt(), session.getLastActivityAt(), session.getExpiresAt(), session.getRevokedAt(),
+                session.getRevocationReason() == null ? null : session.getRevocationReason().name());
     }
 
     public record Actor(Long userId, String ipAddress, String userAgent) {}
@@ -396,25 +376,19 @@ public class StudentService {
             Instant validFrom, Instant expiresAt, Long version) {}
     public record StudentSummary(String publicId, String studentCode, String email, String displayName,
             StudentStatus status, StudentEffectiveStatus effectiveStatus, Instant validFrom, Instant expiresAt,
-            Instant lastLoginAt, Instant updatedAt) {}
+            Instant lastLoginAt, Instant updatedAt, Long version) {}
     public record StudentDetail(String publicId, String studentCode, String email, String firstName, String lastName,
             String displayName, StudentStatus status, StudentEffectiveStatus effectiveStatus, Instant validFrom,
             Instant expiresAt, boolean passwordChangeRequired, Instant temporaryPasswordExpiresAt,
-            Instant lastLoginAt, Instant archivedAt, Instant deletedAt, String deletionReason, Instant createdAt,
-            Instant updatedAt, Long version) {}
+            Instant lastLoginAt, Instant createdAt, Instant updatedAt, Long version) {}
     public record SessionView(String publicId, StudentSessionStatus status, String ipAddress, String userAgent,
             Instant createdAt, Instant lastActivityAt, Instant expiresAt, Instant revokedAt, String revocationReason) {}
     public record PageResult(List<StudentSummary> content, int page, int size, long totalElements, int totalPages) {
         public PageResult {
             content = content == null ? List.of() : List.copyOf(content);
-            page = Math.max(page, 0);
-            size = Math.max(size, 1);
-            totalElements = Math.max(totalElements, 0);
-            totalPages = Math.max(totalPages, 0);
+            page = Math.max(page, 0); size = Math.max(size, 1);
+            totalElements = Math.max(totalElements, 0); totalPages = Math.max(totalPages, 0);
         }
-
-        public static PageResult empty(int page, int size) {
-            return new PageResult(List.of(), page, size, 0, 0);
-        }
+        public static PageResult empty(int page, int size) { return new PageResult(List.of(), page, size, 0, 0); }
     }
 }

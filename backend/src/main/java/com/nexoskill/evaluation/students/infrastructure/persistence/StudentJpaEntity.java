@@ -136,99 +136,89 @@ public class StudentJpaEntity {
 	}
 
 	public StudentEffectiveStatus effectiveStatusAt(Instant now) {
-		if (status == StudentStatus.DELETED)
-			return StudentEffectiveStatus.DELETED;
-		if (status == StudentStatus.ARCHIVED)
-			return StudentEffectiveStatus.ARCHIVED;
-		if (status == StudentStatus.SUSPENDED)
-			return StudentEffectiveStatus.SUSPENDED;
-		if (status == StudentStatus.INACTIVE)
-			return StudentEffectiveStatus.INACTIVE;
-		if (validFrom != null && now.isBefore(validFrom))
-			return StudentEffectiveStatus.PENDING;
-		if (expiresAt != null && !now.isBefore(expiresAt))
-			return StudentEffectiveStatus.EXPIRED;
-		return StudentEffectiveStatus.ACTIVE;
-	}
+        if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
+        if (status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
+        if (status == StudentStatus.EXPIRED || (expiresAt != null && !now.isBefore(expiresAt))) {
+            return StudentEffectiveStatus.EXPIRED;
+        }
+        return StudentEffectiveStatus.ACTIVE;
+    }
 
-	public boolean canAuthenticateAt(Instant now) {
-		return effectiveStatusAt(now) == StudentEffectiveStatus.ACTIVE
-				&& (lockedUntil == null || !lockedUntil.isAfter(now));
-	}
+    public boolean canAuthenticateAt(Instant now) {
+        return status == StudentStatus.ACTIVE
+                && (validFrom == null || !now.isBefore(validFrom))
+                && (expiresAt == null || now.isBefore(expiresAt))
+                && (lockedUntil == null || !lockedUntil.isAfter(now));
+    }
 
-	public boolean isTemporaryPasswordExpiredAt(Instant now) {
-		return passwordChangeRequired && temporaryPasswordExpiresAt != null && !temporaryPasswordExpiresAt.isAfter(now);
-	}
+    public boolean isTemporaryPasswordExpiredAt(Instant now) {
+        return passwordChangeRequired && temporaryPasswordExpiresAt != null && !temporaryPasswordExpiresAt.isAfter(now);
+    }
 
-	public void registerFailedLogin(int maxAttempts, Instant now, java.time.Duration lockDuration) {
-		failedLoginAttempts++;
-		if (failedLoginAttempts >= maxAttempts) {
-			lockedUntil = now.plus(lockDuration);
-			failedLoginAttempts = 0;
-		}
-		touch(updatedBy, now);
-	}
+    public void registerFailedLogin(int maxAttempts, Instant now, java.time.Duration lockDuration) {
+        failedLoginAttempts++;
+        if (failedLoginAttempts >= maxAttempts) {
+            lockedUntil = now.plus(lockDuration);
+            failedLoginAttempts = 0;
+        }
+        touch(updatedBy, now);
+    }
 
-	public void registerSuccessfulLogin(Instant now) {
-		failedLoginAttempts = 0;
-		lockedUntil = null;
-		lastLoginAt = now;
-		updatedAt = now;
-	}
+    public void registerSuccessfulLogin(Instant now) {
+        failedLoginAttempts = 0;
+        lockedUntil = null;
+        lastLoginAt = now;
+        updatedAt = now;
+    }
 
-	public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
-			String displayName, Instant validFrom, Instant expiresAt, Long actorId, Instant now) {
-		this.email = email;
-		this.normalizedEmail = normalizedEmail;
-		this.firstName = firstName;
-		this.lastName = lastName;
-		this.displayName = displayName;
-		this.validFrom = validFrom;
-		this.expiresAt = expiresAt;
-		touch(actorId, now);
-	}
+    public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
+            String displayName, Instant validFrom, Instant expiresAt, Long actorId, Instant now) {
+        this.email = email;
+        this.normalizedEmail = normalizedEmail;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.displayName = displayName;
+        this.validFrom = validFrom;
+        this.expiresAt = expiresAt;
+        if (this.status == StudentStatus.ACTIVE && expiresAt != null && !expiresAt.isAfter(now)) {
+            this.status = StudentStatus.EXPIRED;
+        }
+        touch(actorId, now);
+    }
 
-	public void activate(Long actorId, Instant now) {
-		this.status = StudentStatus.ACTIVE;
-		this.archivedAt = null;
-		this.deletedAt = null;
-		this.deletedBy = null;
-		this.deletionReason = null;
-		touch(actorId, now);
-	}
+    public void activate(Long actorId, Instant now) {
+        this.status = StudentStatus.ACTIVE;
+        this.archivedAt = null;
+        this.deletedAt = null;
+        this.deletedBy = null;
+        this.deletionReason = null;
+        touch(actorId, now);
+    }
 
-	public void deactivate(Long actorId, Instant now) {
-		this.status = StudentStatus.INACTIVE;
-		touch(actorId, now);
-	}
+    public void deactivate(Long actorId, Instant now) {
+        this.status = StudentStatus.INACTIVE;
+        touch(actorId, now);
+    }
 
-	public void suspend(Long actorId, Instant now) {
-		this.status = StudentStatus.SUSPENDED;
-		touch(actorId, now);
-	}
+    public void expire(Long actorId, Instant now) {
+        this.status = StudentStatus.EXPIRED;
+        touch(actorId, now);
+    }
 
-	public void archive(Long actorId, Instant now) {
-		this.status = StudentStatus.ARCHIVED;
-		this.archivedAt = now;
-		touch(actorId, now);
-	}
+    public void renew(Instant newExpiresAt, Long actorId, Instant now) {
+        this.expiresAt = newExpiresAt;
+        this.status = StudentStatus.ACTIVE;
+        touch(actorId, now);
+    }
 
-	public void softDelete(Long actorId, String reason, Instant now) {
-		this.status = StudentStatus.DELETED;
-		this.deletedAt = now;
-		this.deletedBy = actorId;
-		this.deletionReason = reason;
-		touch(actorId, now);
-	}
-
-	public void restore(Long actorId, Instant now) {
-		this.status = StudentStatus.INACTIVE;
-		this.deletedAt = null;
-		this.deletedBy = null;
-		this.deletionReason = null;
-		this.archivedAt = null;
-		touch(actorId, now);
-	}
+    /** Estado transitorio que bloquea operaciones dentro de la transacción de purga. */
+    public void markDeleting(Long actorId, Instant now) {
+        this.status = StudentStatus.DELETED;
+        this.deletedAt = now;
+        this.deletedBy = actorId;
+        this.deletionReason = "PERMANENT_DELETION_IN_PROGRESS";
+        touch(actorId, now);
+    }
 
 	public void resetPassword(String passwordHash, Instant temporaryPasswordExpiresAt, Long actorId, Instant now) {
 		this.passwordHash = passwordHash;
@@ -349,6 +339,10 @@ public class StudentJpaEntity {
 
 	public Instant getUpdatedAt() {
 		return updatedAt;
+	}
+
+	public Long getUpdatedBy() {
+		return updatedBy;
 	}
 
 	public Long getVersion() {

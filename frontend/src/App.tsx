@@ -23,6 +23,7 @@ import { OrganizationEditorPage } from './pages/OrganizationEditorPage'
 import { OrganizationManagementPage } from './pages/OrganizationManagementPage'
 import { AdminStudentsPage } from './pages/AdminStudentsPage'
 import { StudentEditorPage } from './pages/StudentEditorPage'
+import { StudentManagementPage } from './pages/StudentManagementPage'
 import { StudentCertificationsPage } from './pages/StudentCertificationsPage'
 import { StudentLoginPage } from './pages/StudentLoginPage'
 import { StudentPortalPage } from './pages/StudentPortalPage'
@@ -82,6 +83,9 @@ export default function App() {
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
             <Route path="/admin/students/:publicId/edit" element={<StudentEditorPage mode="edit" />} />
+          </Route>
+          <Route element={<PermissionRoute anyOf={['STUDENT_STATUS_CHANGE', 'STUDENT_SESSION_MANAGE', 'STUDENT_DELETE']} />}>
+            <Route path="/admin/students/:publicId/manage" element={<StudentManagementPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CERTIFICATION_MANAGE" />}>
             <Route path="/admin/students/:publicId/certifications" element={<StudentCertificationsPage />} />

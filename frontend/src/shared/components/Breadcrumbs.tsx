@@ -21,6 +21,8 @@ function resolveCrumbs(pathname: string): Crumb[] {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Estudiantes', to: '/admin/students' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nuevo estudiante' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname.endsWith('/certifications')) base.push({ label: 'Administrar certificaciones' })
     else if (pathname !== '/admin/students') base.push({ label: 'Detalle' })
     return base
   }
