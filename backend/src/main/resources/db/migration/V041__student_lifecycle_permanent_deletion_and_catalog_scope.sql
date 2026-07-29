@@ -108,14 +108,31 @@ UPDATE QUESTION_TECHNOLOGY
  WHERE CONTENT_SCOPE IS NULL;
 
 DECLARE
-    PROCEDURE drop_constraint_if_exists(p_table VARCHAR2, p_name VARCHAR2) IS
-        v_count NUMBER;
+    PROCEDURE drop_unique_if_unreferenced(p_table VARCHAR2, p_name VARCHAR2) IS
+        v_constraint_count NUMBER;
+        v_reference_count NUMBER;
     BEGIN
-        SELECT COUNT(*) INTO v_count
+        SELECT COUNT(*) INTO v_constraint_count
           FROM USER_CONSTRAINTS
          WHERE TABLE_NAME = UPPER(p_table)
-           AND CONSTRAINT_NAME = UPPER(p_name);
-        IF v_count > 0 THEN
+           AND CONSTRAINT_NAME = UPPER(p_name)
+           AND CONSTRAINT_TYPE IN ('P', 'U');
+
+        IF v_constraint_count = 0 THEN
+            RETURN;
+        END IF;
+
+        SELECT COUNT(*) INTO v_reference_count
+          FROM USER_CONSTRAINTS
+         WHERE CONSTRAINT_TYPE = 'R'
+           AND R_CONSTRAINT_NAME = UPPER(p_name)
+           AND STATUS = 'ENABLED';
+
+        -- Oracle no permite retirar una clave única mientras existan claves foráneas
+        -- habilitadas que la referencien (ORA-02273). Los catálogos legados que todavía
+        -- relacionan PROFILE_CODE conservan temporalmente esa unicidad global; los demás
+        -- catálogos migran a la unicidad por alcance y propietario definida más abajo.
+        IF v_reference_count = 0 THEN
             EXECUTE IMMEDIATE 'ALTER TABLE ' || p_table || ' DROP CONSTRAINT ' || p_name;
         END IF;
     END;
@@ -132,10 +149,11 @@ DECLARE
         END IF;
     END;
 BEGIN
-    -- Los códigos dejan de ser globalmente únicos para permitir copias organizacionales.
-    drop_constraint_if_exists('CERTIFICATION_PROFILE_CATALOG', 'UK_CERT_PROFILE_CODE');
-    drop_constraint_if_exists('TECHNOLOGICAL_PROFILE_CATALOG', 'UK_TECH_PROFILE_CODE');
-    drop_constraint_if_exists('QUESTION_TECHNOLOGY', 'UK_QUESTION_TECH_CODE');
+    -- Los códigos dejan de ser globalmente únicos cuando no existe una dependencia
+    -- referencial legada que obligue a conservar temporalmente la clave original.
+    drop_unique_if_unreferenced('CERTIFICATION_PROFILE_CATALOG', 'UK_CERT_PROFILE_CODE');
+    drop_unique_if_unreferenced('TECHNOLOGICAL_PROFILE_CATALOG', 'UK_TECH_PROFILE_CODE');
+    drop_unique_if_unreferenced('QUESTION_TECHNOLOGY', 'UK_QUESTION_TECH_CODE');
 
     add_constraint_if_missing('CERTIFICATION_PROFILE_CATALOG', 'CK_CERT_PROFILE_SCOPE',
         'ALTER TABLE CERTIFICATION_PROFILE_CATALOG ADD CONSTRAINT CK_CERT_PROFILE_SCOPE CHECK ((CONTENT_SCOPE = ''GLOBAL'' AND OWNER_ORGANIZATION_ID IS NULL) OR (CONTENT_SCOPE = ''ORGANIZATION'' AND OWNER_ORGANIZATION_ID IS NOT NULL))');
