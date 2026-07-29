@@ -41,6 +41,13 @@ public class AdminQuestionCatalogController {
 		return service.categories(tenant(request), parseStatus(status));
 	}
 
+	@GetMapping("/question-options")
+	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
+	public List<QuestionCategorySummary> questionOptions(
+			@RequestParam(name = "questionPublicId", required = false) String questionPublicId, HttpServletRequest request) {
+		return service.questionOptions(tenant(request), questionPublicId);
+	}
+
 	@GetMapping("/categories/{id}")
 	@PreAuthorize("hasAuthority('QUESTION_CATEGORY_MANAGE')")
 	public QuestionCategorySummary get(@PathVariable String id, HttpServletRequest request) {

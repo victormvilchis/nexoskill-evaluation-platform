@@ -1,6 +1,5 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.config;
 
-import com.nexoskill.evaluation.questionbank.application.port.out.QuestionUsageChecker;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionValidator;
 import org.springframework.context.annotation.*;
 
@@ -11,8 +10,4 @@ public class QuestionBankConfiguration {
 		return new QuestionValidator();
 	}
 
-	@Bean
-	QuestionUsageChecker questionUsageChecker() {
-		return id -> false;
-	}
 }

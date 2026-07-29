@@ -9,6 +9,7 @@ import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.questionbank.application.model.*;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionOperationContextPolicy;
 import com.nexoskill.evaluation.questionbank.application.port.out.*;
 import com.nexoskill.evaluation.questionbank.domain.model.*;
 import com.nexoskill.evaluation.shared.domain.*;
@@ -16,11 +17,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.*;
 import org.springframework.data.domain.*;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 public class OracleQuestionBankAdapter implements QuestionBankPort {
-    private static final String INTERNAL_DIFFICULTY = "BASIC";
+    private static final String INTERNAL_DIFFICULTY = "JR";
 
     private final SpringDataQuestionRepository questions;
     private final SpringDataQuestionTypeRepository types;
@@ -31,10 +33,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final QuestionTagStore tagStore;
     private final SpringDataQuestionMediaRepository media;
     private final QuestionUsageChecker usage;
+    private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper json;
     private final Clock clock;
     private final TenantContextResolver tenantContextResolver;
     private final GlobalContentAccessPolicy accessPolicy;
+    private final QuestionOperationContextPolicy operationContextPolicy;
     private final ContentSynchronizationService synchronization;
     private final AuditLogPort audit;
     private final HttpServletRequest request;
@@ -49,10 +53,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             QuestionTagStore tagStore,
             SpringDataQuestionMediaRepository media,
             QuestionUsageChecker usage,
+            NamedParameterJdbcTemplate jdbc,
             ObjectMapper json,
             Clock clock,
             TenantContextResolver tenantContextResolver,
             GlobalContentAccessPolicy accessPolicy,
+            QuestionOperationContextPolicy operationContextPolicy,
             ContentSynchronizationService synchronization,
             AuditLogPort audit,
             HttpServletRequest request) {
@@ -65,10 +71,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.tagStore = tagStore;
         this.media = media;
         this.usage = usage;
+        this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
         this.tenantContextResolver = tenantContextResolver;
         this.accessPolicy = accessPolicy;
+        this.operationContextPolicy = operationContextPolicy;
         this.synchronization = synchronization;
         this.audit = audit;
         this.request = request;
@@ -94,6 +102,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
         tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
                 saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
+        auditQuestion(command.actorUserId(), "QUESTION_CREATED", saved, Map.of());
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
     @Override
@@ -109,7 +118,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (entity.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "Restaura la pregunta antes de editarla.");
         }
-        boolean transversalEdit = tenant.globalAdministrator() && tenant.globalScope()
+        boolean transversalEdit = tenant.globalAdministrator()
                 && entity.getContentScope() == ContentScope.ORGANIZATION;
         String previousStatement = entity.getStatement();
 
@@ -142,6 +151,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                     "QUESTION_BANK", "El Administrador global modificó contenido propiedad de una organización.",
                     null, null, data, clock.instant());
         }
+        auditQuestion(command.actorUserId(), "QUESTION_UPDATED", saved,
+                Map.of("previousStatement", previousStatement));
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
@@ -186,13 +197,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (source.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "No se puede duplicar una pregunta eliminada.");
         }
-        var tenant = tenantContextResolver.resolve(request);
-        var ownership = accessPolicy.ownershipForCreation(tenant);
-        if (source.getContentScope() != ownership.scope()
-                || !Objects.equals(source.getOwnerOrganizationId(), ownership.organizationId())) {
-            throw error("QUESTION_DUPLICATE_SCOPE_INVALID",
-                    "Utiliza Clonar a Global para copiar contenido de una organización al catálogo maestro.");
-        }
+        assertEditable(source);
+        var ownership = new GlobalContentAccessPolicy.Ownership(
+                source.getContentScope(), source.getOwnerOrganizationId());
         var entity = QuestionJpaEntity.create(
                 UUID.randomUUID().toString(),
                 source.getType(),
@@ -231,6 +238,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
         tagStore.copy(source.getId(), saved.getId(), saved.getContentScope(),
                 saved.getOwnerOrganizationId(), actor, clock.instant());
+        copyAvailability(source, saved, actor);
+        auditQuestion(actor, "QUESTION_DUPLICATED", saved,
+                Map.of("sourceQuestionPublicId", source.getPublicId()));
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
     @Override
@@ -242,13 +252,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (entity.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_DELETED", "Restaura la pregunta antes de cambiar su estado.");
         }
-        if (status == QuestionStatus.ARCHIVED && usage.isUsedByActiveExam(entity.getId())) {
-            throw error("QUESTION_USED_BY_ACTIVE_EXAM",
-                    "No se puede archivar porque está incluida en una evaluación activa.");
-        }
+        boolean activeDependencies = usage.isUsedByActiveExam(entity.getId());
         entity.changeStatus(status, actor, clock.instant());
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        auditQuestion(actor, status == QuestionStatus.ACTIVE ? "QUESTION_ACTIVATED" : "QUESTION_INACTIVATED",
+                saved, Map.of("activeDependenciesPreserved", activeDependencies));
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
@@ -260,13 +269,13 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (entity.getStatus() == QuestionStatus.DELETED) {
             throw error("QUESTION_ALREADY_DELETED", "La pregunta ya está eliminada.");
         }
-        if (usage.isUsedByActiveExam(entity.getId())) {
-            throw error("QUESTION_USED_BY_ACTIVE_EXAM",
-                    "No se puede eliminar porque está incluida en una evaluación activa.");
-        }
+        boolean activeDependencies = usage.isUsedByActiveExam(entity.getId());
         entity.softDelete(actor, clock.instant(), truncate(reason, 500));
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        auditQuestion(actor, "QUESTION_LOGICALLY_DELETED", saved,
+                Map.of("reason", reason == null ? "" : truncate(reason, 500),
+                        "activeDependenciesPreserved", activeDependencies));
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
     }
 
@@ -281,7 +290,54 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.restore(actor, clock.instant());
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        auditQuestion(actor, "QUESTION_RESTORED", saved, Map.of());
         return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
+    }
+
+    private void copyAvailability(QuestionJpaEntity source, QuestionJpaEntity target, Long actor) {
+        if (source.getContentScope() != ContentScope.GLOBAL) return;
+        var now = clock.instant();
+        jdbc.update("""
+            UPDATE QUESTION
+               SET AVAILABILITY_MODE = (
+                       SELECT NVL(source_value.AVAILABILITY_MODE, 'GLOBAL')
+                         FROM QUESTION source_value
+                        WHERE source_value.QUESTION_ID = :sourceQuestionId
+                   ),
+                   UPDATED_BY = :actor,
+                   UPDATED_AT = :now
+             WHERE QUESTION_ID = :targetQuestionId
+            """, Map.of(
+                "sourceQuestionId", source.getId(),
+                "targetQuestionId", target.getId(),
+                "actor", actor,
+                "now", now));
+        jdbc.update("""
+            INSERT INTO QUESTION_ORGANIZATION_AVAILABILITY (
+                QUESTION_ID, ORGANIZATION_ID, STATUS, ENABLED_AT, ENABLED_BY,
+                DISABLED_AT, DISABLED_BY, CREATED_AT, UPDATED_AT, VERSION_NO
+            )
+            SELECT :targetQuestionId, source_value.ORGANIZATION_ID, 'ACTIVE', :now, :actor,
+                   NULL, NULL, :now, :now, 0
+              FROM QUESTION_ORGANIZATION_AVAILABILITY source_value
+             WHERE source_value.QUESTION_ID = :sourceQuestionId
+               AND source_value.STATUS = 'ACTIVE'
+            """, Map.of(
+                "sourceQuestionId", source.getId(),
+                "targetQuestionId", target.getId(),
+                "actor", actor,
+                "now", now));
+    }
+
+    private void auditQuestion(Long actor, String event, QuestionJpaEntity entity, Map<String, Object> extra) {
+        HashMap<String, Object> data = new HashMap<>(extra);
+        data.put("questionPublicId", entity.getPublicId());
+        data.put("scope", entity.getContentScope().name());
+        if (entity.getOwnerOrganizationId() != null) {
+            data.put("organizationId", entity.getOwnerOrganizationId());
+        }
+        audit.record(actor, event, "QUESTION_BANK", "Se ejecutó una operación administrativa sobre una pregunta.",
+                null, null, data, clock.instant());
     }
 
     private void addOptions(QuestionJpaEntity entity, List<QuestionOptionCommand> commands) {
@@ -368,14 +424,20 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     }
 
     private void assertReadable(QuestionJpaEntity entity) {
+        var tenant = tenantContextResolver.resolve(request);
+        if (tenant.globalAdministrator()) return;
         accessPolicy.assertReadable(GlobalContentType.QUESTION, entity.getId(), entity.getContentScope(),
-                entity.getOwnerOrganizationId(), tenantContextResolver.resolve(request),
+                entity.getOwnerOrganizationId(), tenant,
                 "QUESTION_ACCESS_FORBIDDEN", "No tienes permisos para acceder a esta pregunta.");
     }
 
     private void assertEditable(QuestionJpaEntity entity) {
-        accessPolicy.assertEditable(GlobalContentType.QUESTION, entity.getId(), entity.getContentScope(),
-                entity.getOwnerOrganizationId(), entity.getSourceGlobalId(), tenantContextResolver.resolve(request));
+        var tenant = tenantContextResolver.resolve(request);
+        operationContextPolicy.assertCanManage(tenant, entity.getContentScope(), entity.getOwnerOrganizationId());
+        if (!tenant.globalAdministrator() && entity.getSourceGlobalId() != null) {
+            accessPolicy.assertEditable(GlobalContentType.QUESTION, entity.getId(), entity.getContentScope(),
+                    entity.getOwnerOrganizationId(), entity.getSourceGlobalId(), tenant);
+        }
     }
 
     private void markCustomized(QuestionJpaEntity entity) {

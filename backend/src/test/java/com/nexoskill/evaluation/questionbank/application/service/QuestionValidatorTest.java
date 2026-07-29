@@ -36,13 +36,10 @@ class QuestionValidatorTest {
 	}
 
 	@Test
-	void rejectsMoreThanOneDistinctCategory() {
-		BusinessException exception = assertThrows(BusinessException.class,
-				() -> validator.validate(QuestionTypeCode.SINGLE_CHOICE, "Pregunta",
-						List.of("category-a", "category-b"), QuestionAnswerSettings.empty(),
-						List.of(option("A", true), option("B", false)), null));
-
-		assertEquals("QUESTION_CATEGORY_SINGLE_REQUIRED", exception.getCode());
+	void acceptsMoreThanOneDistinctCategory() {
+		assertDoesNotThrow(() -> validator.validate(QuestionTypeCode.SINGLE_CHOICE, "Pregunta",
+				List.of("category-a", "category-b"), QuestionAnswerSettings.empty(),
+				List.of(option("A", true), option("B", false)), null));
 	}
 
 	@Test

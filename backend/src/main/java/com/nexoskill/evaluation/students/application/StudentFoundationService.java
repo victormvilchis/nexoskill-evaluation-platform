@@ -137,8 +137,14 @@ public class StudentFoundationService {
     }
 
     @Transactional(readOnly = true)
-    public CatalogBundle catalogs() {
-        return new CatalogBundle(
+    public CatalogBundle catalogs(TenantContext tenant, String organizationPublicId) {
+        OrganizationJpaEntity organization = resolveCatalogOrganization(tenant, organizationPublicId);
+        OrganizationRef organizationRef = new OrganizationRef(organization.getPublicId(), organization.getCode(),
+                organization.getName(), organization.isAppliesCertifications());
+        if (!organization.isAppliesCertifications()) {
+            return new CatalogBundle(organizationRef, false, List.of(), List.of(), List.of());
+        }
+        return new CatalogBundle(organizationRef, true,
                 catalog("CERTIFICATION_PROFILE_CATALOG", "PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME", "SORT_ORDER"),
                 catalog("TECHNOLOGICAL_PROFILE_CATALOG", "PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME", "DISPLAY_ORDER"),
                 catalog("QUESTION_TECHNOLOGY", "PUBLIC_ID", "TECHNOLOGY_CODE", "TECHNOLOGY_NAME", "DISPLAY_ORDER"));
@@ -158,6 +164,36 @@ public class StudentFoundationService {
                 rs.getString("ORGANIZATION_CODE"), true));
         if (rows.isEmpty()) throw new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe.");
         return rows.getFirst();
+    }
+
+    private OrganizationJpaEntity resolveCatalogOrganization(TenantContext tenant, String organizationPublicId) {
+        requireTenant(tenant);
+        OrganizationJpaEntity organization;
+        if (tenant.globalAdministrator()) {
+            if (organizationPublicId != null && !organizationPublicId.isBlank()) {
+                organization = organizationRepository.findByPublicId(organizationPublicId.trim())
+                        .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND",
+                                "La organización no existe."));
+            } else if (!tenant.globalScope() && tenant.hasOrganization()) {
+                organization = organizationRepository.findById(tenant.organizationId())
+                        .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND",
+                                "La organización no existe."));
+            } else {
+                throw new BusinessException("STUDENT_ORGANIZATION_REQUIRED",
+                        "Selecciona la organización del estudiante antes de consultar sus catálogos.");
+            }
+        } else {
+            if (organizationPublicId != null && !organizationPublicId.isBlank()
+                    && !organizationPublicId.trim().equals(tenant.organizationPublicId())) {
+                throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
+                        "No tienes permisos para consultar catálogos de otra organización.");
+            }
+            organization = organizationRepository.findById(tenant.organizationId())
+                    .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND",
+                            "La organización no existe."));
+        }
+        validateOperationalOrganization(organization.getId());
+        return organization;
     }
 
     private TenantContext resolveCreateTenant(TenantContext tenant, String organizationPublicId) {
@@ -190,12 +226,23 @@ public class StudentFoundationService {
     private void updateFoundation(String studentPublicId, OrganizationJpaEntity organization,
             String professionalProfilePublicId, String technologicalProfilePublicId, String technologyPublicId,
             LocalDate certificationEnrollmentDate, Long actorId) {
-        Long professionalProfileId = resolveCatalogId("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID",
-                professionalProfilePublicId);
-        Long technologicalProfileId = resolveCatalogId("TECHNOLOGICAL_PROFILE_CATALOG", "TECHNOLOGICAL_PROFILE_ID",
-                technologicalProfilePublicId);
-        Long technologyId = resolveCatalogId("QUESTION_TECHNOLOGY", "TECHNOLOGY_ID", technologyPublicId);
         boolean certificationsEnabled = organization.isAppliesCertifications();
+        if (!certificationsEnabled && hasCertificationData(professionalProfilePublicId,
+                technologicalProfilePublicId, technologyPublicId, certificationEnrollmentDate)) {
+            throw new BusinessException("STUDENT_CERTIFICATIONS_NOT_ENABLED",
+                    "La organización seleccionada no tiene habilitada la gestión de certificaciones.");
+        }
+        Long professionalProfileId = certificationsEnabled
+                ? resolveCatalogId("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID",
+                        professionalProfilePublicId)
+                : null;
+        Long technologicalProfileId = certificationsEnabled
+                ? resolveCatalogId("TECHNOLOGICAL_PROFILE_CATALOG", "TECHNOLOGICAL_PROFILE_ID",
+                        technologicalProfilePublicId)
+                : null;
+        Long technologyId = certificationsEnabled
+                ? resolveCatalogId("QUESTION_TECHNOLOGY", "TECHNOLOGY_ID", technologyPublicId)
+                : null;
         jdbc.update("""
             UPDATE STUDENT
                SET PROFESSIONAL_PROFILE_ID = :professionalProfileId,
@@ -214,6 +261,14 @@ public class StudentFoundationService {
                 .addValue("enrollmentDate", certificationsEnabled ? certificationEnrollmentDate : null)
                 .addValue("actorId", actorId)
                 .addValue("studentPublicId", studentPublicId));
+    }
+
+    private boolean hasCertificationData(String professionalProfilePublicId,
+            String technologicalProfilePublicId, String technologyPublicId, LocalDate enrollmentDate) {
+        return (professionalProfilePublicId != null && !professionalProfilePublicId.isBlank())
+                || (technologicalProfilePublicId != null && !technologicalProfilePublicId.isBlank())
+                || (technologyPublicId != null && !technologyPublicId.isBlank())
+                || enrollmentDate != null;
     }
 
     private Long resolveCatalogId(String table, String idColumn, String publicId) {
@@ -368,7 +423,8 @@ public class StudentFoundationService {
             Instant expiresAt, String professionalProfilePublicId, String technologicalProfilePublicId,
             String technologyPublicId, LocalDate certificationEnrollmentDate, Long version) {}
     public record CatalogRef(String publicId, String code, String name) {}
-    public record CatalogBundle(List<CatalogRef> profiles, List<CatalogRef> technologicalProfiles,
+    public record CatalogBundle(OrganizationRef organization, boolean appliesCertifications,
+            List<CatalogRef> profiles, List<CatalogRef> technologicalProfiles,
             List<CatalogRef> technologies) {}
     public record OrganizationRef(String publicId, String code, String name, boolean appliesCertifications) {}
     public record StudentView(String publicId, String studentCode, String email, String firstName, String lastName,

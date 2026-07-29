@@ -79,8 +79,9 @@ public class AdminStudentController {
 
     @GetMapping("/catalogs")
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
-    public StudentFoundationService.CatalogBundle catalogs() {
-        return requireFoundation().catalogs();
+    public StudentFoundationService.CatalogBundle catalogs(
+            @RequestParam(required = false) String organizationPublicId, HttpServletRequest request) {
+        return requireFoundation().catalogs(tenant(request), organizationPublicId);
     }
 
     @GetMapping("/{publicId}")

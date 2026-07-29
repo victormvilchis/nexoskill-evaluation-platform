@@ -10,6 +10,8 @@ public interface QuestionCatalogPort {
 
 	List<QuestionCategorySummary> categories(TenantContext tenant, CatalogStatus status);
 
+	List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId);
+
 	QuestionCategorySummary get(String publicId, TenantContext tenant);
 
 	QuestionCategorySummary create(CategoryCommands.Create command);

@@ -28,6 +28,13 @@ export function getQuestionCatalogs(signal?: AbortSignal) {
   return apiRequest<QuestionCatalogs>('/admin/question-catalogs', { signal })
 }
 
+export function getQuestionCategoryOptions(questionPublicId?: string, signal?: AbortSignal) {
+  const query = new URLSearchParams()
+  if (questionPublicId) query.set('questionPublicId', questionPublicId)
+  const suffix = questionPublicId ? `?${query.toString()}` : ''
+  return apiRequest<QuestionCategory[]>(`/admin/question-catalogs/question-options${suffix}`, { signal })
+}
+
 export function getQuestionCategories(
   signal?: AbortSignal,
   status: CatalogStatus | 'ALL' = 'ACTIVE'

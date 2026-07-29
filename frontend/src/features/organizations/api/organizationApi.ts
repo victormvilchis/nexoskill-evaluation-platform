@@ -86,3 +86,15 @@ export function changeOrganizationStatus(publicId: string, status: OrganizationS
     method: 'POST'
   })
 }
+
+export interface TenantContextView {
+  globalAdministrator: boolean
+  globalScope: boolean
+  organizationId?: number
+  organizationPublicId?: string
+  organizationCode?: string
+}
+
+export function getTenantContext(signal?: AbortSignal) {
+  return apiRequest<TenantContextView>('/tenant-context', { signal })
+}

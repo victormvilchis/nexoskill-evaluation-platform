@@ -56,7 +56,7 @@ export function AdminQuestionDetailPage() {
       <section className={`detail-card question-preview question-preview-v2 ${deleted ? 'deleted-detail' : ''}`}>
         <div className="question-card-top">
           <span className={`status-badge status-${question.status.toLowerCase()}`}>
-            {question.status === 'ACTIVE' ? 'Activa' : question.status === 'ARCHIVED' ? 'Archivada' : 'Eliminada'}
+            {question.status === 'ACTIVE' ? 'Activa' : question.status === 'ARCHIVED' ? 'Inactiva' : 'Eliminada'}
           </span>
           <span>{question.typeName}</span>
         </div>
@@ -80,7 +80,6 @@ export function AdminQuestionDetailPage() {
           <div><span>Organización propietaria</span><strong>{question.ownership.organizationName ?? 'Sin propietario'}</strong></div>
           <div><span>Tecnología</span><strong>{question.technology?.name ?? 'Sin tecnología'}</strong></div>
           <div><span>Dificultad</span><strong>{question.difficultyName ?? 'Sin dificultad'}</strong></div>
-          <div><span>Nivel</span><strong>{question.levelCode ?? 'Sin nivel'}</strong></div>
           <div><span>Usuario creador</span><strong>{question.ownership.creatorName ?? 'Sin registro'}</strong></div>
           {question.ownership.clonedToGlobal && (
             <div className="question-governance-wide"><span>Origen organizacional</span><strong>{question.ownership.sourceOrganizationName ?? 'Sin registro'} · Versión {question.ownership.sourceQuestionVersion ?? '—'}</strong></div>

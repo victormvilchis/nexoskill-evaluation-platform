@@ -16,6 +16,11 @@ public interface SpringDataQuestionCategoryRepository extends JpaRepository<Ques
 
 	List<QuestionCategoryJpaEntity> findAllByPublicIdIn(Collection<String> ids);
 
+	List<QuestionCategoryJpaEntity> findAllByContentScopeOrderByNameAsc(ContentScope scope);
+
+	List<QuestionCategoryJpaEntity> findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
+			ContentScope scope, Long ownerOrganizationId);
+
 	@Query("""
 			select c from QuestionCategoryJpaEntity c
 			where (:status is null or c.status = :status)

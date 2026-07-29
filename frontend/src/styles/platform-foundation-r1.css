@@ -140,6 +140,17 @@
   font: inherit;
 }
 
+
+.organization-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.organization-list-heading small {
+  color: #66788f;
+}
 .organization-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -243,4 +254,63 @@
 
 .selected-organization-chips button {
   cursor: pointer;
+}
+
+/* Clasificación de Preguntas: Tipo y Dificultad comparten exactamente el mismo control. */
+.question-editor-v2-shell .question-governance-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.question-editor-v2-shell .question-governance-grid > .question-classification-select {
+  display: grid;
+  grid-template-rows: 18px 44px 22px;
+  align-content: start;
+  align-self: start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.question-editor-v2-shell .question-classification-select > label {
+  display: flex;
+  align-items: flex-end;
+  min-height: 18px;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.question-editor-v2-shell .question-classification-select > select {
+  box-sizing: border-box;
+  display: block;
+  align-self: start;
+  width: 100%;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 2.5rem 0 .75rem !important;
+  border: 1px solid #cbd6e4;
+  border-radius: 9px;
+  background-color: #fff;
+  color: #18243a;
+  font: inherit;
+  line-height: 1.2;
+}
+
+.question-editor-v2-shell .question-classification-select > select:focus {
+  border-color: #7ba7e5;
+  box-shadow: 0 0 0 3px rgba(22, 93, 202, .1);
+}
+
+.question-editor-v2-shell .question-classification-select > small {
+  display: block;
+  min-height: 22px;
+  margin: 0 !important;
+  line-height: 1.35;
+}
+
+@media (max-width: 760px) {
+  .question-editor-v2-shell .question-governance-grid {
+    grid-template-columns: 1fr;
+  }
 }

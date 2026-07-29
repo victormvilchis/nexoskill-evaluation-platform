@@ -40,6 +40,8 @@ export interface StudentSession {
   createdAt: string; lastActivityAt: string | null; expiresAt: string; revokedAt: string | null; revocationReason: string | null
 }
 export interface StudentCatalogs {
+  organization: StudentOrganizationRef
+  appliesCertifications: boolean
   profiles: StudentCatalogRef[]
   technologicalProfiles: StudentCatalogRef[]
   technologies: StudentCatalogRef[]

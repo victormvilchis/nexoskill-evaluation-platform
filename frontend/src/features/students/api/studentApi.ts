@@ -41,7 +41,12 @@ export function searchStudents(params: {
     totalPages: Number.isFinite(response.totalPages) ? Math.max(response.totalPages, 0) : 0
   }))
 }
-export function getStudentCatalogs(signal?: AbortSignal) { return apiRequest<StudentCatalogs>('/admin/students/catalogs', { signal }) }
+export function getStudentCatalogs(organizationPublicId?: string, signal?: AbortSignal) {
+  const query = new URLSearchParams()
+  if (organizationPublicId) query.set('organizationPublicId', organizationPublicId)
+  const suffix = organizationPublicId ? `?${query.toString()}` : ''
+  return apiRequest<StudentCatalogs>(`/admin/students/catalogs${suffix}`, { signal })
+}
 export function getStudent(publicId: string) { return apiRequest<StudentDetail>(`/admin/students/${publicId}`) }
 export function createStudent(payload: CreateStudentPayload) { return apiRequest<StudentDetail>('/admin/students', { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateStudent(publicId: string, payload: UpdateStudentPayload) { return apiRequest<StudentDetail>(`/admin/students/${publicId}`, { method: 'PUT', body: JSON.stringify(payload) }) }

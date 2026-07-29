@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { searchOrganizations } from '../../organizations/api/organizationApi'
+import { useEffect, useState } from 'react'
+import { getTenantContext, searchOrganizations } from '../../organizations/api/organizationApi'
 import type { OrganizationSummary } from '../../organizations/types/organizations'
 import type { QuestionDetail, QuestionPayload } from '../../../shared/types/questions'
 import { ApiRequestError } from '../../../shared/api/apiClient'
-import { useDebouncedValue } from '../../../shared/hooks/useDebouncedValue'
 import { QuestionEditor } from './QuestionEditor'
 import {
   getQuestionAvailability,
@@ -37,13 +36,33 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
   const [mode, setMode] = useState<QuestionAvailabilityMode>('GLOBAL')
   const [selected, setSelected] = useState<string[]>([])
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
-  const [query, setQuery] = useState('')
-  const debouncedQuery = useDebouncedValue(query, 300)
   const [loadingOrganizations, setLoadingOrganizations] = useState(false)
   const [error, setError] = useState<string>()
+  const [globalScope, setGlobalScope] = useState(Boolean(initial?.ownership.scope === 'GLOBAL'))
 
   useEffect(() => {
-    if (!globalAdministrator || !initial?.publicId) return
+    if (!globalAdministrator) {
+      setGlobalScope(false)
+      return
+    }
+    if (initial) {
+      setGlobalScope(initial.ownership.scope === 'GLOBAL')
+      return
+    }
+    const controller = new AbortController()
+    getTenantContext(controller.signal)
+      .then((context) => setGlobalScope(context.globalScope))
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGlobalScope(false)
+          setError('No fue posible determinar el contexto activo para la disponibilidad de la pregunta.')
+        }
+      })
+    return () => controller.abort()
+  }, [globalAdministrator, initial])
+
+  useEffect(() => {
+    if (!globalAdministrator || !globalScope || !initial?.publicId) return
     const controller = new AbortController()
     getQuestionAvailability(initial.publicId, controller.signal)
       .then((availability) => {
@@ -63,27 +82,26 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
       })
       .catch(() => { if (!controller.signal.aborted) setError('No fue posible consultar la disponibilidad actual.') })
     return () => controller.abort()
-  }, [globalAdministrator, initial?.publicId])
+  }, [globalAdministrator, globalScope, initial?.publicId])
 
   useEffect(() => {
-    if (!globalAdministrator || mode !== 'SELECTED_ORGANIZATIONS') return
+    if (!globalAdministrator || !globalScope) return
     const controller = new AbortController()
     setLoadingOrganizations(true)
-    searchOrganizations({ query: debouncedQuery, status: 'ACTIVE', page: 0, size: 25, sort: 'name', direction: 'ASC', signal: controller.signal })
+    searchOrganizations({
+      status: 'ACTIVE',
+      page: 0,
+      size: 100,
+      sort: 'name',
+      direction: 'ASC',
+      signal: controller.signal
+    })
       .then((page) => setOrganizations((current) => mergeOrganizations(current,
         page.content.filter((item) => item.organizationType === 'CUSTOMER'))))
       .catch(() => { if (!controller.signal.aborted) setError('No fue posible consultar las organizaciones.') })
       .finally(() => { if (!controller.signal.aborted) setLoadingOrganizations(false) })
     return () => controller.abort()
-  }, [debouncedQuery, globalAdministrator, mode])
-
-  const visibleOrganizations = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase('es-MX')
-    if (!normalized) return organizations
-    return organizations.filter((organization) =>
-      organization.name.toLocaleLowerCase('es-MX').includes(normalized)
-      || organization.code.toLocaleLowerCase('es-MX').includes(normalized))
-  }, [organizations, query])
+  }, [globalAdministrator, globalScope])
 
   function toggle(publicId: string) {
     setSelected((current) => current.includes(publicId)
@@ -93,7 +111,7 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
 
   async function submit(payload: QuestionPayload) {
     setError(undefined)
-    if (globalAdministrator && mode === 'SELECTED_ORGANIZATIONS' && selected.length === 0) {
+    if (globalAdministrator && globalScope && mode === 'SELECTED_ORGANIZATIONS' && selected.length === 0) {
       setError('Selecciona al menos una organización para esta pregunta.')
       throw new ApiRequestError('Selecciona al menos una organización para esta pregunta.', 'QUESTION_ORGANIZATIONS_REQUIRED', 400)
     }
@@ -103,7 +121,7 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
       technologyPublicId: undefined,
       levelCode: undefined
     }
-    await onSubmit(cleanPayload, globalAdministrator ? {
+    await onSubmit(cleanPayload, globalAdministrator && globalScope ? {
       mode,
       organizations: organizations
         .filter((organization) => selected.includes(organization.publicId))
@@ -113,7 +131,7 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
 
   return (
     <div className="question-editor-v2-shell">
-      {globalAdministrator && (
+      {globalAdministrator && globalScope && (
         <section className="editor-card question-availability-card">
           <div className="section-heading">
             <div><p className="eyebrow">Disponibilidad</p><h2>Organizaciones con acceso</h2></div>
@@ -131,8 +149,10 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
           </div>
           {mode === 'SELECTED_ORGANIZATIONS' && (
             <div className="organization-multiselect">
-              <label htmlFor="organization-search">Buscar organizaciones</label>
-              <input id="organization-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre o código" />
+              <div className="organization-list-heading">
+                <strong>Organizaciones disponibles</strong>
+                <small>{loadingOrganizations ? 'Cargando…' : `${organizations.length} disponibles`}</small>
+              </div>
               <div className="selected-organization-chips" aria-label="Organizaciones seleccionadas">
                 {organizations.filter((organization) => selected.includes(organization.publicId)).slice(0, 4).map((organization) => (
                   <button key={organization.publicId} type="button" onClick={() => toggle(organization.publicId)}>#{organization.code} ×</button>
@@ -140,17 +160,22 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
                 {selected.length > 4 && <span>+{selected.length - 4}</span>}
               </div>
               <div className="organization-options" role="group" aria-label="Organizaciones disponibles" aria-busy={loadingOrganizations}>
-                {visibleOrganizations.map((organization) => (
+                {organizations.map((organization) => (
                   <label key={organization.publicId}>
                     <input type="checkbox" checked={selected.includes(organization.publicId)} onChange={() => toggle(organization.publicId)} />
                     <span><strong>{organization.name}</strong><small>{organization.code}</small></span>
                   </label>
                 ))}
-                {!loadingOrganizations && visibleOrganizations.length === 0 && <p className="muted">No se encontraron organizaciones activas.</p>}
+                {!loadingOrganizations && organizations.length === 0 && <p className="muted">No existen organizaciones comerciales activas.</p>}
               </div>
             </div>
           )}
           {error && <p className="error-message" role="alert">{error}</p>}
+        </section>
+      )}
+      {globalAdministrator && !globalScope && error && (
+        <section className="inline-error-panel" role="alert">
+          <div><strong>No fue posible preparar la disponibilidad</strong><p>{error}</p></div>
         </section>
       )}
       <QuestionEditor initial={initial} onSubmit={submit} submitLabel={submitLabel} />

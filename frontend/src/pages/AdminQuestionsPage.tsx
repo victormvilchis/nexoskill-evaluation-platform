@@ -36,7 +36,7 @@ import type {
 
 const statusLabel: Record<QuestionStatus, string> = {
   ACTIVE: 'Activa',
-  ARCHIVED: 'Archivada',
+  ARCHIVED: 'Inactiva',
   DELETED: 'Eliminada'
 }
 
@@ -182,6 +182,8 @@ export function AdminQuestionsPage() {
 
   const questions = data?.content ?? []
   const hasFilters = Boolean(query || organizationPublicId || categoryPublicId || status !== 'ACTIVE' || difficultyCode || creationYear)
+  const canManageQuestion = useCallback((question: QuestionSummary) =>
+    globalAdministrator || question.ownership.scope === 'ORGANIZATION', [globalAdministrator])
 
   function clearFilters() {
     const next = new URLSearchParams({ status: 'ACTIVE' })
@@ -267,7 +269,7 @@ export function AdminQuestionsPage() {
         toast.success('Pregunta restaurada como archivada')
       } else {
         await changeQuestionStatus(question.publicId, type === 'ACTIVATE' ? 'ACTIVE' : 'ARCHIVED', question.entityVersion)
-        toast.success(type === 'ACTIVATE' ? 'Pregunta reactivada' : 'Pregunta archivada')
+        toast.success(type === 'ACTIVATE' ? 'Pregunta reactivada' : 'Pregunta inactivada')
       }
       setPendingAction(null)
       reload()
@@ -276,7 +278,13 @@ export function AdminQuestionsPage() {
       if (requestError instanceof ApiRequestError && requestError.status === 409) {
         toast.warning('La pregunta cambió mientras trabajabas', message)
         reload()
-      } else toast.error('Operación no completada', message)
+      } else {
+        const title = type === 'DELETE' ? 'No fue posible eliminar la pregunta'
+          : type === 'RESTORE' ? 'No fue posible restaurar la pregunta'
+            : type === 'ARCHIVE' ? 'No fue posible inactivar la pregunta'
+              : 'No fue posible reactivar la pregunta'
+        toast.error(title, message)
+      }
     } finally {
       setBusyId(undefined)
     }
@@ -284,11 +292,11 @@ export function AdminQuestionsPage() {
 
   const dialogTitle = pendingAction?.type === 'DELETE' ? 'Eliminar pregunta'
     : pendingAction?.type === 'RESTORE' ? 'Restaurar pregunta'
-      : pendingAction?.type === 'ARCHIVE' ? 'Archivar pregunta' : 'Reactivar pregunta'
+      : pendingAction?.type === 'ARCHIVE' ? 'Inactivar pregunta' : 'Reactivar pregunta'
   const dialogDescription = pendingAction?.type === 'DELETE'
-    ? 'La pregunta dejará de aparecer en el banco normal. El registro y su historial permanecerán almacenados.'
+    ? 'La pregunta dejará de aparecer en los listados operativos. Sus relaciones, intentos, resultados e historial permanecerán intactos.'
     : pendingAction?.type === 'RESTORE' ? 'La pregunta volverá como archivada.'
-      : pendingAction?.type === 'ARCHIVE' ? 'La pregunta dejará de estar disponible para contenido nuevo.'
+      : pendingAction?.type === 'ARCHIVE' ? 'La pregunta dejará de estar disponible para contenido nuevo. Los usos existentes permanecerán intactos.'
         : 'La pregunta volverá a estar disponible.'
 
   return (
@@ -308,7 +316,7 @@ export function AdminQuestionsPage() {
         <ResourceSearchField value={query} onChange={(value) => updateFilter('q', value)} placeholder="Buscar por texto de la pregunta" />
         {globalAdministrator && <ResourceSelectField label="Organización" value={organizationPublicId} onChange={(value) => updateFilter('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((organization) => <option value={organization.publicId} key={organization.publicId}>{organization.name}</option>)}</ResourceSelectField>}
         <ResourceSelectField label="Categoría" value={categoryPublicId} onChange={(value) => updateFilter('category', value)}><option value="">Todas las categorías</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}{globalAdministrator && category.organizationName ? ` · ${category.organizationName}` : ''}</option>)}</ResourceSelectField>
-        <ResourceSelectField label="Estado" value={status} onChange={(value) => updateFilter('status', value || 'ALL')}><option value="ACTIVE">Activas</option><option value="ARCHIVED">Archivadas</option><option value="DELETED">Eliminadas</option><option value="">Todas</option></ResourceSelectField>
+        <ResourceSelectField label="Estado" value={status} onChange={(value) => updateFilter('status', value || 'ALL')}><option value="ACTIVE">Activas</option><option value="ARCHIVED">Inactivas</option><option value="DELETED">Eliminadas</option><option value="">Todas</option></ResourceSelectField>
         <ResourceSelectField label="Dificultad" value={difficultyCode} onChange={(value) => updateFilter('difficulty', value)}><option value="">Todas las dificultades</option>{catalogs?.difficulties.map((difficulty) => <option value={difficulty.code} key={difficulty.code}>{difficulty.name}</option>)}</ResourceSelectField>
         <ResourceSelectField label="Año de creación" value={creationYear} onChange={(value) => updateFilter('year', value)}><option value="">Todos los años</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</ResourceSelectField>
       </FilterToolbar>
@@ -344,13 +352,13 @@ export function AdminQuestionsPage() {
                   <td>{formatDate(question.updatedAt ?? question.createdAt)}</td>
                   <td><TableActions>
                     <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
-                    {permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
-                    {permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />}
+                    {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
+                    {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />}
                     {globalAdministrator && permissions.has('GLOBAL_CONTENT_PROMOTE') && question.ownership.scope === 'ORGANIZATION' && question.status !== 'DELETED' && <TableActionButton label="Clonar a GLOBAL" icon="copy" tone="primary" onClick={() => void openClone(question)} />}
-                    {question.status === 'ACTIVE' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Archivar" icon="archive" onClick={() => setPendingAction({ type: 'ARCHIVE', question })} />}
-                    {question.status === 'ARCHIVED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Reactivar" icon="restore" onClick={() => setPendingAction({ type: 'ACTIVATE', question })} />}
-                    {question.status !== 'DELETED' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Eliminar" icon="trash" tone="danger" onClick={() => setPendingAction({ type: 'DELETE', question })} />}
-                    {question.status === 'DELETED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Restaurar" icon="restore" onClick={() => setPendingAction({ type: 'RESTORE', question })} />}
+                    {canManageQuestion(question) && question.status === 'ACTIVE' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Inactivar" icon="archive" onClick={() => setPendingAction({ type: 'ARCHIVE', question })} />}
+                    {canManageQuestion(question) && question.status === 'ARCHIVED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Reactivar" icon="restore" onClick={() => setPendingAction({ type: 'ACTIVATE', question })} />}
+                    {canManageQuestion(question) && question.status !== 'DELETED' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Eliminar" icon="trash" tone="danger" onClick={() => setPendingAction({ type: 'DELETE', question })} />}
+                    {canManageQuestion(question) && question.status === 'DELETED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Restaurar" icon="restore" onClick={() => setPendingAction({ type: 'RESTORE', question })} />}
                   </TableActions></td>
                 </tr>
               ))}
@@ -360,7 +368,7 @@ export function AdminQuestionsPage() {
         <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </section>
 
-      <ConfirmDialog open={pendingAction !== null} title={dialogTitle} description={dialogDescription} confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Archivar' : 'Reactivar'} tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'} onCancel={() => setPendingAction(null)} onConfirm={() => void executePendingAction()} />
+      <ConfirmDialog open={pendingAction !== null} title={dialogTitle} description={dialogDescription} confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Inactivar' : 'Reactivar'} tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'} onCancel={() => setPendingAction(null)} onConfirm={() => void executePendingAction()} />
 
       {cloneState && <div className="ns-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !cloneState.busy) setCloneState(undefined) }}><section className="ns-modal-card question-clone-dialog" role="dialog" aria-modal="true" aria-labelledby="clone-title"><header><div><p className="eyebrow">Banco de Preguntas Global</p><h2 id="clone-title">Clonar a GLOBAL</h2></div><button className="icon-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}><Icon name="close" /></button></header>{cloneState.loading && <p className="muted">Analizando pregunta, dependencias y posibles duplicados…</p>}{cloneState.error && <div className="inline-error-panel"><div className="inline-error-icon"><Icon name="error" /></div><div><strong>No fue posible preparar la clonación</strong><p>{cloneState.error}</p></div></div>}{cloneState.preview && <><div className="clone-preview-summary"><div><span>Organización de origen</span><strong>{cloneState.question.ownership.organizationName}</strong></div><div><span>Versión</span><strong>{cloneState.question.entityVersion}</strong></div><div><span>Dependencias</span><strong>{cloneState.preview.dependencies.length}</strong></div><div><span>Posibles duplicados</span><strong>{cloneState.preview.possibleDuplicates.length}</strong></div></div><p className="clone-source-statement">{cloneState.question.statement}</p>{cloneState.preview.warnings.length > 0 && <ul className="clone-warning-list">{cloneState.preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}<label className="org-check-row"><input type="checkbox" checked={cloneState.includeDependencies} onChange={(event) => setCloneState((current) => current ? { ...current, includeDependencies: event.target.checked } : current)} />Clonar también las dependencias necesarias</label><label className="ns-field"><span>Notas de clonación</span><textarea rows={3} maxLength={1000} value={cloneState.notes} onChange={(event) => setCloneState((current) => current ? { ...current, notes: event.target.value } : current)} /></label><p className="muted">Se creará un registro GLOBAL nuevo. La pregunta original permanecerá en su organización sin cambios.</p></>}<footer><button className="secondary-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}>Cancelar</button><button className="primary-button" type="button" disabled={cloneState.busy || cloneState.loading || !cloneState.preview?.promotable} onClick={() => void executeClone()}>{cloneState.busy ? 'Clonando…' : 'Confirmar clonación'}</button></footer></section></div>}
     </main>

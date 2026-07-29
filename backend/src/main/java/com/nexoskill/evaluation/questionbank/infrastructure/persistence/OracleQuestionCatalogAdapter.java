@@ -14,8 +14,11 @@ import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -56,9 +59,6 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
 
     @Override
     public QuestionCatalogs activeCatalogs(TenantContext tenant) {
-        List<QuestionCategoryJpaEntity> visibleCategories = tenant.globalAdministrator() && tenant.globalScope()
-                ? categories.findAllByStatusOrderByNameAsc(CatalogStatus.ACTIVE)
-                : categories.findVisible(tenant.organizationId(), CatalogStatus.ACTIVE);
         return new QuestionCatalogs(
                 types.findAllByStatusOrderByNameAsc(CatalogStatus.ACTIVE).stream()
                         .map(type -> new CatalogOption(type.getCode(), type.getName(), type.getDescription())).toList(),
@@ -68,10 +68,7 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
                                 com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus.ACTIVE)
                         .stream().map(value -> new QuestionTechnologySummary(value.getPublicId(), value.getCode(),
                                 value.getName(), value.getStatus().name(), value.getDisplayOrder())).toList(),
-                visibleCategories.stream()
-                        .filter(category -> accessPolicy.canRead(GlobalContentType.CATEGORY, category.getId(),
-                                category.getContentScope(), category.getOwnerOrganizationId(), tenant))
-                        .map(this::summary).toList());
+                questionOptions(tenant, null));
     }
 
     @Override
@@ -83,6 +80,50 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
                 .filter(category -> accessPolicy.canRead(GlobalContentType.CATEGORY, category.getId(),
                         category.getContentScope(), category.getOwnerOrganizationId(), tenant))
                 .map(this::summary).toList();
+    }
+
+    @Override
+    public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId) {
+        ContentScope targetScope;
+        Long targetOrganizationId;
+        Set<Long> retainedCategoryIds = Set.of();
+
+        if (questionPublicId == null || questionPublicId.isBlank()) {
+            GlobalContentAccessPolicy.Ownership ownership = accessPolicy.ownershipForCreation(tenant);
+            targetScope = ownership.scope();
+            targetOrganizationId = ownership.organizationId();
+        } else {
+            String normalizedId = PublicIdNormalizer.requiredUuid(questionPublicId, "QUESTION_ID_INVALID",
+                    "La pregunta indicada no es válida.");
+            QuestionJpaEntity question = questions.findByPublicId(normalizedId)
+                    .orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
+            if (!tenant.globalAdministrator()) {
+                accessPolicy.assertReadable(GlobalContentType.QUESTION, question.getId(), question.getContentScope(),
+                        question.getOwnerOrganizationId(), tenant, "QUESTION_ACCESS_FORBIDDEN",
+                        "No tienes permisos para acceder a esta pregunta.");
+            }
+            targetScope = question.getContentScope();
+            targetOrganizationId = question.getOwnerOrganizationId();
+            retainedCategoryIds = new HashSet<>(question.getCategories().stream()
+                    .map(QuestionCategoryJpaEntity::getId).toList());
+        }
+
+        if (targetOrganizationId == null) {
+            throw error("QUESTION_CATEGORY_CONTEXT_NOT_RESOLVED",
+                    "No fue posible determinar las categorías disponibles para el contexto actual.");
+        }
+
+        List<QuestionCategoryJpaEntity> candidates = targetScope == ContentScope.GLOBAL
+                ? categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)
+                : categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
+                        ContentScope.ORGANIZATION, targetOrganizationId);
+        Set<Long> retained = retainedCategoryIds;
+        return candidates.stream()
+                .filter(category -> category.getStatus() == CatalogStatus.ACTIVE
+                        || (category.getStatus() == CatalogStatus.INACTIVE && retained.contains(category.getId())))
+                .sorted(Comparator.comparing(QuestionCategoryJpaEntity::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(this::summary)
+                .toList();
     }
 
     @Override
