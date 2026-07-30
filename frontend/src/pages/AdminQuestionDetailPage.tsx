@@ -76,7 +76,7 @@ export function AdminQuestionDetailPage() {
         )}
         <div className="question-governance-detail-grid">
 
-          <div><span>Alcance</span><strong>{question.ownership.scope}</strong></div>
+          <div><span>Alcance</span><strong>{question.ownership.scope === 'GLOBAL' ? 'Global' : 'Organizacional'}</strong></div>
           <div><span>Organización propietaria</span><strong>{question.ownership.organizationName ?? 'Sin propietario'}</strong></div>
           <div><span>Tecnología</span><strong>{question.technology?.name ?? 'Sin tecnología'}</strong></div>
           <div><span>Dificultad</span><strong>{question.difficultyName ?? 'Sin dificultad'}</strong></div>

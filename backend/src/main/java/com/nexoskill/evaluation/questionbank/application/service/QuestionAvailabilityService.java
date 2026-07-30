@@ -54,9 +54,9 @@ public class QuestionAvailabilityService {
     @Transactional
     public AvailabilityView update(String questionPublicId, UpdateCommand command, TenantContext tenant,
             Actor actor) {
-        if (tenant == null || !tenant.globalAdministrator() || !tenant.globalScope()) {
+        if (tenant == null || !tenant.globalAdministrator()) {
             throw new BusinessException("QUESTION_AVAILABILITY_FORBIDDEN",
-                    "La disponibilidad de una pregunta solo puede administrarse desde GLOBAL.");
+                    "La disponibilidad organizacional solo puede modificarse por un Administrador global sobre una pregunta global.");
         }
         QuestionRow question = findGlobalQuestion(questionPublicId);
         QuestionAvailabilityMode mode = command.mode() == null ? QuestionAvailabilityMode.GLOBAL : command.mode();
@@ -65,8 +65,8 @@ public class QuestionAvailabilityService {
             throw new BusinessException("QUESTION_ORGANIZATIONS_REQUIRED",
                     "Selecciona al menos una organización para esta pregunta.");
         }
-        List<OrganizationRow> organizations = mode == QuestionAvailabilityMode.GLOBAL
-                ? List.of() : resolveOrganizations(requested);
+        List<OrganizationRow> organizations = mode == QuestionAvailabilityMode.SELECTED_ORGANIZATIONS
+                ? resolveOrganizations(requested) : List.of();
         if (organizations.size() != requested.size()) {
             throw new BusinessException("QUESTION_ORGANIZATION_INVALID",
                     "Una o más organizaciones no existen, no están activas o no son comerciales.");

@@ -28,10 +28,17 @@ export function getQuestionCatalogs(signal?: AbortSignal) {
   return apiRequest<QuestionCatalogs>('/admin/question-catalogs', { signal })
 }
 
-export function getQuestionCategoryOptions(questionPublicId?: string, signal?: AbortSignal) {
+export function getQuestionCategoryOptions(
+  questionPublicId?: string,
+  targetScope?: ContentScope,
+  organizationPublicId?: string,
+  signal?: AbortSignal
+) {
   const query = new URLSearchParams()
   if (questionPublicId) query.set('questionPublicId', questionPublicId)
-  const suffix = questionPublicId ? `?${query.toString()}` : ''
+  if (!questionPublicId && targetScope) query.set('targetScope', targetScope)
+  if (!questionPublicId && organizationPublicId) query.set('organizationPublicId', organizationPublicId)
+  const suffix = query.size > 0 ? `?${query.toString()}` : ''
   return apiRequest<QuestionCategory[]>(`/admin/question-catalogs/question-options${suffix}`, { signal })
 }
 
@@ -194,6 +201,13 @@ export function cloneQuestionToGlobal(id: string, payload: { includeDependencies
   return apiRequest<CloneToGlobalResult>(`/admin/questions/${id}/clone-to-global`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  })
+}
+
+
+export function createQuestionOrganizationCopy(id: string) {
+  return apiRequest<QuestionDetail>(`/admin/questions/${id}/copy-to-organization`, {
+    method: 'POST'
   })
 }
 

@@ -1,6 +1,5 @@
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { createQuestion } from '../features/questions/api/questionApi'
-import { updateQuestionAvailability, type QuestionAvailability } from '../features/questions/api/questionAvailabilityApi'
 import { QuestionEditorV2 } from '../features/questions/components/QuestionEditorV2'
 import { BackButton } from '../shared/components/BackButton'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
@@ -10,14 +9,8 @@ export function CreateQuestionPage() {
   const completeSave = useSaveNavigation('/admin/questions')
   const { user } = useAuth()
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
-  async function save(payload: QuestionPayload, availability?: QuestionAvailability) {
-    const created = await createQuestion(payload)
-    if (globalAdministrator && availability) {
-      await updateQuestionAvailability(created.publicId, {
-        mode: availability.mode,
-        organizationPublicIds: availability.organizations.map((organization) => organization.publicId)
-      })
-    }
+  async function save(payload: QuestionPayload) {
+    await createQuestion(payload)
     completeSave({ title: 'Pregunta creada correctamente.' })
   }
   return (

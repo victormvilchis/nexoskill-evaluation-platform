@@ -34,8 +34,9 @@ public class CatalogService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId) {
-		return port.questionOptions(tenant, questionPublicId);
+	public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId,
+			String targetScope, String organizationPublicId) {
+		return port.questionOptions(tenant, questionPublicId, targetScope, organizationPublicId);
 	}
 
 	@Transactional(readOnly = true)

@@ -132,6 +132,17 @@ public class QuestionCategoryJpaEntity {
         }
     }
 
+    public void linkToGlobalSource(Long globalCategoryId, long globalVersion, Instant now) {
+        if (contentScope != ContentScope.ORGANIZATION || globalCategoryId == null) {
+            throw new IllegalStateException("La referencia global solo puede asignarse a una categoría organizacional.");
+        }
+        sourceGlobalId = globalCategoryId;
+        sourceGlobalVersion = globalVersion;
+        customized = 0;
+        syncStatus = SyncStatus.SYNCHRONIZED;
+        lastSynchronizedAt = now;
+    }
+
     public void markCustomized(Instant now) {
         if (sourceGlobalId != null) {
             customized = 1;

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.List;
+import com.nexoskill.evaluation.questionbank.domain.model.QuestionAvailabilityMode;
 
 public final class QuestionRequests {
     private QuestionRequests() {
@@ -41,14 +42,18 @@ public final class QuestionRequests {
             String promptMediaPublicId,
             @Size(max = 30000) String codeContent,
             @Valid AnswerSettings answerSettings,
-            List<@Valid Option> options) {
+            List<@Valid Option> options,
+            String contentScope,
+            String organizationPublicId,
+            QuestionAvailabilityMode availabilityMode,
+            List<String> availabilityOrganizationPublicIds) {
         public Create(String typeCode, String difficultyCode, String technologyPublicId,
                 String levelCode, List<String> categoryPublicIds, String statement,
                 String explanation, String promptMediaPublicId, String codeContent,
                 AnswerSettings answerSettings, List<Option> options) {
             this(typeCode, difficultyCode, technologyPublicId, levelCode,
                     categoryPublicIds, List.of(), statement, explanation,
-                    promptMediaPublicId, codeContent, answerSettings, options);
+                    promptMediaPublicId, codeContent, answerSettings, options, null, null, null, List.of());
         }
     }
 
@@ -66,7 +71,9 @@ public final class QuestionRequests {
             @Size(max = 30000) String codeContent,
             @Valid AnswerSettings answerSettings,
             List<@Valid Option> options,
-            @PositiveOrZero long expectedEntityVersion) {
+            @PositiveOrZero long expectedEntityVersion,
+            QuestionAvailabilityMode availabilityMode,
+            List<String> availabilityOrganizationPublicIds) {
         public Update(String typeCode, String difficultyCode, String technologyPublicId,
                 String levelCode, List<String> categoryPublicIds, String statement,
                 String explanation, String promptMediaPublicId, String codeContent,
@@ -75,7 +82,7 @@ public final class QuestionRequests {
             this(typeCode, difficultyCode, technologyPublicId, levelCode,
                     categoryPublicIds, List.of(), statement, explanation,
                     promptMediaPublicId, codeContent, answerSettings, options,
-                    expectedEntityVersion);
+                    expectedEntityVersion, null, List.of());
         }
     }
 

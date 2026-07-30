@@ -13,6 +13,7 @@ import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EditQuestionPage } from './pages/EditQuestionPage'
+import { QuestionManagementPage } from './pages/QuestionManagementPage'
 import { AdminFormsPage } from './pages/AdminFormsPage'
 import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
@@ -103,6 +104,9 @@ export default function App() {
           </Route>
           <Route element={<PermissionRoute permission="QUESTION_UPDATE" />}>
             <Route path="/admin/questions/:publicId/edit" element={<EditQuestionPage />} />
+          </Route>
+          <Route element={<PermissionRoute anyOf={['QUESTION_UPDATE', 'QUESTION_ARCHIVE']} />}>
+            <Route path="/admin/questions/:publicId/manage" element={<QuestionManagementPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission="COLLECTION_VIEW" />}>

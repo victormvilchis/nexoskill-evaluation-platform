@@ -382,4 +382,6 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
              WHERE qr.CATEGORY_ID = :id
             """, nativeQuery = true)
     long countAllByCategory(@Param("id") Long id);
+
+	boolean existsBySourceGlobalIdAndOwnerOrganizationIdAndStatusNot(Long sourceGlobalId, Long ownerOrganizationId, com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus status);
 }

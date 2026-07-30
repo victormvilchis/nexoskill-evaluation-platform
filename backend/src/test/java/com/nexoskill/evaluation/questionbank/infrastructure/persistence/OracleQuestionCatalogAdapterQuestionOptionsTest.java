@@ -10,6 +10,7 @@ import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionCreationTargetResolver;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -34,6 +35,7 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     @Mock private QuestionCategoryStatusHistoryRepository history;
     @Mock private OrganizationRepository organizations;
     @Mock private GlobalContentAccessPolicy accessPolicy;
+    @Mock private QuestionCreationTargetResolver creationTargetResolver;
     @Mock private ContentSynchronizationService synchronization;
     @Mock private QuestionCategoryJpaEntity category;
     @Mock private QuestionJpaEntity question;
@@ -43,7 +45,7 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     @BeforeEach
     void setUp() {
         adapter = new OracleQuestionCatalogAdapter(types, difficulties, technologies, categories, questions,
-                history, organizations, accessPolicy, synchronization,
+                history, organizations, accessPolicy, creationTargetResolver, synchronization,
                 Clock.fixed(Instant.parse("2026-07-29T12:00:00Z"), ZoneOffset.UTC));
         lenient().when(category.getId()).thenReturn(10L);
         lenient().when(category.getPublicId()).thenReturn("00000000-0000-0000-0000-000000000010");
@@ -61,11 +63,11 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     @Test
     void loadsAllActiveCategoriesForTheCreationOwner() {
         TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
-        when(accessPolicy.ownershipForCreation(tenant))
-                .thenReturn(new GlobalContentAccessPolicy.Ownership(ContentScope.GLOBAL, 1L));
+        when(creationTargetResolver.resolve(tenant, null, null))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.GLOBAL, 1L, "global"));
         when(categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)).thenReturn(List.of(category));
 
-        var result = adapter.questionOptions(tenant, null);
+        var result = adapter.questionOptions(tenant, null, null, null);
 
         assertEquals(List.of("Java"), result.stream().map(value -> value.name()).toList());
     }
@@ -85,7 +87,7 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
                 ContentScope.ORGANIZATION, 2L)).thenReturn(List.of(category));
         when(organizations.findById(2L)).thenReturn(Optional.empty());
 
-        var result = adapter.questionOptions(tenant, QUESTION_ID);
+        var result = adapter.questionOptions(tenant, QUESTION_ID, null, null);
 
         assertEquals(1, result.size());
         assertEquals(CatalogStatus.INACTIVE, result.getFirst().status());
@@ -93,12 +95,12 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     @Test
     void supportsLegacyGlobalCategoriesWithoutOwner() {
         TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
-        when(accessPolicy.ownershipForCreation(tenant))
-                .thenReturn(new GlobalContentAccessPolicy.Ownership(ContentScope.GLOBAL, 1L));
+        when(creationTargetResolver.resolve(tenant, null, null))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.GLOBAL, 1L, "global"));
         lenient().when(category.getOwnerOrganizationId()).thenReturn(null);
         when(categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)).thenReturn(List.of(category));
 
-        var result = adapter.questionOptions(tenant, null);
+        var result = adapter.questionOptions(tenant, null, null, null);
 
         assertEquals(1, result.size());
         assertEquals("Java", result.getFirst().name());
@@ -107,14 +109,14 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     @Test
     void excludesCategoriesOwnedByAnotherOrganization() {
         TenantContext tenant = TenantContext.organization(2L, "customer", "CUSTOMER", false);
-        when(accessPolicy.ownershipForCreation(tenant))
-                .thenReturn(new GlobalContentAccessPolicy.Ownership(ContentScope.ORGANIZATION, 2L));
+        when(creationTargetResolver.resolve(tenant, null, null))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.ORGANIZATION, 2L, "customer"));
         lenient().when(category.getContentScope()).thenReturn(ContentScope.ORGANIZATION);
         lenient().when(category.getOwnerOrganizationId()).thenReturn(3L);
         when(categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
                 ContentScope.ORGANIZATION, 2L)).thenReturn(List.of());
 
-        var result = adapter.questionOptions(tenant, null);
+        var result = adapter.questionOptions(tenant, null, null, null);
 
         assertEquals(0, result.size());
     }

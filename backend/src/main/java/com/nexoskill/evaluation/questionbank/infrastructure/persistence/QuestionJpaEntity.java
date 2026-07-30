@@ -261,6 +261,17 @@ public class QuestionJpaEntity {
         this.ownerOrganizationId = organizationId;
     }
 
+    public void linkToGlobalSource(Long globalQuestionId, long globalVersion, Instant now) {
+        if (contentScope != ContentScope.ORGANIZATION || globalQuestionId == null) {
+            throw new IllegalStateException("La referencia global solo puede asignarse a una pregunta organizacional.");
+        }
+        sourceGlobalId = globalQuestionId;
+        sourceGlobalVersion = globalVersion;
+        customized = 0;
+        syncStatus = SyncStatus.SYNCHRONIZED;
+        lastSynchronizedAt = now;
+    }
+
     public void markClonedFromOrganization(Long organizationId, Long sourceQuestionId,
             Long sourceVersion, Long actorId, Instant now) {
         if (contentScope != ContentScope.GLOBAL) {

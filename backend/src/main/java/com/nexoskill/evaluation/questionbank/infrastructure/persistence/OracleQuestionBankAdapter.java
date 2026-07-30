@@ -10,11 +10,13 @@ import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionOperationContextPolicy;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionCreationTargetResolver;
 import com.nexoskill.evaluation.questionbank.application.port.out.*;
 import com.nexoskill.evaluation.questionbank.domain.model.*;
 import com.nexoskill.evaluation.shared.domain.*;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
@@ -40,6 +42,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final TenantContextResolver tenantContextResolver;
     private final GlobalContentAccessPolicy accessPolicy;
     private final QuestionOperationContextPolicy operationContextPolicy;
+    private final QuestionCreationTargetResolver creationTargetResolver;
     private final ContentSynchronizationService synchronization;
     private final AuditLogPort audit;
     private final HttpServletRequest request;
@@ -60,6 +63,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             TenantContextResolver tenantContextResolver,
             GlobalContentAccessPolicy accessPolicy,
             QuestionOperationContextPolicy operationContextPolicy,
+            QuestionCreationTargetResolver creationTargetResolver,
             ContentSynchronizationService synchronization,
             AuditLogPort audit,
             HttpServletRequest request) {
@@ -78,6 +82,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.tenantContextResolver = tenantContextResolver;
         this.accessPolicy = accessPolicy;
         this.operationContextPolicy = operationContextPolicy;
+        this.creationTargetResolver = creationTargetResolver;
         this.synchronization = synchronization;
         this.audit = audit;
         this.request = request;
@@ -86,7 +91,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     @Override
     public QuestionDetail create(CreateQuestionCommand command) {
         var tenant = tenantContextResolver.resolve(request);
-        var ownership = accessPolicy.ownershipForCreation(tenant);
+        var target = creationTargetResolver.resolve(tenant, command.contentScope(), command.organizationPublicId());
+        var ownership = new GlobalContentAccessPolicy.Ownership(target.scope(), target.organizationId());
         var selection = selection(command.typeCode(), command.categoryPublicIds(), Set.of(),
                 ownership.scope(), ownership.organizationId());
         var settings = command.answerSettings();
@@ -258,6 +264,77 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         }
     }
     @Override
+    public QuestionDetail copyToOrganization(String id, Long actor) {
+        var tenant = tenantContextResolver.resolve(request);
+        if (tenant.globalAdministrator() || !tenant.hasOrganization()) {
+            throw error("QUESTION_ORGANIZATION_COPY_FORBIDDEN",
+                    "La copia organizacional debe crearse desde una organización autorizada.");
+        }
+        var source = lockedForDuplicate(id);
+        assertReadable(source);
+        if (source.getContentScope() != ContentScope.GLOBAL) {
+            throw error("QUESTION_GLOBAL_SOURCE_REQUIRED",
+                    "Solo una pregunta GLOBAL disponible puede copiarse a la organización.");
+        }
+        if (source.getStatus() != QuestionStatus.ACTIVE) {
+            throw error("QUESTION_GLOBAL_SOURCE_INACTIVE",
+                    "La pregunta GLOBAL debe estar activa para crear una copia organizacional.");
+        }
+        if (questions.existsBySourceGlobalIdAndOwnerOrganizationIdAndStatusNot(
+                source.getId(), tenant.organizationId(), QuestionStatus.DELETED)) {
+            throw error("QUESTION_ORGANIZATION_COPY_EXISTS",
+                    "La organización ya cuenta con una copia de esta pregunta GLOBAL.");
+        }
+
+        Instant now = clock.instant();
+        LinkedHashSet<QuestionCategoryJpaEntity> targetCategories = new LinkedHashSet<>();
+        for (QuestionCategoryJpaEntity sourceCategory : source.getCategories()) {
+            if (sourceCategory.getContentScope() != ContentScope.GLOBAL) {
+                throw error("QUESTION_CATEGORY_SCOPE_INVALID",
+                        "Una categoría relacionada no pertenece al catálogo GLOBAL.");
+            }
+            QuestionCategoryJpaEntity targetCategory = categories
+                    .findFirstBySourceGlobalIdAndOwnerOrganizationId(sourceCategory.getId(), tenant.organizationId())
+                    .orElseGet(() -> categories
+                            .findFirstByContentScopeAndOwnerOrganizationIdAndCodeIgnoreCase(
+                                    ContentScope.ORGANIZATION, tenant.organizationId(), sourceCategory.getCode())
+                            .orElseGet(() -> {
+                                QuestionCategoryJpaEntity created = QuestionCategoryJpaEntity.create(
+                                        UUID.randomUUID().toString(), sourceCategory.getCode(), sourceCategory.getName(),
+                                        sourceCategory.getDescription(), ContentScope.ORGANIZATION,
+                                        tenant.organizationId(), actor, now);
+                                created.linkToGlobalSource(sourceCategory.getId(), sourceCategory.getVersion(), now);
+                                return categories.saveAndFlush(created);
+                            }));
+            if (targetCategory.getStatus() != CatalogStatus.ACTIVE) {
+                throw error("QUESTION_CATEGORY_INACTIVE",
+                        "Una categoría necesaria para la copia está inactiva en la organización.");
+            }
+            targetCategories.add(targetCategory);
+        }
+
+        var entity = QuestionJpaEntity.create(
+                UUID.randomUUID().toString(), source.getType(), source.getDifficulty(), source.getTechnology(),
+                source.getLevelCode(), targetCategories, source.getStatement(), source.getExplanation(),
+                source.getPromptMedia(), javaLanguage(source.getCodeContent()), source.getCodeContent(),
+                source.getAcceptedAnswersJson(), source.isCaseSensitive(), source.isManualReview(),
+                null, null, null, source.getResponseMaxLength(), actor, now);
+        entity.assignOwnership(ContentScope.ORGANIZATION, tenant.organizationId());
+        entity.linkToGlobalSource(source.getId(), source.getVersion(), now);
+        for (var option : source.getOptions()) {
+            entity.addOption(QuestionOptionJpaEntity.create(entity, UUID.randomUUID().toString(),
+                    option.getOptionOrder(), option.getText(), option.getMedia(), option.getMatchText(),
+                    option.getMatchMedia(), option.isCorrect(), option.getFeedback(), now));
+        }
+        QuestionJpaEntity saved = questions.saveAndFlush(entity);
+        tagStore.copy(source.getId(), saved.getId(), ContentScope.ORGANIZATION,
+                tenant.organizationId(), actor, now);
+        auditQuestion(actor, "QUESTION_ORGANIZATION_COPY_CREATED", saved,
+                Map.of("sourceGlobalQuestionPublicId", source.getPublicId()));
+        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
+    }
+
+    @Override
     public QuestionDetail changeStatus(String id, QuestionStatus status, long expected, Long actor) {
 
         var entity = locked(id);
@@ -284,6 +361,10 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             throw error("QUESTION_ALREADY_DELETED", "La pregunta ya está eliminada.");
         }
         boolean activeDependencies = usage.isUsedByActiveExam(entity.getId());
+        if (activeDependencies) {
+            throw error("QUESTION_ACTIVE_DEPENDENCIES",
+                    "La pregunta no puede eliminarse porque está siendo utilizada en formularios activos. Inactívala o retírala del contenido relacionado.");
+        }
         entity.softDelete(actor, clock.instant(), truncate(reason, 500));
         markCustomized(entity);
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
@@ -311,36 +392,12 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private void copyAvailability(QuestionJpaEntity source, QuestionJpaEntity target, Long actor) {
         if (source.getContentScope() != ContentScope.GLOBAL) return;
         var now = clock.instant();
+        // A duplicate is created unpublished to avoid exposing content accidentally.
         jdbc.update("""
             UPDATE QUESTION
-               SET AVAILABILITY_MODE = (
-                       SELECT NVL(source_value.AVAILABILITY_MODE, 'GLOBAL')
-                         FROM QUESTION source_value
-                        WHERE source_value.QUESTION_ID = :sourceQuestionId
-                   ),
-                   UPDATED_BY = :actor,
-                   UPDATED_AT = :now
+               SET AVAILABILITY_MODE = 'NONE', UPDATED_BY = :actor, UPDATED_AT = :now
              WHERE QUESTION_ID = :targetQuestionId
-            """, Map.of(
-                "sourceQuestionId", source.getId(),
-                "targetQuestionId", target.getId(),
-                "actor", actor,
-                "now", now));
-        jdbc.update("""
-            INSERT INTO QUESTION_ORGANIZATION_AVAILABILITY (
-                QUESTION_ID, ORGANIZATION_ID, STATUS, ENABLED_AT, ENABLED_BY,
-                DISABLED_AT, DISABLED_BY, CREATED_AT, UPDATED_AT, VERSION_NO
-            )
-            SELECT :targetQuestionId, source_value.ORGANIZATION_ID, 'ACTIVE', :now, :actor,
-                   NULL, NULL, :now, :now, 0
-              FROM QUESTION_ORGANIZATION_AVAILABILITY source_value
-             WHERE source_value.QUESTION_ID = :sourceQuestionId
-               AND source_value.STATUS = 'ACTIVE'
-            """, Map.of(
-                "sourceQuestionId", source.getId(),
-                "targetQuestionId", target.getId(),
-                "actor", actor,
-                "now", now));
+            """, Map.of("targetQuestionId", target.getId(), "actor", actor, "now", now));
     }
 
     private void auditQuestion(Long actor, String event, QuestionJpaEntity entity, Map<String, Object> extra) {

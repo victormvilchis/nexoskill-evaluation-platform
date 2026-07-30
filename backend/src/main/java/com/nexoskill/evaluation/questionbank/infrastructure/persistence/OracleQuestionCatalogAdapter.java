@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import com.nexoskill.evaluation.globalcontent.application.service.ContentSynchronizationService;
 import com.nexoskill.evaluation.globalcontent.application.service.GlobalContentAccessPolicy;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionCreationTargetResolver;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
@@ -32,6 +33,7 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     private final QuestionCategoryStatusHistoryRepository historyRepository;
     private final OrganizationRepository organizationRepository;
     private final GlobalContentAccessPolicy accessPolicy;
+    private final QuestionCreationTargetResolver creationTargetResolver;
     private final ContentSynchronizationService synchronization;
     private final Clock clock;
 
@@ -43,6 +45,7 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
             QuestionCategoryStatusHistoryRepository historyRepository,
             OrganizationRepository organizationRepository,
             GlobalContentAccessPolicy accessPolicy,
+            QuestionCreationTargetResolver creationTargetResolver,
             ContentSynchronizationService synchronization,
             Clock clock) {
         this.types = types;
@@ -53,6 +56,7 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
         this.historyRepository = historyRepository;
         this.organizationRepository = organizationRepository;
         this.accessPolicy = accessPolicy;
+        this.creationTargetResolver = creationTargetResolver;
         this.synchronization = synchronization;
         this.clock = clock;
     }
@@ -68,7 +72,7 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
                                 com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus.ACTIVE)
                         .stream().map(value -> new QuestionTechnologySummary(value.getPublicId(), value.getCode(),
                                 value.getName(), value.getStatus().name(), value.getDisplayOrder())).toList(),
-                questionOptions(tenant, null));
+                questionOptions(tenant, null, null, null));
     }
 
     @Override
@@ -83,15 +87,17 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     }
 
     @Override
-    public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId) {
+    public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId,
+            String targetScopeValue, String organizationPublicId) {
         ContentScope targetScope;
         Long targetOrganizationId;
         Set<Long> retainedCategoryIds = Set.of();
 
         if (questionPublicId == null || questionPublicId.isBlank()) {
-            GlobalContentAccessPolicy.Ownership ownership = accessPolicy.ownershipForCreation(tenant);
-            targetScope = ownership.scope();
-            targetOrganizationId = ownership.organizationId();
+            QuestionCreationTargetResolver.Target target = creationTargetResolver.resolve(tenant,
+                    targetScopeValue, organizationPublicId);
+            targetScope = target.scope();
+            targetOrganizationId = target.organizationId();
         } else {
             String normalizedId = PublicIdNormalizer.requiredUuid(questionPublicId, "QUESTION_ID_INVALID",
                     "La pregunta indicada no es válida.");

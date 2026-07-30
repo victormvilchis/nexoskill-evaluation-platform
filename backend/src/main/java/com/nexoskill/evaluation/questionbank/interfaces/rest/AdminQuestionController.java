@@ -3,6 +3,8 @@ package com.nexoskill.evaluation.questionbank.interfaces.rest;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionServices;
+import com.nexoskill.evaluation.questionbank.application.service.QuestionSaveService;
+import com.nexoskill.evaluation.shared.interfaces.rest.ClientRequestInfo;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionFilterOptionsService;
@@ -20,9 +22,9 @@ import org.springframework.web.bind.annotation.*;
 public class AdminQuestionController {
     private final QuestionServices.Search search;
     private final QuestionServices.Get get;
-    private final QuestionServices.Create create;
-    private final QuestionServices.Update update;
+    private final QuestionSaveService save;
     private final QuestionServices.Duplicate duplicate;
+    private final QuestionServices.CopyToOrganization copyToOrganization;
     private final QuestionServices.ChangeStatus status;
     private final QuestionServices.Delete delete;
     private final QuestionServices.Restore restore;
@@ -31,16 +33,16 @@ public class AdminQuestionController {
     private final TenantContextResolver tenantContextResolver;
 
     public AdminQuestionController(QuestionServices.Search search, QuestionServices.Get get,
-            QuestionServices.Create create, QuestionServices.Update update, QuestionServices.Duplicate duplicate,
-            QuestionServices.ChangeStatus status, QuestionServices.Delete delete, QuestionServices.Restore restore,
+            QuestionSaveService save, QuestionServices.Duplicate duplicate,
+            QuestionServices.CopyToOrganization copyToOrganization, QuestionServices.ChangeStatus status, QuestionServices.Delete delete, QuestionServices.Restore restore,
             com.nexoskill.evaluation.questionbank.application.service.QuestionGlobalCloneService globalClone,
             QuestionFilterOptionsService filterOptions,
             TenantContextResolver tenantContextResolver) {
         this.search = search;
         this.get = get;
-        this.create = create;
-        this.update = update;
+        this.save = save;
         this.duplicate = duplicate;
+        this.copyToOrganization = copyToOrganization;
         this.status = status;
         this.delete = delete;
         this.restore = restore;
@@ -103,23 +105,29 @@ public class AdminQuestionController {
     @PostMapping
     @PreAuthorize("hasAuthority('QUESTION_CREATE')")
     public ResponseEntity<QuestionDetail> create(@Valid @RequestBody QuestionRequests.Create body,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        var question = create.execute(new CreateQuestionCommand(body.typeCode(), body.difficultyCode(),
+            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
+        var question = save.create(new CreateQuestionCommand(body.typeCode(), body.difficultyCode(),
                 body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(), body.tags(),
                 body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
-                settings(body.answerSettings()), options(body.options()), actor.internalId()));
+                settings(body.answerSettings()), options(body.options()), body.contentScope(),
+                body.organizationPublicId(), actor.internalId()), body.availabilityMode(),
+                body.availabilityOrganizationPublicIds(), tenantContextResolver.resolve(request),
+                new QuestionSaveService.Actor(actor.internalId(), ClientRequestInfo.ipAddress(request),
+                        ClientRequestInfo.userAgent(request)));
         return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('QUESTION_UPDATE')")
     public QuestionDetail update(@PathVariable String id, @Valid @RequestBody QuestionRequests.Update body,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return update.execute(new UpdateQuestionCommand(id, body.typeCode(), body.difficultyCode(),
+            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
+        return save.update(new UpdateQuestionCommand(id, body.typeCode(), body.difficultyCode(),
                 body.technologyPublicId(), body.levelCode(), body.categoryPublicIds(), body.tags(),
                 body.statement(), body.explanation(), body.promptMediaPublicId(), body.codeContent(),
                 settings(body.answerSettings()), options(body.options()), body.expectedEntityVersion(),
-                actor.internalId()));
+                actor.internalId()), body.availabilityMode(), body.availabilityOrganizationPublicIds(),
+                tenantContextResolver.resolve(request), new QuestionSaveService.Actor(actor.internalId(),
+                        ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
     }
 
     @PostMapping("/{id}/duplicate")
@@ -127,6 +135,14 @@ public class AdminQuestionController {
     public ResponseEntity<QuestionDetail> duplicate(@PathVariable String id,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         var question = duplicate.execute(id, actor.internalId());
+        return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
+    }
+
+    @PostMapping("/{id}/copy-to-organization")
+    @PreAuthorize("hasRole('SUPERVISOR') and hasAuthority('QUESTION_CREATE')")
+    public ResponseEntity<QuestionDetail> copyToOrganization(@PathVariable String id,
+            @AuthenticationPrincipal AuthenticatedUser actor) {
+        var question = copyToOrganization.execute(id, actor.internalId());
         return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
     }
 

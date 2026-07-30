@@ -8,6 +8,7 @@ import type { OrganizationSummary } from '../features/organizations/types/organi
 import {
   changeQuestionStatus,
   cloneQuestionToGlobal,
+  createQuestionOrganizationCopy,
   deleteQuestion,
   duplicateQuestion,
   getQuestionCatalogs,
@@ -67,6 +68,8 @@ export function AdminQuestionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
+  const supervisor = Boolean(user?.roles.includes('SUPERVISOR'))
+  const canWriteQuestions = permissions.has('QUESTION_CREATE') || permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')
 
   const query = searchParams.get('q') ?? ''
   const organizationPublicId = globalAdministrator ? searchParams.get('organization') ?? '' : ''
@@ -221,6 +224,20 @@ export function AdminQuestionsPage() {
     }
   }
 
+  async function createOrganizationCopy(question: QuestionSummary) {
+    setBusyId(question.publicId)
+    try {
+      const copy = await createQuestionOrganizationCopy(question.publicId)
+      toast.success('Copia organizacional creada', 'La pregunta GLOBAL permaneció sin cambios.')
+      navigate(`/admin/questions/${copy.publicId}/edit`)
+    } catch (requestError) {
+      toast.error('No fue posible crear la copia organizacional',
+        requestError instanceof ApiRequestError ? requestError.message : undefined)
+    } finally {
+      setBusyId(undefined)
+    }
+  }
+
   async function openClone(question: QuestionSummary) {
     setCloneState({ question, loading: true, busy: false, includeDependencies: true, notes: '' })
     try {
@@ -307,7 +324,9 @@ export function AdminQuestionsPage() {
           <h1>{globalAdministrator ? 'Banco de Preguntas Global' : 'Banco de Preguntas'}</h1>
           <p className="muted">{globalAdministrator
             ? 'Consulta el contenido global y organizacional con filtros compactos y contexto explícito.'
-            : 'Consulta y administra únicamente las preguntas propias de tu organización.'}</p>
+            : canWriteQuestions
+              ? 'Consulta y administra únicamente las preguntas propias de tu organización.'
+              : 'Consulta las preguntas propias y el contenido GLOBAL habilitado para tu organización.'}</p>
         </div>
         {permissions.has('QUESTION_CREATE') && <Link className="primary-button button-link" to="/admin/questions/new"><Icon name="plus" size={16} /> Nueva pregunta</Link>}
       </header>
@@ -344,7 +363,7 @@ export function AdminQuestionsPage() {
                       </span>
                     )}
                   </td>
-                  {globalAdministrator && <td><strong>{question.ownership.organizationName ?? 'GLOBAL'}</strong><small>{question.ownership.scope}</small></td>}
+                  {globalAdministrator && <td><strong>{question.ownership.organizationName ?? 'GLOBAL'}</strong><small>{question.ownership.scope === 'GLOBAL' ? 'Global' : 'Organizacional'}</small></td>}
                   <td>{question.categories.length ? question.categories.map((category) => category.name).join(', ') : 'Sin categoría'}</td>
                   <td>{question.difficultyName ?? 'Sin dificultad'}</td>
                   <td><span className={`status-badge status-${question.status.toLowerCase()}`}>{statusLabel[question.status]}</span></td>
@@ -352,13 +371,11 @@ export function AdminQuestionsPage() {
                   <td>{formatDate(question.updatedAt ?? question.createdAt)}</td>
                   <td><TableActions>
                     <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
+                    {supervisor && question.ownership.scope === 'GLOBAL' && question.status === 'ACTIVE' && permissions.has('QUESTION_CREATE') && <TableActionButton label="Crear copia para mi organización" icon="copy" disabled={busyId === question.publicId} onClick={() => void createOrganizationCopy(question)} />}
                     {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
+                    {canManageQuestion(question) && (permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')) && <TableActionLink to={`/admin/questions/${question.publicId}/manage`} label="Administrar" icon="archive" />}
                     {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />}
                     {globalAdministrator && permissions.has('GLOBAL_CONTENT_PROMOTE') && question.ownership.scope === 'ORGANIZATION' && question.status !== 'DELETED' && <TableActionButton label="Clonar a GLOBAL" icon="copy" tone="primary" onClick={() => void openClone(question)} />}
-                    {canManageQuestion(question) && question.status === 'ACTIVE' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Inactivar" icon="archive" onClick={() => setPendingAction({ type: 'ARCHIVE', question })} />}
-                    {canManageQuestion(question) && question.status === 'ARCHIVED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Reactivar" icon="restore" onClick={() => setPendingAction({ type: 'ACTIVATE', question })} />}
-                    {canManageQuestion(question) && question.status !== 'DELETED' && permissions.has('QUESTION_ARCHIVE') && <TableActionButton label="Eliminar" icon="trash" tone="danger" onClick={() => setPendingAction({ type: 'DELETE', question })} />}
-                    {canManageQuestion(question) && question.status === 'DELETED' && permissions.has('QUESTION_UPDATE') && <TableActionButton label="Restaurar" icon="restore" onClick={() => setPendingAction({ type: 'RESTORE', question })} />}
                   </TableActions></td>
                 </tr>
               ))}

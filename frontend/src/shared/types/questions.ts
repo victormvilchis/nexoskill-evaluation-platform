@@ -180,6 +180,10 @@ export interface QuestionPayload {
   codeContent?: string
   answerSettings: QuestionAnswerSettings
   options: QuestionOptionPayload[]
+  contentScope?: ContentScope
+  organizationPublicId?: string
+  availabilityMode?: 'NONE' | 'GLOBAL' | 'SELECTED_ORGANIZATIONS'
+  availabilityOrganizationPublicIds?: string[]
 }
 
 export interface UpdateQuestionPayload extends QuestionPayload {

@@ -14,6 +14,10 @@ public interface SpringDataQuestionCategoryRepository extends JpaRepository<Ques
 
 	Optional<QuestionCategoryJpaEntity> findByPublicId(String publicId);
 
+	Optional<QuestionCategoryJpaEntity> findFirstBySourceGlobalIdAndOwnerOrganizationId(Long sourceGlobalId, Long ownerOrganizationId);
+
+	Optional<QuestionCategoryJpaEntity> findFirstByContentScopeAndOwnerOrganizationIdAndCodeIgnoreCase(ContentScope scope, Long ownerOrganizationId, String code);
+
 	List<QuestionCategoryJpaEntity> findAllByPublicIdIn(Collection<String> ids);
 
 	List<QuestionCategoryJpaEntity> findAllByContentScopeOrderByNameAsc(ContentScope scope);

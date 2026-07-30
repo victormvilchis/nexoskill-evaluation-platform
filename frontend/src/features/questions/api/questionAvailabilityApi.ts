@@ -1,6 +1,6 @@
 import { apiRequest } from '../../../shared/api/apiClient'
 
-export type QuestionAvailabilityMode = 'GLOBAL' | 'SELECTED_ORGANIZATIONS'
+export type QuestionAvailabilityMode = 'NONE' | 'GLOBAL' | 'SELECTED_ORGANIZATIONS'
 export interface QuestionAvailabilityOrganization { publicId: string; code: string; name: string }
 export interface QuestionAvailability {
   mode: QuestionAvailabilityMode

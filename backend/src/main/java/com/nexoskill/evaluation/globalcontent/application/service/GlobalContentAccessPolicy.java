@@ -130,8 +130,9 @@ public class GlobalContentAccessPolicy {
         var link = replicationLinks.findByOrganizationIdAndContentTypeAndTargetContentId(
                 tenant.organizationId(), type, internalId).orElse(null);
         if (link == null) {
-            throw new BusinessException("GLOBAL_CONTENT_COPY_POLICY_MISSING",
-                    "No se encontró la política de edición de la copia organizacional.");
+            // Las copias creadas explícitamente desde el módulo funcional conservan SOURCE_GLOBAL_ID
+            // y siguen siendo editables únicamente por su organización propietaria.
+            return;
         }
         boolean editable = grants.findAllByOrganizationIdAndContentTypeAndGlobalContentIdAndStatus(
                         tenant.organizationId(), type, sourceGlobalId, GrantStatus.ACTIVE)

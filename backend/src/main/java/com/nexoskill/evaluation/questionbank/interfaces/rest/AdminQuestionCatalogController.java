@@ -44,8 +44,11 @@ public class AdminQuestionCatalogController {
 	@GetMapping("/question-options")
 	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
 	public List<QuestionCategorySummary> questionOptions(
-			@RequestParam(name = "questionPublicId", required = false) String questionPublicId, HttpServletRequest request) {
-		return service.questionOptions(tenant(request), questionPublicId);
+			@RequestParam(name = "questionPublicId", required = false) String questionPublicId,
+			@RequestParam(name = "targetScope", required = false) String targetScope,
+			@RequestParam(name = "organizationPublicId", required = false) String organizationPublicId,
+			HttpServletRequest request) {
+		return service.questionOptions(tenant(request), questionPublicId, targetScope, organizationPublicId);
 	}
 
 	@GetMapping("/categories/{id}")

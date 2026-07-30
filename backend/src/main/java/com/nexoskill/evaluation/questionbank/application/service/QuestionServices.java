@@ -118,6 +118,14 @@ public final class QuestionServices {
     }
 
     @Service
+    public static class CopyToOrganization {
+        private final QuestionBankPort port;
+        public CopyToOrganization(QuestionBankPort port) { this.port = port; }
+        @Transactional
+        public QuestionDetail execute(String id, Long actor) { return port.copyToOrganization(id, actor); }
+    }
+
+    @Service
     public static class ChangeStatus {
         private final QuestionBankPort port;
         public ChangeStatus(QuestionBankPort port) { this.port = port; }

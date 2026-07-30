@@ -15,6 +15,8 @@ public record CreateQuestionCommand(
         String codeContent,
         QuestionAnswerSettings answerSettings,
         List<QuestionOptionCommand> options,
+        String contentScope,
+        String organizationPublicId,
         Long actorUserId) {
     public CreateQuestionCommand {
         categoryPublicIds = categoryPublicIds == null ? List.of() : List.copyOf(categoryPublicIds);
@@ -30,7 +32,7 @@ public record CreateQuestionCommand(
             List<QuestionOptionCommand> options, Long actorUserId) {
         this(typeCode, difficultyCode, technologyPublicId, levelCode, categoryPublicIds,
                 List.of(), statement, explanation, promptMediaPublicId, codeContent,
-                answerSettings, options, actorUserId);
+                answerSettings, options, null, null, actorUserId);
     }
 
     public CreateQuestionCommand(String typeCode, List<String> categoryPublicIds,
@@ -38,6 +40,6 @@ public record CreateQuestionCommand(
             String codeContent, QuestionAnswerSettings answerSettings,
             List<QuestionOptionCommand> options, Long actorUserId) {
         this(typeCode, null, null, null, categoryPublicIds, List.of(), statement, explanation,
-                promptMediaPublicId, codeContent, answerSettings, options, actorUserId);
+                promptMediaPublicId, codeContent, answerSettings, options, null, null, actorUserId);
     }
 }

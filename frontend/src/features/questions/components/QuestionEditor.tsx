@@ -17,7 +17,8 @@ import type {
   QuestionMedia,
   QuestionOptionPayload,
   QuestionPayload,
-  QuestionTypeCode
+  QuestionTypeCode,
+  ContentScope
 } from '../../../shared/types/questions'
 import { JavaCodeEditor } from './JavaCodePanel'
 import { MediaUploadField } from './MediaUploadField'
@@ -88,9 +89,11 @@ interface QuestionEditorProps {
   initial?: QuestionDetail
   onSubmit: (payload: QuestionPayload) => Promise<void>
   submitLabel: string
+  targetScope?: ContentScope
+  organizationPublicId?: string
 }
 
-export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEditorProps) {
+export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, organizationPublicId }: QuestionEditorProps) {
   const toast = useToast()
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [availableCategories, setAvailableCategories] = useState<QuestionCatalogs['categories']>()
@@ -122,7 +125,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
     setAvailableCategories(undefined)
     Promise.allSettled([
       getQuestionCatalogs(controller.signal),
-      getQuestionCategoryOptions(initial?.publicId, controller.signal)
+      getQuestionCategoryOptions(initial?.publicId, targetScope, organizationPublicId, controller.signal)
     ]).then(([catalogResult, categoryResult]) => {
       if (controller.signal.aborted) return
       const failures: string[] = []
@@ -133,6 +136,10 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
       }
       if (categoryResult.status === 'fulfilled') {
         setAvailableCategories(categoryResult.value)
+        if (!initial) {
+          const allowed = new Set(categoryResult.value.map((category) => category.publicId))
+          setCategoryPublicIds((current) => current.filter((id) => allowed.has(id)))
+        }
       } else {
         failures.push('No fue posible cargar las categorías disponibles.')
       }
@@ -144,7 +151,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel }: QuestionEdito
       setCatalogLoading(false)
     })
     return () => controller.abort()
-  }, [initial?.publicId, toast])
+  }, [initial?.publicId, targetScope, organizationPublicId, toast])
 
   const usesOptions = optionTypes.has(type)
   const categoryOptions = useMemo(() => {

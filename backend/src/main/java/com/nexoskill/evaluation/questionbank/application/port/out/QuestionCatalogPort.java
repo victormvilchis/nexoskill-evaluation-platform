@@ -10,7 +10,8 @@ public interface QuestionCatalogPort {
 
 	List<QuestionCategorySummary> categories(TenantContext tenant, CatalogStatus status);
 
-	List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId);
+	List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId,
+		String targetScope, String organizationPublicId);
 
 	QuestionCategorySummary get(String publicId, TenantContext tenant);
 

@@ -10,6 +10,8 @@ public interface QuestionBankPort {
     QuestionDetail get(String publicId);
     QuestionPage search(QuestionSearchFilter filter, int page, int size);
     QuestionDetail duplicate(String publicId, Long actorUserId);
+
+    QuestionDetail copyToOrganization(String publicId, Long actorUserId);
     QuestionDetail changeStatus(String publicId, QuestionStatus status, long expectedEntityVersion, Long actorUserId);
     QuestionDetail softDelete(String publicId, long expectedEntityVersion, String reason, Long actorUserId);
     QuestionDetail restore(String publicId, long expectedEntityVersion, Long actorUserId);
