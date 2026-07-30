@@ -27,7 +27,7 @@ function statusLabel(status: CollectionStatus) {
   return labels[status]
 }
 
-export function CollectionDetailPage() {
+export function CollectionDetailPage({ readOnly = false }: { readOnly?: boolean }) {
   const { publicId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
@@ -55,7 +55,7 @@ export function CollectionDetailPage() {
   }, [publicId])
 
   async function save(payload: CollectionPayload) {
-    if (!publicId || saving) return
+    if (readOnly || !publicId || saving) return
     setSaving(true)
     try {
       await updateLearningCollection(publicId, payload)
@@ -76,7 +76,7 @@ export function CollectionDetailPage() {
   }
 
   async function changeStatus(status: CollectionStatus) {
-    if (!publicId) return
+    if (readOnly || !publicId) return
     setChangingStatus(true)
     try {
       const updated = await changeLearningCollectionStatus(publicId, status)
@@ -130,9 +130,9 @@ export function CollectionDetailPage() {
             </span>
           </div>
           <h1>{collection.name}</h1>
-          <p>Administra los formularios y el orden de desbloqueo de los niveles.</p>
+          <p>{readOnly ? 'Consulta la composición de la colección sin modificarla.' : 'Administra los formularios y el orden de desbloqueo de los niveles.'}</p>
         </div>
-        <div className="lc-status-actions">
+        {!readOnly && <div className="lc-status-actions">
           {collection.status !== 'ACTIVE' && collection.status !== 'ARCHIVED' && (
             <button
               className="primary-button"
@@ -173,10 +173,24 @@ export function CollectionDetailPage() {
               Archivar
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
-      {collection.status === 'ARCHIVED' ? (
+      {readOnly ? (
+        <section className="ns-card">
+          <div className="catalog-readonly-grid">
+            <div><span>Nombre</span><strong>{collection.name}</strong></div>
+            <div><span>Código</span><strong>{collection.code}</strong></div>
+            <div><span>Estado</span><strong>{statusLabel(collection.status)}</strong></div>
+            <div><span>Niveles</span><strong>{collection.levels.length}</strong></div>
+            <div className="catalog-readonly-wide"><span>Descripción</span><strong>{collection.description || 'Sin descripción'}</strong></div>
+          </div>
+          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Nivel</th><th>Formulario</th><th>Modalidad</th><th>Desbloqueo</th></tr></thead><tbody>
+            {collection.levels.length === 0 && <tr><td colSpan={4} className="ns-table-empty">Sin niveles configurados.</td></tr>}
+            {collection.levels.map((level) => <tr key={`${level.level}-${level.formPublicId}`}><td>{level.level}</td><td><strong>{level.formTitle}</strong><small>{level.formCode}</small></td><td>{level.modeCode === 'PRACTICE' ? 'Práctica' : 'Evaluación'}</td><td>{level.unlockRule === 'PASS_PREVIOUS' ? 'Aprobar nivel anterior' : 'Disponible inicialmente'}</td></tr>)}
+          </tbody></table></div>
+        </section>
+      ) : collection.status === 'ARCHIVED' ? (
         <section className="lc-archived-panel">
           <Icon name="archive" size={24} />
           <div>

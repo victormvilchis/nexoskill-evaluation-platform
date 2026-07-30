@@ -5,6 +5,7 @@ import {
   createCatalogItem,
   deleteCatalogItem,
   getCatalogDependencies,
+  getCatalogItem,
   getCatalogItems,
   getCatalogTypes,
   updateCatalogItem
@@ -29,6 +30,7 @@ import { useClientPagination } from '../shared/hooks/useClientPagination'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
+import { useAuth } from '../features/authentication/context/AuthContext'
 
 type DialogMode = 'create' | 'view' | 'edit' | 'manage'
 type StatusFilter = ManagedCatalogStatus | 'ALL'
@@ -59,6 +61,10 @@ export function CatalogItemsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const permissions = useMemo(() => new Set(user?.permissions ?? []), [user?.permissions])
+  const canManage = permissions.has('CATALOG_MANAGE')
+  const globalAdministrator = user?.roles.includes('ADMINISTRATOR') ?? false
   const [searchParams, setSearchParams] = useSearchParams()
   const type = params.type?.toUpperCase() as CatalogType
   const validType = catalogTypes.has(type)
@@ -103,17 +109,18 @@ export function CatalogItemsPage() {
       getCatalogTypes(controller.signal),
       getCatalogItems(type, {
         status: requestedStatus,
-        organizationPublicId: type === 'CATEGORIES' ? organizationPublicId || undefined : undefined,
+        organizationPublicId: globalAdministrator ? organizationPublicId || undefined : undefined,
         signal: controller.signal
       }),
-      type === 'CATEGORIES'
+      globalAdministrator
         ? searchOrganizations({ status: 'ALL', size: 100, signal: controller.signal }).then((page) => page.content)
         : Promise.resolve([] as OrganizationSummary[]),
       type === 'PROFESSIONAL_PROFILES'
         ? getCatalogItems('TECHNOLOGICAL_PROFILES', { status: 'ACTIVE', signal: controller.signal })
-        : Promise.resolve([] as CatalogItem[])
+        : Promise.resolve([] as CatalogItem[]),
+      params.id ? getCatalogItem(type, params.id, controller.signal) : Promise.resolve(undefined)
     ])
-      .then(([types, values, organizationValues, techProfiles]) => {
+      .then(([types, values, organizationValues, techProfiles, requestedItem]) => {
         setSummary(types.find((item) => item.type === type))
         setItems(values)
         setOrganizations(organizationValues)
@@ -133,22 +140,21 @@ export function CatalogItemsPage() {
         }
 
         if (params.id) {
-          const currentItem = values.find((item) => String(item.id) === params.id)
-          if (!currentItem) {
+          if (!requestedItem) {
             toast.error('No fue posible abrir el registro', 'El registro solicitado no existe o no está disponible en este contexto.')
             navigate(listPath, { replace: true })
             return
           }
 
-          setSelected(currentItem)
+          setSelected(requestedItem)
           setForm({
-            code: currentItem.code,
-            name: currentItem.name,
-            description: currentItem.description ?? '',
-            displayOrder: currentItem.displayOrder,
-            organizationPublicId: currentItem.organizationPublicId,
-            suggestedTechnologicalProfile: currentItem.suggestedTechnologicalProfile,
-            expectedVersion: currentItem.version
+            code: requestedItem.code,
+            name: requestedItem.name,
+            description: requestedItem.description ?? '',
+            displayOrder: requestedItem.displayOrder,
+            organizationPublicId: requestedItem.organizationPublicId,
+            suggestedTechnologicalProfile: requestedItem.suggestedTechnologicalProfile,
+            expectedVersion: requestedItem.version
           })
         } else {
           setSelected(undefined)
@@ -166,7 +172,7 @@ export function CatalogItemsPage() {
       })
 
     return () => controller.abort()
-  }, [listPath, mode, navigate, organizationPublicId, params.id, reloadKey, status, toast, type, validType])
+  }, [globalAdministrator, listPath, mode, navigate, organizationPublicId, params.id, reloadKey, status, toast, type, validType])
 
   useEffect(() => {
     if (mode !== 'manage' || !selected) {
@@ -261,7 +267,7 @@ export function CatalogItemsPage() {
         code: form.code.trim(),
         name: form.name.trim(),
         description: form.description?.trim() || undefined,
-        organizationPublicId: type === 'CATEGORIES' ? form.organizationPublicId : undefined,
+        organizationPublicId: globalAdministrator ? form.organizationPublicId : undefined,
         expectedVersion: selected?.version
       }
 
@@ -329,7 +335,7 @@ export function CatalogItemsPage() {
           <h1>{summary?.name ?? 'Catálogo'}</h1>
           <p className="muted">{summary?.description}</p>
         </div>
-        {!mode && (
+        {!mode && canManage && (
           <div className="catalog-header-actions">
             <button className="primary-button" type="button" onClick={openCreate}>
               <Icon name="plus" size={16} /> Nuevo registro
@@ -344,7 +350,7 @@ export function CatalogItemsPage() {
         onClear={() => { setQuery(''); setStatus('ACTIVE'); setOrganizationPublicId('') }}
       >
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, código o descripción" />
-        {type === 'CATEGORIES' && (
+        {globalAdministrator && (
           <ResourceSelectField label="Organización" value={organizationPublicId} onChange={setOrganizationPublicId}>
             <option value="">Todas las organizaciones</option>
             {organizations.map((organization) => (
@@ -374,8 +380,7 @@ export function CatalogItemsPage() {
               <tr>
                 <th>Nombre</th>
                 <th>Código</th>
-                {type === 'CATEGORIES' && <th>Organización</th>}
-                <th>Usos</th>
+                {globalAdministrator && <th>Organización</th>}
                 <th>Actualización</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
@@ -383,13 +388,13 @@ export function CatalogItemsPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>Cargando registros…</td></tr>
+                <tr><td className="ns-table-empty" colSpan={globalAdministrator ? 6 : 5}>Cargando registros…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="ns-table-empty" colSpan={type === 'CATEGORIES' ? 7 : 6}>
+                  <td className="ns-table-empty" colSpan={globalAdministrator ? 6 : 5}>
                     <strong>No hay registros</strong>
-                    <span>Ajusta los filtros o crea un valor nuevo.</span>
+                    <span>{canManage ? 'Ajusta los filtros o crea un valor nuevo.' : 'Ajusta los filtros para consultar los registros disponibles.'}</span>
                   </td>
                 </tr>
               )}
@@ -397,15 +402,14 @@ export function CatalogItemsPage() {
                 <tr key={item.id}>
                   <td className="ns-primary-cell"><strong>{item.name}</strong><small>{item.description || 'Sin descripción'}</small></td>
                   <td><code>{item.code}</code></td>
-                  {type === 'CATEGORIES' && <td>{item.organizationName ?? 'GLOBAL'}</td>}
-                  <td>{item.dependencyCount}</td>
+                  {globalAdministrator && <td>{item.organizationName ?? 'GLOBAL'}</td>}
                   <td>{formatDate(item.updatedAt ?? item.createdAt)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
                     <TableActions>
                       <TableActionButton label="Ver" icon="eye" onClick={() => open('view', item)} />
-                      <TableActionButton label="Editar" icon="edit" tone="primary" onClick={() => open('edit', item)} />
-                      <TableActionButton label="Administrar" icon="archive" onClick={() => open('manage', item)} />
+                      {canManage && <TableActionButton label="Editar" icon="edit" tone="primary" onClick={() => open('edit', item)} />}
+                      {canManage && <TableActionButton label="Administrar" icon="archive" onClick={() => open('manage', item)} />}
                     </TableActions>
                   </td>
                 </tr>
@@ -438,7 +442,7 @@ export function CatalogItemsPage() {
               </button>
             </header>
 
-            {(mode === 'create' || mode === 'edit') && (
+            {(mode === 'create' || mode === 'edit') && canManage && (
               <form className="ns-dialog-form" onSubmit={(event) => void submit(event)}>
                 <div className="catalog-form-grid">
                   <label className="ns-dialog-field">
@@ -453,12 +457,12 @@ export function CatalogItemsPage() {
                     <span>Orden</span>
                     <input min={0} type="number" value={form.displayOrder ?? 0} onChange={(event) => setForm((value) => ({ ...value, displayOrder: Number(event.target.value) }))} />
                   </label>
-                  {type === 'CATEGORIES' && (
+                  {globalAdministrator && (
                     <label className="ns-dialog-field">
                       <span>Organización propietaria</span>
                       <select disabled={mode === 'edit'} value={form.organizationPublicId ?? ''} onChange={(event) => setForm((value) => ({ ...value, organizationPublicId: event.target.value || undefined }))}>
                         <option value="">GLOBAL</option>
-                        {organizations.filter((organization) => organization.organizationType === 'CUSTOMER').map((organization) => (
+                        {organizations.filter((organization) => organization.organizationType === 'CUSTOMER' && organization.status === 'ACTIVE').map((organization) => (
                           <option key={organization.publicId} value={organization.publicId}>{organization.name}</option>
                         ))}
                       </select>
@@ -469,7 +473,11 @@ export function CatalogItemsPage() {
                       <span>Perfil tecnológico sugerido</span>
                       <select value={form.suggestedTechnologicalProfile ?? ''} onChange={(event) => setForm((value) => ({ ...value, suggestedTechnologicalProfile: event.target.value || undefined }))}>
                         <option value="">Sin sugerencia</option>
-                        {technologicalProfiles.map((profile) => <option key={profile.code} value={profile.code}>{profile.name}</option>)}
+                        {technologicalProfiles
+                          .filter((profile) => profile.scope === 'GLOBAL'
+                            || (!globalAdministrator)
+                            || Boolean(form.organizationPublicId && profile.organizationPublicId === form.organizationPublicId))
+                          .map((profile) => <option key={`${profile.scope}-${profile.organizationPublicId ?? 'GLOBAL'}-${profile.code}`} value={profile.code}>{profile.name}</option>)}
                       </select>
                     </label>
                   )}
@@ -503,7 +511,7 @@ export function CatalogItemsPage() {
               </>
             )}
 
-            {mode === 'manage' && selected && (
+            {mode === 'manage' && selected && canManage && (
               <>
                 <div className="catalog-management-summary">
                   <div><span>Estado actual</span><strong>{selected.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</strong></div>

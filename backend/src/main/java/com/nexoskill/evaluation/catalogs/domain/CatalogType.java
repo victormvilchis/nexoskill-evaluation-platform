@@ -2,9 +2,9 @@ package com.nexoskill.evaluation.catalogs.domain;
 
 public enum CatalogType {
     CATEGORIES("Categorías", "Clasificación de preguntas globales y organizacionales", true),
-    TECHNOLOGIES("Tecnologías", "Tecnologías reutilizadas por contenido y certificaciones", false),
-    PROFESSIONAL_PROFILES("Perfiles", "Perfiles profesionales utilizados en certificaciones", false),
-    TECHNOLOGICAL_PROFILES("Perfiles tecnológicos", "Clasificación tecnológica sugerida para perfiles", false),
+    TECHNOLOGIES("Tecnologías", "Tecnologías reutilizadas por contenido y certificaciones", true),
+    PROFESSIONAL_PROFILES("Perfiles", "Perfiles profesionales utilizados en certificaciones", true),
+    TECHNOLOGICAL_PROFILES("Perfiles tecnológicos", "Clasificación tecnológica sugerida para perfiles", true),
     QUESTION_TYPES("Tipos de pregunta", "Tipos de respuesta admitidos por el Banco de Preguntas", false),
     DIFFICULTIES("Dificultades", "Niveles de dificultad disponibles para las preguntas", false);
 

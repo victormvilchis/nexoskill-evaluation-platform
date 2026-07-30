@@ -25,6 +25,14 @@ export function getCatalogItems(
   return apiRequest<CatalogItem[]>(`/admin/catalogs/${type}?${query}`, { signal: options.signal })
 }
 
+
+export function getCatalogItem(type: CatalogType, id: string, signal?: AbortSignal) {
+  return apiRequest<CatalogItem>(
+    `/admin/catalogs/${type}/${encodeURIComponent(id)}`,
+    { signal }
+  )
+}
+
 export function createCatalogItem(type: CatalogType, payload: CatalogPayload) {
   return apiRequest<CatalogItem>(`/admin/catalogs/${type}`, {
     method: 'POST',

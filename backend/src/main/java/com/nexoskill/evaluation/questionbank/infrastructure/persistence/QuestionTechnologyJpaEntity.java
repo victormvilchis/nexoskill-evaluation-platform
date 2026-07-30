@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
+import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -15,7 +16,7 @@ public class QuestionTechnologyJpaEntity {
     @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
     private String publicId;
 
-    @Column(name = "TECHNOLOGY_CODE", nullable = false, unique = true, length = 80)
+    @Column(name = "TECHNOLOGY_CODE", nullable = false, length = 80)
     private String code;
 
     @Column(name = "TECHNOLOGY_NAME", nullable = false, length = 160)
@@ -27,6 +28,13 @@ public class QuestionTechnologyJpaEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "STATUS", nullable = false, length = 20)
     private QuestionTechnologyStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "CONTENT_SCOPE", nullable = false, length = 20)
+    private ContentScope contentScope;
+
+    @Column(name = "OWNER_ORGANIZATION_ID")
+    private Long ownerOrganizationId;
 
     @Column(name = "DISPLAY_ORDER", nullable = false)
     private int displayOrder;
@@ -50,13 +58,16 @@ public class QuestionTechnologyJpaEntity {
     protected QuestionTechnologyJpaEntity() { }
 
     public static QuestionTechnologyJpaEntity create(String publicId, String code, String name,
-            String description, int displayOrder, Long actorId, Instant now) {
+            String description, int displayOrder, ContentScope contentScope, Long ownerOrganizationId,
+            Long actorId, Instant now) {
         QuestionTechnologyJpaEntity entity = new QuestionTechnologyJpaEntity();
         entity.publicId = publicId;
         entity.code = code;
         entity.name = name;
         entity.description = description;
         entity.status = QuestionTechnologyStatus.ACTIVE;
+        entity.contentScope = contentScope;
+        entity.ownerOrganizationId = ownerOrganizationId;
         entity.displayOrder = displayOrder;
         entity.createdBy = actorId;
         entity.updatedBy = actorId;
@@ -85,6 +96,8 @@ public class QuestionTechnologyJpaEntity {
     public String getName() { return name; }
     public String getDescription() { return description; }
     public QuestionTechnologyStatus getStatus() { return status; }
+    public ContentScope getContentScope() { return contentScope; }
+    public Long getOwnerOrganizationId() { return ownerOrganizationId; }
     public int getDisplayOrder() { return displayOrder; }
     public Long getCreatedBy() { return createdBy; }
     public Long getUpdatedBy() { return updatedBy; }

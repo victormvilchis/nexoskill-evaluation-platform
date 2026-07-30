@@ -8,6 +8,7 @@ import { TableActionLink, TableActions } from '../shared/components/TableActions
 import { TablePagination } from '../shared/components/TablePagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { FormStatus, FormSummary } from '../shared/types/forms'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { normalizePagedResponse, parsePage, parsePageSize, type PagedResponse, type PageSize } from '../shared/types/pagination'
 
 const formStatusLabel: Record<FormStatus, string> = {
@@ -20,6 +21,9 @@ function formatDate(value?: string) {
 }
 
 export function AdminFormsPage() {
+  const { user } = useAuth()
+  const canCreate = user?.permissions.includes('FORM_CREATE') ?? false
+  const canUpdate = user?.permissions.includes('FORM_UPDATE') ?? false
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
   const [status, setStatus] = useState(searchParams.get('status') ?? 'ACTIVE')
@@ -80,7 +84,7 @@ export function AdminFormsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Evaluaciones</p><h1>Formularios</h1><p className="muted">Diseña evaluaciones y prácticas reutilizando preguntas.</p></div><Link className="primary-button button-link" to="/admin/forms/new"><Icon name="plus" size={16} /> Nuevo formulario</Link></header>
+      <header className="ns-page-header"><div><p className="eyebrow">Evaluaciones</p><h1>Formularios</h1><p className="muted">Diseña evaluaciones y prácticas reutilizando preguntas.</p></div>{canCreate && <Link className="primary-button button-link" to="/admin/forms/new"><Icon name="plus" size={16} /> Nuevo formulario</Link>}</header>
 
       <FilterToolbar hasActiveFilters={hasFilters} onClear={() => { setQuery(''); setStatus('ACTIVE'); setMode(''); updateUrl({ query: undefined, status: undefined, mode: undefined, page: undefined }) }}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre o código" />
@@ -102,7 +106,10 @@ export function AdminFormsPage() {
               <td><span>{form.sectionCount} {form.sectionCount === 1 ? 'sección' : 'secciones'}</span><small>{form.questionCount} {form.questionCount === 1 ? 'pregunta' : 'preguntas'}</small></td>
               <td><span>{form.startsAt ? `Desde ${formatDate(form.startsAt)}` : 'Inicio inmediato'}</span><small>{form.endsAt ? `Hasta ${formatDate(form.endsAt)}` : 'Sin fecha de cierre'}</small></td>
               <td><span className={`status-badge status-${form.status.toLowerCase()}`}>{formStatusLabel[form.status]}</span></td>
-              <td><TableActions><TableActionLink to={`/admin/forms/${form.publicId}/edit`} label="Editar" icon="edit" tone="primary" /></TableActions></td>
+              <td><TableActions>
+                <TableActionLink to={`/admin/forms/${form.publicId}`} label="Ver" icon="eye" />
+                {canUpdate && <TableActionLink to={`/admin/forms/${form.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
+              </TableActions></td>
             </tr>)}
           </tbody>
         </table></div>

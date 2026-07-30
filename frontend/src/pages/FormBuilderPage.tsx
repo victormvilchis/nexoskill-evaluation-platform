@@ -13,15 +13,15 @@ const initial: FormPayload = {
   oneActiveAttempt: true, thankYouMessage: 'Gracias por completar el formulario.', sections: []
 }
 
-function Toggle({ checked, onChange, title, description }: { checked: boolean; onChange: (value: boolean) => void; title: string; description?: string }) {
+function Toggle({ checked, onChange, title, description, disabled = false }: { checked: boolean; onChange: (value: boolean) => void; title: string; description?: string; disabled?: boolean }) {
   return <label className="ns-toggle-row">
-    <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+    <input type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} />
     <span className="ns-toggle-control" aria-hidden="true" />
     <span className="ns-toggle-copy"><strong>{title}</strong>{description && <small>{description}</small>}</span>
   </label>
 }
 
-export function FormBuilderPage() {
+export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const { id } = useParams()
   const editing = Boolean(id)
   const navigate = useNavigate()
@@ -54,6 +54,7 @@ export function FormBuilderPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (readOnly) return
     if (saving) return
     const firstReadinessError = readiness[0]
 
@@ -82,6 +83,37 @@ export function FormBuilderPage() {
   }
 
   if (loading) return <main className="content-page"><div className="ns-loading-card">Cargando formulario…</div></main>
+
+  if (readOnly) {
+    return <main className="content-page ns-form-builder">
+      <BackButton fallback="/admin/forms" label="Volver a formularios" />
+      <header className="ns-page-header"><div><p className="eyebrow">Formularios</p><h1>Ver formulario</h1><p className="muted">Consulta la configuración sin modificarla.</p></div></header>
+      {error && <div className="ns-inline-alert" role="alert"><strong>No fue posible abrir el formulario</strong><span>{error}</span></div>}
+      {!error && <div className="ns-builder-layout">
+        <div className="ns-builder-main">
+          <section className="ns-card"><div className="ns-card-heading"><h2>Información general</h2></div>
+            <div className="catalog-readonly-grid">
+              <div><span>Título</span><strong>{model.title}</strong></div>
+              <div><span>Modalidad</span><strong>{model.modeCode === 'PRACTICE' ? 'Práctica' : 'Evaluación'}</strong></div>
+              <div><span>Puntaje mínimo</span><strong>{model.passingScore}%</strong></div>
+              <div className="catalog-readonly-wide"><span>Descripción</span><strong>{model.description || 'Sin descripción'}</strong></div>
+            </div>
+          </section>
+          <section className="ns-card"><div className="ns-card-heading"><h2>Contenido</h2></div><p className="muted">{model.sections.length} {model.sections.length === 1 ? 'sección configurada' : 'secciones configuradas'}.</p></section>
+        </div>
+        <aside className="ns-builder-sidebar"><section className="ns-card ns-settings-card"><div className="ns-card-heading"><h2>Configuración</h2></div>
+          <div className="catalog-readonly-grid">
+            <div><span>Aceptar respuestas</span><strong>{model.acceptResponses ? 'Sí' : 'No'}</strong></div>
+            <div><span>Reintentar hasta aprobar</span><strong>{model.retryUntilPassed ? 'Sí' : 'No'}</strong></div>
+            <div><span>Mostrar resultados</span><strong>{model.showResults ? 'Sí' : 'No'}</strong></div>
+            <div><span>Mostrar respuestas correctas</span><strong>{model.showCorrectAnswers ? 'Sí' : 'No'}</strong></div>
+            <div><span>Duración</span><strong>{model.durationMinutes ? `${model.durationMinutes} min` : 'Sin límite'}</strong></div>
+            <div><span>Intentos máximos</span><strong>{model.retryUntilPassed ? 'Hasta aprobar' : model.maxAttempts ?? 'Sin límite'}</strong></div>
+          </div>
+        </section></aside>
+      </div>}
+    </main>
+  }
 
   return <main className="content-page ns-form-builder">
     <BackButton fallback="/admin/forms" label="Volver a formularios" />

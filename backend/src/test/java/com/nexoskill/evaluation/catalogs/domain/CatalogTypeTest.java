@@ -15,10 +15,14 @@ class CatalogTypeTest {
     }
 
     @Test
-    void marksOnlyCategoriesAsTenantAware() {
-        assertThat(CatalogType.CATEGORIES.tenantAware()).isTrue();
+    void marksTheFourOrganizationalCatalogsAsTenantAware() {
         assertThat(Arrays.stream(CatalogType.values())
-                .filter(type -> type != CatalogType.CATEGORIES))
-                .allMatch(type -> !type.tenantAware());
+                .filter(CatalogType::tenantAware)
+                .map(Enum::name))
+                .containsExactlyInAnyOrder(
+                        "CATEGORIES", "TECHNOLOGIES", "PROFESSIONAL_PROFILES",
+                        "TECHNOLOGICAL_PROFILES");
+        assertThat(CatalogType.QUESTION_TYPES.tenantAware()).isFalse();
+        assertThat(CatalogType.DIFFICULTIES.tenantAware()).isFalse();
     }
 }

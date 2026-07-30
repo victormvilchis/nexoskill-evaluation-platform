@@ -1,5 +1,6 @@
 package com.nexoskill.evaluation.certifications.infrastructure.persistence;
 
+import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -9,10 +10,13 @@ public class ProfessionalCertificationProfileJpaEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "CERTIFICATION_PROFILE_ID") private Long id;
     @Column(name = "PUBLIC_ID", nullable = false, length = 36, unique = true) private String publicId;
-    @Column(name = "PROFILE_CODE", nullable = false, length = 120, unique = true) private String code;
+    @Column(name = "PROFILE_CODE", nullable = false, length = 120) private String code;
     @Column(name = "PROFILE_NAME", nullable = false, length = 200) private String name;
     @Column(name = "DESCRIPTION", length = 500) private String description;
     @Column(name = "STATUS", nullable = false, length = 20) private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "CONTENT_SCOPE", nullable = false, length = 20) private ContentScope contentScope;
+    @Column(name = "OWNER_ORGANIZATION_ID") private Long ownerOrganizationId;
     @Column(name = "SUGGESTED_TECH_PROFILE", length = 40) private String suggestedTechnologicalProfile;
     @Column(name = "SORT_ORDER", nullable = false) private int sortOrder;
     @Column(name = "CREATED_BY") private Long createdBy;
@@ -24,13 +28,16 @@ public class ProfessionalCertificationProfileJpaEntity {
     protected ProfessionalCertificationProfileJpaEntity() {}
 
     public static ProfessionalCertificationProfileJpaEntity create(String publicId, String code, String name,
-            String description, int sortOrder, String suggested, Long actorId, Instant now) {
+            String description, int sortOrder, String suggested, ContentScope contentScope,
+            Long ownerOrganizationId, Long actorId, Instant now) {
         ProfessionalCertificationProfileJpaEntity entity = new ProfessionalCertificationProfileJpaEntity();
         entity.publicId = publicId;
         entity.code = code;
         entity.name = name;
         entity.description = description;
         entity.status = "ACTIVE";
+        entity.contentScope = contentScope;
+        entity.ownerOrganizationId = ownerOrganizationId;
         entity.sortOrder = sortOrder;
         entity.suggestedTechnologicalProfile = suggested;
         entity.createdBy = actorId;
@@ -62,6 +69,8 @@ public class ProfessionalCertificationProfileJpaEntity {
     public String getName() { return name; }
     public String getDescription() { return description; }
     public String getStatus() { return status; }
+    public ContentScope getContentScope() { return contentScope; }
+    public Long getOwnerOrganizationId() { return ownerOrganizationId; }
     public String getSuggestedTechnologicalProfile() { return suggestedTechnologicalProfile; }
     public int getSortOrder() { return sortOrder; }
     public Long getCreatedBy() { return createdBy; }

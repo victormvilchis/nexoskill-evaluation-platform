@@ -43,14 +43,14 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/certification-settings/current")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public Availability availability(HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.availability(tenantContextResolver.resolve(request), actor);
     }
 
     @GetMapping("/certification-catalogs")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public Catalogs catalogs(@RequestParam(required = false) String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         TenantContext tenant = tenantContextResolver.resolve(request);
@@ -59,14 +59,14 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public StudentCertificationDetail get(@PathVariable String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.get(tenantContextResolver.resolve(request), studentPublicId, actor);
     }
 
     @PutMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public StudentCertificationDetail save(@PathVariable String studentPublicId,
             @Valid @RequestBody SaveRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -75,7 +75,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public CycleView createCycle(@PathVariable String studentPublicId, @Valid @RequestBody CycleRequest body,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.createCycle(tenantContextResolver.resolve(request), studentPublicId, body.toCommand(), actor,
@@ -83,7 +83,7 @@ public class StudentCertificationController {
     }
 
     @PutMapping("/students/{studentPublicId}/certifications/{certificationId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public CycleView updateCycle(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @Valid @RequestBody CycleRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -92,7 +92,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/make-primary")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public CycleView makePrimary(@PathVariable String studentPublicId, @PathVariable String certificationId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.makePrimary(tenantContextResolver.resolve(request), studentPublicId, certificationId,
@@ -100,7 +100,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/cancel")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public CycleView cancel(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @RequestBody(required = false) CancelRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -109,7 +109,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public PageResult<AttemptView> attempts(@PathVariable String studentPublicId,
             @PathVariable String certificationId, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size, HttpServletRequest request,
@@ -120,7 +120,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public AttemptView addAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @Valid @RequestBody AttemptRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -129,7 +129,7 @@ public class StudentCertificationController {
     }
 
     @PutMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts/{attemptId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public AttemptView updateAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @PathVariable String attemptId, @Valid @RequestBody AttemptRequest body,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -138,7 +138,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/history")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE') and hasAnyRole('MANAGER', 'SUPERVISOR')")
     public PageResult<HistoryView> history(@PathVariable String studentPublicId,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {

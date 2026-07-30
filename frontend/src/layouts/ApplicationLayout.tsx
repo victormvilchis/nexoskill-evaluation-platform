@@ -28,19 +28,18 @@ const navigationConfig: NavSection[] = [
     items: [
       { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
       { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-      { id: 'students', label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' },
-      {
-        id: 'catalogs',
-        label: 'Catálogos',
-        icon: 'categories',
-        permission: 'CATALOG_VIEW',
-        children: [
-          { id: 'catalog-categories', label: 'Categorías', to: '/admin/catalogs/CATEGORIES', icon: 'categories' },
-          { id: 'catalog-technologies', label: 'Tecnologías', to: '/admin/catalogs/TECHNOLOGIES', icon: 'code' },
-          { id: 'catalog-professional-profiles', label: 'Perfiles', to: '/admin/catalogs/PROFESSIONAL_PROFILES', icon: 'profile' },
-          { id: 'catalog-technological-profiles', label: 'Perfiles tecnológicos', to: '/admin/catalogs/TECHNOLOGICAL_PROFILES', icon: 'profile' }
-        ]
-      }
+      { id: 'students', label: 'Estudiantes', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' }
+    ]
+  },
+  {
+    id: 'catalogs',
+    label: 'Catálogos',
+    icon: 'categories',
+    items: [
+      { id: 'catalog-categories', label: 'Categorías', to: '/admin/catalogs/CATEGORIES', icon: 'categories', permission: 'CATALOG_VIEW' },
+      { id: 'catalog-technologies', label: 'Tecnologías', to: '/admin/catalogs/TECHNOLOGIES', icon: 'code', permission: 'CATALOG_VIEW' },
+      { id: 'catalog-professional-profiles', label: 'Perfiles', to: '/admin/catalogs/PROFESSIONAL_PROFILES', icon: 'profile', permission: 'CATALOG_VIEW' },
+      { id: 'catalog-technological-profiles', label: 'Perfiles tecnológicos', to: '/admin/catalogs/TECHNOLOGICAL_PROFILES', icon: 'profile', permission: 'CATALOG_VIEW' }
     ]
   },
   {
@@ -81,7 +80,7 @@ export function ApplicationLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(['administration', 'content'])
+    () => new Set(['administration', 'catalogs', 'content'])
   )
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(['catalogs'])

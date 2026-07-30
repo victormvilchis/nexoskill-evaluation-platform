@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -110,16 +111,23 @@ public class LearningCollectionService {
         String normalizedStatus = normalizeOptionalFormStatus(status);
 
         var tenant = tenantContextResolver.resolve(request);
-        return formRepository.findAll().stream()
-                .filter(form -> accessPolicy.canRead(GlobalContentType.FORM, form.id, form.contentScope,
-                        form.ownerOrganizationId, tenant))
+        return formRepository.searchVisible(
+                        normalizedQuery == null ? null : "%" + normalizedQuery + "%",
+                        normalizedStatus,
+                        null,
+                        tenant.globalScope(),
+                        tenant.organizationId(),
+                        accessPolicy.allowsAllGlobal(tenant),
+                        ContentScope.ORGANIZATION,
+                        ContentScope.GLOBAL,
+                        GlobalContentType.FORM,
+                        GrantStatus.ACTIVE,
+                        DistributionMode.GLOBAL_REFERENCE,
+                        EditorialStatus.PUBLISHED,
+                        Instant.now(),
+                        Pageable.unpaged(Sort.by(Sort.Direction.ASC, "title")))
+                .stream()
                 .filter(form -> !"ARCHIVED".equals(form.status))
-                .filter(form -> normalizedStatus == null
-                        || normalizedStatus.equals(form.status))
-                .filter(form -> normalizedQuery == null
-                        || formSearchableText(form).contains(normalizedQuery))
-                .sorted(Comparator.comparing(
-                        form -> form.title.toLowerCase(Locale.ROOT)))
                 .map(form -> new LearningCollectionModels.FormOption(
                         form.publicId,
                         form.code,
@@ -463,17 +471,6 @@ public class LearningCollectionService {
         return Normalizer.normalize(value.trim(), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "")
                 .toLowerCase(Locale.ROOT);
-    }
-
-    private static String searchableText(LearningCollectionJpaEntity collection) {
-        return normalizeForSearch(
-                collection.name + " "
-                        + collection.code + " "
-                        + Objects.toString(collection.description, ""));
-    }
-
-    private static String formSearchableText(FormJpaEntity form) {
-        return normalizeForSearch(form.title + " " + form.code);
     }
 
     private static String normalizeForSearch(String value) {

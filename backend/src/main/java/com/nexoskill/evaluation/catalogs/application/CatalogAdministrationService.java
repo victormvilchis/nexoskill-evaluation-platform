@@ -1,23 +1,48 @@
 package com.nexoskill.evaluation.catalogs.application;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
-import com.nexoskill.evaluation.catalogs.application.CatalogModels.*;
+import com.nexoskill.evaluation.catalogs.application.CatalogModels.Dependencies;
+import com.nexoskill.evaluation.catalogs.application.CatalogModels.Item;
+import com.nexoskill.evaluation.catalogs.application.CatalogModels.TypeSummary;
+import com.nexoskill.evaluation.catalogs.application.CatalogModels.Upsert;
 import com.nexoskill.evaluation.catalogs.domain.CatalogType;
-import com.nexoskill.evaluation.certifications.infrastructure.persistence.*;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.CertificationTechnologyJpaEntity;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.CertificationTechnologyRepository;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.ProfessionalCertificationProfileJpaEntity;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.ProfessionalCertificationProfileRepository;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.TechnologicalProfileCatalogJpaEntity;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.TechnologicalProfileCatalogRepository;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
-import com.nexoskill.evaluation.questionbank.infrastructure.persistence.*;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionDifficultyJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTechnologyJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTypeJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionCategoryRepository;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionDifficultyRepository;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionTechnologyRepository;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionTypeRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,96 +89,85 @@ public class CatalogAdministrationService {
 
     @Transactional(readOnly = true)
     public List<TypeSummary> types(TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
-        return Arrays.stream(CatalogType.values()).map(this::typeSummary).toList();
+        requireTenant(tenant);
+        return Arrays.stream(CatalogType.values())
+                .map(type -> typeSummary(type, tenant))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<Item> items(CatalogType type, String status, String organizationPublicId,
             TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
+        requireTenant(tenant);
         String normalizedStatus = parseStatus(status);
-        return switch (type) {
-            case CATEGORIES -> categoryItems(normalizedStatus, organizationPublicId);
-            case TECHNOLOGIES -> technologies.findAllByOrderByDisplayOrderAscNameAsc().stream()
-                    .filter(value -> matchesStatus(value.getStatus().name(), normalizedStatus))
-                    .map(this::technologyItem).toList();
-            case PROFESSIONAL_PROFILES -> profiles.findAllByOrderBySortOrderAscNameAsc().stream()
-                    .filter(value -> matchesStatus(value.getStatus(), normalizedStatus))
-                    .map(this::profileItem).toList();
-            case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findAll().stream()
-                    .filter(value -> matchesStatus(value.getStatus(), normalizedStatus))
-                    .sorted(Comparator.comparingInt(TechnologicalProfileCatalogJpaEntity::getDisplayOrder)
-                            .thenComparing(TechnologicalProfileCatalogJpaEntity::getName))
-                    .map(this::technologicalProfileItem).toList();
-            case QUESTION_TYPES -> types.findAllByOrderByDisplayOrderAscNameAsc().stream()
-                    .filter(value -> value.getStatus() != CatalogStatus.DELETED)
-                    .filter(value -> matchesStatus(value.getStatus().name(), normalizedStatus))
-                    .map(this::typeItem).toList();
-            case DIFFICULTIES -> difficulties.findAllByOrderBySortOrderAsc().stream()
-                    .filter(value -> value.getStatus() != CatalogStatus.DELETED)
-                    .filter(value -> matchesStatus(value.getStatus().name(), normalizedStatus))
-                    .map(this::difficultyItem).toList();
-        };
+        if (!type.tenantAware() && !tenant.globalAdministrator()) {
+            return globalItems(type, normalizedStatus);
+        }
+        if (tenant.globalAdministrator()) {
+            return filterByOrganization(allItems(type, normalizedStatus), organizationPublicId);
+        }
+        return organizationVisibleItems(type, normalizedStatus, tenant.organizationId());
     }
 
     @Transactional(readOnly = true)
     public Item get(CatalogType type, String id, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
-        return switch (type) {
-            case CATEGORIES -> categoryItem(requireCategory(id));
-            case TECHNOLOGIES -> technologyItem(requireTechnology(id));
-            case PROFESSIONAL_PROFILES -> profileItem(requireProfile(id));
-            case TECHNOLOGICAL_PROFILES -> technologicalProfileItem(requireTechnologicalProfile(id));
-            case QUESTION_TYPES -> typeItem(requireType(id));
-            case DIFFICULTIES -> difficultyItem(requireDifficulty(id));
-        };
+        requireTenant(tenant);
+        Item item = getWithoutSecurity(type, id);
+        assertReadable(type, item, tenant);
+        return item;
     }
 
     @Transactional
     public Item create(CatalogType type, Upsert request, Long actorId, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
+        requireTenant(tenant);
         validate(request);
+        OwnershipTarget owner = resolveCreationOwner(type, request.organizationPublicId(), tenant);
         String code = normalizeCode(request.code());
         String name = clean(request.name(), 200);
-        assertUnique(type, null, code, name, request.organizationPublicId());
+        assertUnique(type, null, code, name, owner.scope(), owner.organizationPublicId());
         Instant now = clock.instant();
         Item result = switch (type) {
-            case CATEGORIES -> createCategory(request, code, name, actorId, now);
+            case CATEGORIES -> categoryItem(categories.saveAndFlush(QuestionCategoryJpaEntity.create(
+                    UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
+                    owner.scope(), categoryOwnerId(owner), actorId, now)));
             case TECHNOLOGIES -> {
                 QuestionTechnologyJpaEntity entity = technologies.saveAndFlush(QuestionTechnologyJpaEntity.create(
                         UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
-                        order(request.displayOrder()), actorId, now));
+                        order(request.displayOrder()), owner.scope(), owner.ownerOrganizationId(), actorId, now));
                 synchronizeCertificationTechnology(entity, now);
                 yield technologyItem(entity);
             }
             case PROFESSIONAL_PROFILES -> profileItem(profiles.saveAndFlush(
                     ProfessionalCertificationProfileJpaEntity.create(UUID.randomUUID().toString(), code, name,
                             cleanOptional(request.description(), 500), order(request.displayOrder()),
-                            parseSuggestedProfile(request.suggestedTechnologicalProfile()), actorId, now)));
+                            parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner),
+                            owner.scope(), owner.ownerOrganizationId(), actorId, now)));
             case TECHNOLOGICAL_PROFILES -> technologicalProfileItem(technologicalProfiles.saveAndFlush(
                     TechnologicalProfileCatalogJpaEntity.create(UUID.randomUUID().toString(), code, name,
-                            cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)));
+                            cleanOptional(request.description(), 500), order(request.displayOrder()),
+                            owner.scope(), owner.ownerOrganizationId(), actorId, now)));
             case QUESTION_TYPES -> typeItem(types.saveAndFlush(QuestionTypeJpaEntity.create(code, name,
                     cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)));
             case DIFFICULTIES -> difficultyItem(difficulties.saveAndFlush(QuestionDifficultyJpaEntity.create(code,
                     name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)));
         };
-        record(actorId, "CATALOG_ITEM_CREATED", type, result, "Se creó un valor de catálogo.");
+        record(actorId, "CATALOG_ITEM_CREATED", type, result, "Se creó un valor de catálogo.", tenant);
         return result;
     }
 
     @Transactional
     public Item update(CatalogType type, String id, Upsert request, Long actorId, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
+        requireTenant(tenant);
         validate(request);
+        Item current = getWithoutSecurity(type, id);
+        assertWritable(type, current, tenant);
         String name = clean(request.name(), 200);
-        String currentCode = currentCode(type, id);
-        if (request.code() != null && !normalizeCode(request.code()).equals(currentCode)) {
+        if (request.code() != null && !normalizeCode(request.code()).equals(current.code())) {
             throw new BusinessException("CATALOG_CODE_IMMUTABLE",
                     "El código es estable y no puede modificarse después de crear el registro.");
         }
-        assertUnique(type, id, currentCode, name, getWithoutSecurity(type, id).organizationPublicId());
+        assertUnique(type, id, current.code(), name, ContentScope.valueOf(current.scope()),
+                current.organizationPublicId());
         Instant now = clock.instant();
         Item result = switch (type) {
             case CATEGORIES -> {
@@ -173,8 +187,10 @@ public class CatalogAdministrationService {
             case PROFESSIONAL_PROFILES -> {
                 ProfessionalCertificationProfileJpaEntity entity = requireProfile(id);
                 checkVersion(entity.getVersion(), request.expectedVersion());
+                OwnershipTarget owner = new OwnershipTarget(entity.getContentScope(),
+                        entity.getOwnerOrganizationId(), current.organizationPublicId());
                 entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()),
-                        parseSuggestedProfile(request.suggestedTechnologicalProfile()), actorId, now);
+                        parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner), actorId, now);
                 yield profileItem(profiles.saveAndFlush(entity));
             }
             case TECHNOLOGICAL_PROFILES -> {
@@ -196,14 +212,16 @@ public class CatalogAdministrationService {
                 yield difficultyItem(difficulties.saveAndFlush(entity));
             }
         };
-        record(actorId, "CATALOG_ITEM_UPDATED", type, result, "Se actualizó un valor de catálogo.");
+        record(actorId, "CATALOG_ITEM_UPDATED", type, result, "Se actualizó un valor de catálogo.", tenant);
         return result;
     }
 
     @Transactional
     public Item changeStatus(CatalogType type, String id, String nextStatus, Long expectedVersion,
             Long actorId, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
+        requireTenant(tenant);
+        Item current = getWithoutSecurity(type, id);
+        assertWritable(type, current, tenant);
         String target = requireOperationalStatus(nextStatus);
         Instant now = clock.instant();
         Item result = switch (type) {
@@ -247,13 +265,12 @@ public class CatalogAdministrationService {
             }
         };
         record(actorId, target.equals(ACTIVE) ? "CATALOG_ITEM_ACTIVATED" : "CATALOG_ITEM_DEACTIVATED",
-                type, result, "Se cambió el estado del valor de catálogo.");
+                type, result, "Se cambió el estado del valor de catálogo.", tenant);
         return result;
     }
 
     @Transactional(readOnly = true)
     public Dependencies dependencies(CatalogType type, String id, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
         Item item = get(type, id, tenant);
         long count = dependencyCount(type, dependencyKey(type, id));
         List<String> details = count == 0 ? List.of() : List.of(dependencyLabel(type, count));
@@ -262,8 +279,9 @@ public class CatalogAdministrationService {
 
     @Transactional
     public void delete(CatalogType type, String id, Long expectedVersion, Long actorId, TenantContext tenant) {
-        requireGlobalAdministrator(tenant);
-        Item item = get(type, id, tenant);
+        requireTenant(tenant);
+        Item item = getWithoutSecurity(type, id);
+        assertWritable(type, item, tenant);
         if (!INACTIVE.equals(item.status())) {
             throw new BusinessException("CATALOG_MUST_BE_INACTIVE",
                     "Primero debes inactivar el registro antes de eliminarlo.");
@@ -296,121 +314,249 @@ public class CatalogAdministrationService {
             case DIFFICULTIES -> { difficulties.delete(requireDifficulty(id)); difficulties.flush(); }
         }
         record(actorId, "CATALOG_ITEM_DELETED", type, item,
-                "Se eliminó físicamente un valor inactivo sin dependencias.");
+                "Se eliminó físicamente un valor inactivo sin dependencias.", tenant);
     }
 
-    private TypeSummary typeSummary(CatalogType type) {
-        List<Item> values = itemsWithoutSecurity(type);
+    private TypeSummary typeSummary(CatalogType type, TenantContext tenant) {
+        List<Item> values = tenant.globalAdministrator()
+                ? allItems(type, null)
+                : organizationVisibleItems(type, null, tenant.organizationId());
         return new TypeSummary(type, type.label(), type.description(),
                 values.stream().filter(value -> ACTIVE.equals(value.status())).count(),
                 values.stream().filter(value -> INACTIVE.equals(value.status())).count(),
-                values.stream().map(Item::updatedAt).filter(Objects::nonNull).max(Comparator.naturalOrder()).orElse(null),
+                values.stream().map(Item::updatedAt).filter(Objects::nonNull)
+                        .max(Comparator.naturalOrder()).orElse(null),
                 type.tenantAware());
     }
 
-    private List<Item> itemsWithoutSecurity(CatalogType type) {
+    private List<Item> organizationVisibleItems(CatalogType type, String status, Long organizationId) {
         return switch (type) {
-            case CATEGORIES -> categories.findAll().stream().filter(value -> value.getStatus() != CatalogStatus.DELETED)
-                    .map(this::categoryItem).toList();
-            case TECHNOLOGIES -> technologies.findAllByOrderByDisplayOrderAscNameAsc().stream().map(this::technologyItem).toList();
-            case PROFESSIONAL_PROFILES -> profiles.findAllByOrderBySortOrderAscNameAsc().stream().map(this::profileItem).toList();
-            case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findAll().stream().map(this::technologicalProfileItem).toList();
-            case QUESTION_TYPES -> types.findAllByOrderByDisplayOrderAscNameAsc().stream()
-                    .filter(value -> value.getStatus() != CatalogStatus.DELETED).map(this::typeItem).toList();
-            case DIFFICULTIES -> difficulties.findAllByOrderBySortOrderAsc().stream()
-                    .filter(value -> value.getStatus() != CatalogStatus.DELETED).map(this::difficultyItem).toList();
+            case CATEGORIES -> categories.findVisible(organizationId, status == null ? null : CatalogStatus.valueOf(status))
+                    .stream().filter(value -> value.getStatus() != CatalogStatus.DELETED).map(this::categoryListItem).toList();
+            case TECHNOLOGIES -> technologies.findVisible(organizationId,
+                            status == null ? null : QuestionTechnologyStatus.valueOf(status))
+                    .stream().map(this::technologyListItem).toList();
+            case PROFESSIONAL_PROFILES -> profiles.findVisible(organizationId, status).stream().map(this::profileListItem).toList();
+            case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findVisible(organizationId, status).stream()
+                    .map(this::technologicalProfileListItem).toList();
+            case QUESTION_TYPES, DIFFICULTIES -> globalItems(type, status);
         };
     }
 
-    private List<Item> categoryItems(String status, String organizationPublicId) {
-        Long organizationId = null;
-        if (organizationPublicId != null && !organizationPublicId.isBlank()) {
-            organizationId = organizations.findByPublicId(organizationPublicId.trim())
-                    .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización solicitada no existe."))
-                    .getId();
-        }
-        Long selectedOrganizationId = organizationId;
-        return categories.findAll().stream()
-                .filter(value -> value.getStatus() != CatalogStatus.DELETED)
-                .filter(value -> matchesStatus(value.getStatus().name(), status))
-                .filter(value -> selectedOrganizationId == null || Objects.equals(value.getOwnerOrganizationId(), selectedOrganizationId))
-                .sorted(Comparator.comparing(QuestionCategoryJpaEntity::getName))
-                .map(this::categoryItem).toList();
+    private List<Item> globalItems(CatalogType type, String status) {
+        return allItems(type, status).stream().filter(value -> "GLOBAL".equals(value.scope())).toList();
     }
 
-    private Item createCategory(Upsert request, String code, String name, Long actorId, Instant now) {
-        OrganizationJpaEntity owner = request.organizationPublicId() == null || request.organizationPublicId().isBlank()
-                ? organizations.findByCode(OrganizationJpaEntity.GLOBAL_CODE)
-                    .orElseThrow(() -> new BusinessException("GLOBAL_ORGANIZATION_NOT_FOUND", "La organización GLOBAL no está configurada."))
-                : organizations.findByPublicId(request.organizationPublicId().trim())
-                    .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización solicitada no existe."));
-        ContentScope scope = owner.isGlobal() ? ContentScope.GLOBAL : ContentScope.ORGANIZATION;
-        QuestionCategoryJpaEntity entity = QuestionCategoryJpaEntity.create(UUID.randomUUID().toString(), code,
-                name, cleanOptional(request.description(), 500), scope, owner.getId(), actorId, now);
-        return categoryItem(categories.saveAndFlush(entity));
+    private List<Item> allItems(CatalogType type, String status) {
+        return switch (type) {
+            case CATEGORIES -> categories.findAll().stream()
+                    .filter(value -> value.getStatus() != CatalogStatus.DELETED)
+                    .filter(value -> matchesStatus(value.getStatus().name(), status))
+                    .sorted(Comparator.comparing(QuestionCategoryJpaEntity::getName))
+                    .map(this::categoryListItem).toList();
+            case TECHNOLOGIES -> technologies.findAllByOrderByDisplayOrderAscNameAsc().stream()
+                    .filter(value -> matchesStatus(value.getStatus().name(), status)).map(this::technologyListItem).toList();
+            case PROFESSIONAL_PROFILES -> profiles.findAllByOrderBySortOrderAscNameAsc().stream()
+                    .filter(value -> matchesStatus(value.getStatus(), status)).map(this::profileListItem).toList();
+            case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findAll().stream()
+                    .filter(value -> matchesStatus(value.getStatus(), status))
+                    .sorted(Comparator.comparingInt(TechnologicalProfileCatalogJpaEntity::getDisplayOrder)
+                            .thenComparing(TechnologicalProfileCatalogJpaEntity::getName))
+                    .map(this::technologicalProfileListItem).toList();
+            case QUESTION_TYPES -> types.findAllByOrderByDisplayOrderAscNameAsc().stream()
+                    .filter(value -> value.getStatus() != CatalogStatus.DELETED)
+                    .filter(value -> matchesStatus(value.getStatus().name(), status)).map(this::typeListItem).toList();
+            case DIFFICULTIES -> difficulties.findAllByOrderBySortOrderAsc().stream()
+                    .filter(value -> value.getStatus() != CatalogStatus.DELETED)
+                    .filter(value -> matchesStatus(value.getStatus().name(), status)).map(this::difficultyListItem).toList();
+        };
+    }
+
+    private List<Item> filterByOrganization(List<Item> values, String organizationPublicId) {
+        if (organizationPublicId == null || organizationPublicId.isBlank()) return values;
+        OrganizationJpaEntity organization = organizations.findByPublicId(organizationPublicId.trim())
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización solicitada no existe."));
+        if (organization.isGlobal()) {
+            return values.stream().filter(value -> "GLOBAL".equals(value.scope())).toList();
+        }
+        return values.stream().filter(value -> Objects.equals(organization.getPublicId(), value.organizationPublicId())).toList();
     }
 
     private Item categoryItem(QuestionCategoryJpaEntity value) {
+        return categoryItem(value, true);
+    }
+
+    private Item categoryListItem(QuestionCategoryJpaEntity value) {
+        return categoryItem(value, false);
+    }
+
+    private Item categoryItem(QuestionCategoryJpaEntity value, boolean includeDependencies) {
         OrganizationJpaEntity owner = organizations.findById(value.getOwnerOrganizationId()).orElse(null);
         return new Item(value.getPublicId(), value.getCode(), value.getName(), value.getDescription(),
                 value.getStatus().name(), 0, value.getContentScope().name(),
-                owner == null ? null : owner.getPublicId(), owner == null ? null : owner.getName(), null,
+                owner == null ? null : owner.getPublicId(), owner == null ? scopeName(value.getContentScope()) : owner.getName(), null,
                 value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.CATEGORIES, value.getId()));
+                value.getVersion(), includeDependencies ? dependencyCount(CatalogType.CATEGORIES, value.getId()) : 0);
     }
 
     private Item technologyItem(QuestionTechnologyJpaEntity value) {
+        return technologyItem(value, true);
+    }
+
+    private Item technologyListItem(QuestionTechnologyJpaEntity value) {
+        return technologyItem(value, false);
+    }
+
+    private Item technologyItem(QuestionTechnologyJpaEntity value, boolean includeDependencies) {
+        OrganizationJpaEntity owner = organization(value.getOwnerOrganizationId());
         return new Item(value.getPublicId(), value.getCode(), value.getName(), value.getDescription(),
-                value.getStatus().name(), value.getDisplayOrder(), "GLOBAL", null, "GLOBAL", null,
+                value.getStatus().name(), value.getDisplayOrder(), value.getContentScope().name(),
+                owner == null ? null : owner.getPublicId(), owner == null ? scopeName(value.getContentScope()) : owner.getName(), null,
                 value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.TECHNOLOGIES, value.getId()));
+                value.getVersion(), includeDependencies ? dependencyCount(CatalogType.TECHNOLOGIES, value.getId()) : 0);
     }
 
     private Item profileItem(ProfessionalCertificationProfileJpaEntity value) {
+        return profileItem(value, true);
+    }
+
+    private Item profileListItem(ProfessionalCertificationProfileJpaEntity value) {
+        return profileItem(value, false);
+    }
+
+    private Item profileItem(ProfessionalCertificationProfileJpaEntity value, boolean includeDependencies) {
+        OrganizationJpaEntity owner = organization(value.getOwnerOrganizationId());
         return new Item(value.getPublicId(), value.getCode(), value.getName(), value.getDescription(),
-                value.getStatus(), value.getSortOrder(), "GLOBAL", null, "GLOBAL",
-                value.getSuggestedTechnologicalProfile(),
-                value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.PROFESSIONAL_PROFILES, value.getId()));
+                value.getStatus(), value.getSortOrder(), value.getContentScope().name(),
+                owner == null ? null : owner.getPublicId(), owner == null ? scopeName(value.getContentScope()) : owner.getName(),
+                value.getSuggestedTechnologicalProfile(), value.getCreatedBy(), value.getUpdatedBy(),
+                value.getCreatedAt(), value.getUpdatedAt(), value.getVersion(),
+                includeDependencies ? dependencyCount(CatalogType.PROFESSIONAL_PROFILES, value.getId()) : 0);
     }
 
     private Item technologicalProfileItem(TechnologicalProfileCatalogJpaEntity value) {
+        return technologicalProfileItem(value, true);
+    }
+
+    private Item technologicalProfileListItem(TechnologicalProfileCatalogJpaEntity value) {
+        return technologicalProfileItem(value, false);
+    }
+
+    private Item technologicalProfileItem(TechnologicalProfileCatalogJpaEntity value, boolean includeDependencies) {
+        OrganizationJpaEntity owner = organization(value.getOwnerOrganizationId());
         return new Item(value.getPublicId(), value.getCode(), value.getName(), value.getDescription(),
-                value.getStatus(), value.getDisplayOrder(), "GLOBAL", null, "GLOBAL", null,
+                value.getStatus(), value.getDisplayOrder(), value.getContentScope().name(),
+                owner == null ? null : owner.getPublicId(), owner == null ? scopeName(value.getContentScope()) : owner.getName(), null,
                 value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.TECHNOLOGICAL_PROFILES, value.getCode()));
+                value.getVersion(), includeDependencies ? dependencyCount(CatalogType.TECHNOLOGICAL_PROFILES, value.getCode()) : 0);
     }
 
     private Item typeItem(QuestionTypeJpaEntity value) {
+        return typeItem(value, true);
+    }
+
+    private Item typeListItem(QuestionTypeJpaEntity value) {
+        return typeItem(value, false);
+    }
+
+    private Item typeItem(QuestionTypeJpaEntity value, boolean includeDependencies) {
         return new Item(value.getCode(), value.getCode(), value.getName(), value.getDescription(),
                 value.getStatus().name(), value.getDisplayOrder(), "GLOBAL", null, "GLOBAL", null,
                 value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.QUESTION_TYPES, value.getCode()));
+                value.getVersion(), includeDependencies ? dependencyCount(CatalogType.QUESTION_TYPES, value.getCode()) : 0);
     }
 
     private Item difficultyItem(QuestionDifficultyJpaEntity value) {
+        return difficultyItem(value, true);
+    }
+
+    private Item difficultyListItem(QuestionDifficultyJpaEntity value) {
+        return difficultyItem(value, false);
+    }
+
+    private Item difficultyItem(QuestionDifficultyJpaEntity value, boolean includeDependencies) {
         return new Item(value.getCode(), value.getCode(), value.getName(), value.getDescription(),
                 value.getStatus().name(), value.getSortOrder(), "GLOBAL", null, "GLOBAL", null,
                 value.getCreatedBy(), value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(),
-                value.getVersion(), dependencyCount(CatalogType.DIFFICULTIES, value.getCode()));
+                value.getVersion(), includeDependencies ? dependencyCount(CatalogType.DIFFICULTIES, value.getCode()) : 0);
+    }
+
+    private OwnershipTarget resolveCreationOwner(CatalogType type, String requestedOrganizationPublicId,
+            TenantContext tenant) {
+        if (!type.tenantAware()) {
+            requireGlobalScopeAdministrator(tenant);
+            return new OwnershipTarget(ContentScope.GLOBAL, null, null);
+        }
+        if (!tenant.globalAdministrator()) {
+            if (!tenant.hasOrganization()) throw new AccessDeniedException("No se pudo resolver la organización autenticada.");
+            if (requestedOrganizationPublicId != null && !requestedOrganizationPublicId.isBlank()
+                    && !requestedOrganizationPublicId.equals(tenant.organizationPublicId())) {
+                throw new AccessDeniedException("No puedes seleccionar una organización distinta a la de tu sesión.");
+            }
+            OrganizationJpaEntity organization = requireOperationalOrganization(tenant.organizationPublicId());
+            return new OwnershipTarget(ContentScope.ORGANIZATION, organization.getId(), organization.getPublicId());
+        }
+        if (requestedOrganizationPublicId != null && !requestedOrganizationPublicId.isBlank()) {
+            OrganizationJpaEntity organization = requireOperationalOrganization(requestedOrganizationPublicId);
+            return new OwnershipTarget(ContentScope.ORGANIZATION, organization.getId(), organization.getPublicId());
+        }
+        if (!tenant.globalScope() && tenant.hasOrganization()) {
+            OrganizationJpaEntity organization = requireOperationalOrganization(tenant.organizationPublicId());
+            return new OwnershipTarget(ContentScope.ORGANIZATION, organization.getId(), organization.getPublicId());
+        }
+        return new OwnershipTarget(ContentScope.GLOBAL, null, null);
+    }
+
+    private OrganizationJpaEntity requireOperationalOrganization(String publicId) {
+        OrganizationJpaEntity organization = organizations.findByPublicId(publicId)
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización solicitada no existe."));
+        if (organization.getOrganizationType() != OrganizationType.CUSTOMER
+                || !organization.isOperational(LocalDate.now(clock))) {
+            throw new BusinessException("ORGANIZATION_NOT_OPERATIONAL",
+                    "La organización propietaria debe ser comercial y estar activa.");
+        }
+        return organization;
+    }
+
+    private Long categoryOwnerId(OwnershipTarget owner) {
+        if (owner.scope() == ContentScope.ORGANIZATION) return owner.ownerOrganizationId();
+        return organizations.findByCode(OrganizationJpaEntity.GLOBAL_CODE)
+                .orElseThrow(() -> new BusinessException("GLOBAL_ORGANIZATION_NOT_FOUND",
+                        "La organización GLOBAL no está configurada."))
+                .getId();
+    }
+
+    private void assertReadable(CatalogType type, Item item, TenantContext tenant) {
+        if (tenant.globalAdministrator()) return;
+        if (!type.tenantAware() || "GLOBAL".equals(item.scope())) return;
+        if (!Objects.equals(tenant.organizationPublicId(), item.organizationPublicId())) {
+            throw new AccessDeniedException("No tienes acceso a recursos de otra organización.");
+        }
+    }
+
+    private void assertWritable(CatalogType type, Item item, TenantContext tenant) {
+        if (tenant.globalAdministrator()) return;
+        if (!type.tenantAware() || "GLOBAL".equals(item.scope())) {
+            throw new AccessDeniedException("No puedes modificar contenido GLOBAL.");
+        }
+        if (!Objects.equals(tenant.organizationPublicId(), item.organizationPublicId())) {
+            throw new AccessDeniedException("No puedes modificar recursos de otra organización.");
+        }
     }
 
     private void assertUnique(CatalogType type, String excludedId, String code, String name,
-            String organizationPublicId) {
+            ContentScope scope, String organizationPublicId) {
         String normalizedName = normalizeName(name);
-        String requestedOwner = normalizeOrganization(organizationPublicId);
-        boolean duplicate = itemsWithoutSecurity(type).stream()
+        boolean duplicate = allItems(type, null).stream()
                 .filter(value -> excludedId == null || !value.id().equals(excludedId))
-                .anyMatch(value -> {
-                    boolean duplicatedCode = value.code().equalsIgnoreCase(code);
-                    boolean sameOwner = type != CatalogType.CATEGORIES
-                            || Objects.equals(categoryOwnerKey(value), requestedOwner);
-                    boolean duplicatedName = sameOwner && normalizeName(value.name()).equals(normalizedName);
-                    return duplicatedCode || duplicatedName;
-                });
+                .filter(value -> Objects.equals(scope.name(), value.scope()))
+                .filter(value -> scope == ContentScope.GLOBAL
+                        || Objects.equals(organizationPublicId, value.organizationPublicId()))
+                .anyMatch(value -> value.code().equalsIgnoreCase(code)
+                        || normalizeName(value.name()).equals(normalizedName));
         if (duplicate) {
             throw new BusinessException("CATALOG_DUPLICATE",
-                    "Ya existe un registro con ese nombre o código dentro del catálogo seleccionado.");
+                    "Ya existe un registro con ese nombre o código dentro de la organización propietaria.");
         }
     }
 
@@ -458,26 +604,27 @@ public class CatalogAdministrationService {
 
     private QuestionCategoryJpaEntity requireCategory(String id) {
         return categories.findByPublicId(id).filter(value -> value.getStatus() != CatalogStatus.DELETED)
-                .orElseThrow(() -> notFound());
-    }
-    private QuestionTechnologyJpaEntity requireTechnology(String id) {
-        return technologies.findByPublicId(id).orElseThrow(() -> notFound());
-    }
-    private ProfessionalCertificationProfileJpaEntity requireProfile(String id) {
-        return profiles.findByPublicId(id).orElseThrow(() -> notFound());
-    }
-    private TechnologicalProfileCatalogJpaEntity requireTechnologicalProfile(String id) {
-        return technologicalProfiles.findByPublicId(id).orElseThrow(() -> notFound());
-    }
-    private QuestionTypeJpaEntity requireType(String id) {
-        return types.findById(id).orElseThrow(() -> notFound());
-    }
-    private QuestionDifficultyJpaEntity requireDifficulty(String id) {
-        return difficulties.findById(id).orElseThrow(() -> notFound());
+                .orElseThrow(this::notFound);
     }
 
-    private String currentCode(CatalogType type, String id) {
-        return getWithoutSecurity(type, id).code();
+    private QuestionTechnologyJpaEntity requireTechnology(String id) {
+        return technologies.findByPublicId(id).orElseThrow(this::notFound);
+    }
+
+    private ProfessionalCertificationProfileJpaEntity requireProfile(String id) {
+        return profiles.findByPublicId(id).orElseThrow(this::notFound);
+    }
+
+    private TechnologicalProfileCatalogJpaEntity requireTechnologicalProfile(String id) {
+        return technologicalProfiles.findByPublicId(id).orElseThrow(this::notFound);
+    }
+
+    private QuestionTypeJpaEntity requireType(String id) {
+        return types.findById(id).orElseThrow(this::notFound);
+    }
+
+    private QuestionDifficultyJpaEntity requireDifficulty(String id) {
+        return difficulties.findById(id).orElseThrow(this::notFound);
     }
 
     private Item getWithoutSecurity(CatalogType type, String id) {
@@ -522,10 +669,15 @@ public class CatalogAdministrationService {
         return expected == null || expected.equals(current);
     }
 
-    private void requireGlobalAdministrator(TenantContext tenant) {
-        if (tenant == null || !tenant.globalAdministrator()) {
-            throw new BusinessException("CATALOG_ADMIN_FORBIDDEN",
-                    "Solo el Administrador global puede administrar los catálogos maestros.");
+    private void requireTenant(TenantContext tenant) {
+        if (tenant == null || (!tenant.globalAdministrator() && !tenant.hasOrganization())) {
+            throw new AccessDeniedException("No se pudo resolver el contexto organizacional.");
+        }
+    }
+
+    private void requireGlobalScopeAdministrator(TenantContext tenant) {
+        if (tenant == null || !tenant.globalAdministrator() || !tenant.globalScope()) {
+            throw new AccessDeniedException("Este catálogo solamente puede modificarse desde el contexto GLOBAL.");
         }
     }
 
@@ -534,15 +686,6 @@ public class CatalogAdministrationService {
             throw new BusinessException("CATALOG_CONCURRENT_MODIFICATION",
                     "La información fue modificada por otra sesión. Actualiza la página.");
         }
-    }
-
-
-    private String categoryOwnerKey(Item value) {
-        return "GLOBAL".equals(value.scope()) ? "GLOBAL" : normalizeOrganization(value.organizationPublicId());
-    }
-
-    private String normalizeOrganization(String value) {
-        return value == null || value.isBlank() ? "GLOBAL" : value.trim();
     }
 
     private String normalizeCode(String value) {
@@ -578,6 +721,7 @@ public class CatalogAdministrationService {
     private int order(Integer value) { return value == null ? 0 : Math.max(0, value); }
 
     private void synchronizeCertificationTechnology(QuestionTechnologyJpaEntity master, Instant now) {
+        if (master.getContentScope() != ContentScope.GLOBAL) return;
         CertificationTechnologyJpaEntity bridge = certificationTechnologies.findByMasterTechnologyId(master.getId())
                 .or(() -> certificationTechnologies.findByCodeIgnoreCase(master.getCode()))
                 .orElseGet(() -> CertificationTechnologyJpaEntity.createFromMaster(
@@ -588,12 +732,19 @@ public class CatalogAdministrationService {
         certificationTechnologies.saveAndFlush(bridge);
     }
 
-    private String parseSuggestedProfile(String value) {
+    private String parseSuggestedProfile(String value, OwnershipTarget owner) {
         if (value == null || value.isBlank()) return null;
         String code = normalizeCode(value);
-        TechnologicalProfileCatalogJpaEntity profile = technologicalProfiles.findByCode(code)
+        TechnologicalProfileCatalogJpaEntity profile = technologicalProfiles
+                .findVisible(owner.ownerOrganizationId(), ACTIVE).stream()
+                .filter(candidate -> candidate.getCode().equalsIgnoreCase(code))
+                .filter(candidate -> owner.scope() == ContentScope.ORGANIZATION
+                        || candidate.getContentScope() == ContentScope.GLOBAL)
+                .sorted(Comparator.comparing((TechnologicalProfileCatalogJpaEntity candidate) ->
+                        !Objects.equals(candidate.getOwnerOrganizationId(), owner.ownerOrganizationId())))
+                .findFirst()
                 .orElseThrow(() -> new BusinessException("CATALOG_TECH_PROFILE_INVALID",
-                        "El perfil tecnológico sugerido no existe."));
+                        "El perfil tecnológico sugerido no pertenece al contexto del perfil profesional."));
         if (!ACTIVE.equals(profile.getStatus())) {
             throw new BusinessException("CATALOG_TECH_PROFILE_INACTIVE",
                     "El perfil tecnológico sugerido se encuentra inactivo.");
@@ -601,13 +752,28 @@ public class CatalogAdministrationService {
         return profile.getCode();
     }
 
-    private void record(Long actorId, String eventType, CatalogType type, Item item, String description) {
+    private OrganizationJpaEntity organization(Long id) {
+        return id == null ? null : organizations.findById(id).orElse(null);
+    }
+
+    private String scopeName(ContentScope scope) {
+        return scope == ContentScope.GLOBAL ? "GLOBAL" : null;
+    }
+
+    private void record(Long actorId, String eventType, CatalogType type, Item item,
+            String description, TenantContext tenant) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("catalogType", type.name());
         values.put("catalogItemId", item.id());
         values.put("code", item.code());
         values.put("name", item.name());
         values.put("status", item.status());
+        values.put("scope", item.scope());
+        values.put("actorOrganizationId", tenant.organizationPublicId());
+        values.put("ownerOrganizationId", item.organizationPublicId());
         audit.record(actorId, eventType, "CATALOGS", description, null, null, values, clock.instant());
     }
+
+    private record OwnershipTarget(ContentScope scope, Long ownerOrganizationId,
+            String organizationPublicId) {}
 }

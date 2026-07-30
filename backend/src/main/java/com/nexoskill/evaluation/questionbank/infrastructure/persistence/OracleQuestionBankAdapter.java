@@ -92,7 +92,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         var settings = command.answerSettings();
         var entity = QuestionJpaEntity.create(
                 UUID.randomUUID().toString(), selection.type(), difficulty(command.difficultyCode()),
-                technology(command.technologyPublicId()), command.levelCode(), selection.categories(),
+                technology(command.technologyPublicId(), ownership.scope(), ownership.organizationId()), command.levelCode(), selection.categories(),
                 trim(command.statement()), nullable(command.explanation()),
                 optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
                 nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
@@ -131,7 +131,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.clearOptions();
         questions.flush();
         entity.apply(selection.type(), difficulty(command.difficultyCode()),
-                technology(command.technologyPublicId()), command.levelCode(), selection.categories(),
+                technology(command.technologyPublicId(), entity.getContentScope(), entity.getOwnerOrganizationId()), command.levelCode(), selection.categories(),
                 trim(command.statement()), nullable(command.explanation()),
                 optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
                 nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
@@ -409,7 +409,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                         "La dificultad seleccionada no está disponible."));
     }
 
-    private QuestionTechnologyJpaEntity technology(String publicId) {
+    private QuestionTechnologyJpaEntity technology(String publicId, ContentScope questionScope,
+            Long questionOrganizationId) {
         if (publicId == null || publicId.isBlank()) return null;
         String normalized = PublicIdNormalizer.requiredUuid(publicId, "QUESTION_TECHNOLOGY_INVALID",
                 "La tecnología seleccionada no es válida.");
@@ -419,6 +420,15 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (value.getStatus() != QuestionTechnologyStatus.ACTIVE) {
             throw error("QUESTION_TECHNOLOGY_INACTIVE",
                     "La tecnología seleccionada no se encuentra activa.");
+        }
+        boolean compatible = questionScope == ContentScope.GLOBAL
+                ? value.getContentScope() == ContentScope.GLOBAL
+                : value.getContentScope() == ContentScope.GLOBAL
+                    || (value.getContentScope() == ContentScope.ORGANIZATION
+                        && Objects.equals(value.getOwnerOrganizationId(), questionOrganizationId));
+        if (!compatible) {
+            throw error("QUESTION_TECHNOLOGY_SCOPE_MISMATCH",
+                    "La tecnología seleccionada no pertenece al contexto de la pregunta.");
         }
         return value;
     }

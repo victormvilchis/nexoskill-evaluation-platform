@@ -9,6 +9,7 @@ import { TableActionLink, TableActions } from '../shared/components/TableActions
 import { TablePagination } from '../shared/components/TablePagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { CollectionStatus, CollectionSummary } from '../shared/types/collections'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { normalizePagedResponse, parsePage, parsePageSize, type PagedResponse, type PageSize } from '../shared/types/pagination'
 
 function statusLabel(status: CollectionStatus) {
@@ -19,6 +20,8 @@ function statusLabel(status: CollectionStatus) {
 }
 
 export function AdminCollectionsPage() {
+  const { user } = useAuth()
+  const canManage = user?.permissions.includes('COLLECTION_MANAGE') ?? false
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
   const [status, setStatus] = useState(searchParams.get('status') ?? 'ACTIVE')
@@ -86,7 +89,7 @@ export function AdminCollectionsPage() {
     <main className="content-page resource-page ns-list-page">
       <header className="ns-page-header">
         <div><p className="eyebrow">Aprendizaje</p><h1>Colecciones</h1><p className="muted">Organiza formularios en niveles progresivos.</p></div>
-        <Link className="primary-button button-link" to="/admin/collections/new"><Icon name="plus" size={17} /> Nueva colección</Link>
+        {canManage && <Link className="primary-button button-link" to="/admin/collections/new"><Icon name="plus" size={17} /> Nueva colección</Link>}
       </header>
 
       <FilterToolbar hasActiveFilters={activeFilters} onClear={() => { setQuery(''); setStatus('ACTIVE'); updateUrl({ query: undefined, status: undefined, page: undefined }) }}>
@@ -109,7 +112,10 @@ export function AdminCollectionsPage() {
                 <td className="ns-primary-cell"><strong>{collection.name}</strong><small>{collection.description || 'Sin descripción'}</small><small><code className="ns-code-label">{collection.code}</code></small></td>
                 <td><strong>{collection.levelCount}</strong></td><td>{collection.activeLevelCount}</td>
                 <td><span className={`status-badge status-${collection.status.toLowerCase()}`}>{statusLabel(collection.status)}</span></td>
-                <td><TableActions><TableActionLink to={`/admin/collections/${collection.publicId}`} label="Editar" icon="edit" tone="primary" /></TableActions></td>
+                <td><TableActions>
+                  <TableActionLink to={`/admin/collections/${collection.publicId}`} label="Ver" icon="eye" />
+                  {canManage && <TableActionLink to={`/admin/collections/${collection.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
+                </TableActions></td>
               </tr>)}
             </tbody>
           </table>

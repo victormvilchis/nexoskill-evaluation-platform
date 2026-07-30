@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.shared.interfaces.rest;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.nexoskill.evaluation.authentication.domain.AuthenticationException;
+import com.nexoskill.evaluation.authentication.infrastructure.security.PlatformAccessDeniedHandler;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,17 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final PlatformAccessDeniedHandler platformAccessDeniedHandler;
+
+    /** Conservado para pruebas unitarias aisladas. */
+    public GlobalExceptionHandler() {
+        this.platformAccessDeniedHandler = null;
+    }
+
+    @Autowired
+    public GlobalExceptionHandler(PlatformAccessDeniedHandler platformAccessDeniedHandler) {
+        this.platformAccessDeniedHandler = platformAccessDeniedHandler;
+    }
 
 	@ExceptionHandler(AuthenticationException.class)
 	public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException exception,
@@ -123,6 +136,10 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException exception,
 			HttpServletRequest request) {
 		LOGGER.warn("Access denied on {}: {}", request.getRequestURI(), exception.getMessage());
+        if (platformAccessDeniedHandler != null) {
+            PlatformAccessDeniedHandler.Denial denial = platformAccessDeniedHandler.resolveAndAudit(request);
+            return response(HttpStatus.FORBIDDEN, denial.code(), denial.message(), request.getRequestURI(), null);
+        }
 		return response(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
 				exception.getMessage() == null || exception.getMessage().isBlank()
 						? "No tienes permiso para completar esta operación."

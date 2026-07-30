@@ -28,8 +28,8 @@ public class SecurityConfig {
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http, SessionAuthenticationFilter sessionFilter,
-			StudentSessionAuthenticationFilter studentSessionFilter, OriginProtectionFilter originFilter)
-			throws Exception {
+			StudentSessionAuthenticationFilter studentSessionFilter, OriginProtectionFilter originFilter,
+			PlatformAccessDeniedHandler accessDeniedHandler) throws Exception {
 
 		return http.csrf(csrf -> csrf.disable()).cors(Customizer.withDefaults())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -44,12 +44,7 @@ public class SecurityConfig {
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 					response.getWriter().write(
 							"{\"code\":\"UNAUTHORIZED\"," + "\"message\":\"La sesión no es válida o ha vencido.\"}");
-				}).accessDeniedHandler((request, response, exception) -> {
-					response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-					response.getWriter().write("{\"code\":\"ACCESS_DENIED\","
-							+ "\"message\":\"No tienes permisos para esta operación.\"}");
-				})).addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class)
+				}).accessDeniedHandler(accessDeniedHandler)).addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(sessionFilter, OriginProtectionFilter.class)
 				.addFilterAfter(studentSessionFilter, SessionAuthenticationFilter.class).build();
 	}

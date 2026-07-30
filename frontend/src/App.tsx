@@ -107,10 +107,11 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="COLLECTION_VIEW" />}>
             <Route path="/admin/collections" element={<AdminCollectionsPage />} />
-            <Route path="/admin/collections/:publicId" element={<CollectionDetailPage />} />
+            <Route path="/admin/collections/:publicId" element={<CollectionDetailPage readOnly />} />
           </Route>
           <Route element={<PermissionRoute permission="COLLECTION_MANAGE" />}>
             <Route path="/admin/collections/new" element={<CreateCollectionPage />} />
+            <Route path="/admin/collections/:publicId/edit" element={<CollectionDetailPage />} />
           </Route>
           <Route path="/admin/question-collections" element={<Navigate to="/admin/collections" replace />} />
           <Route path="/admin/question-collections/new" element={<Navigate to="/admin/collections/new" replace />} />
@@ -118,10 +119,13 @@ export default function App() {
 
           <Route element={<PermissionRoute permission="FORM_VIEW" />}>
             <Route path="/admin/forms" element={<AdminFormsPage />} />
-            <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />
+            <Route path="/admin/forms/:id" element={<FormBuilderPage readOnly />} />
           </Route>
           <Route element={<PermissionRoute permission="FORM_CREATE" />}>
             <Route path="/admin/forms/new" element={<FormBuilderPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="FORM_UPDATE" />}>
+            <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />
           </Route>
 
           <Route element={<PermissionRoute permission="CATALOG_VIEW" />}>
@@ -129,8 +133,10 @@ export default function App() {
             <Route path="/admin/catalogs/QUESTION_TYPES" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />
             <Route path="/admin/catalogs/DIFFICULTIES" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />
             <Route path="/admin/catalogs/:type" element={<CatalogItemsPage />} />
-            <Route path="/admin/catalogs/:type/new" element={<CatalogItemsPage />} />
             <Route path="/admin/catalogs/:type/:id" element={<CatalogItemsPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="CATALOG_MANAGE" />}>
+            <Route path="/admin/catalogs/:type/new" element={<CatalogItemsPage />} />
             <Route path="/admin/catalogs/:type/:id/edit" element={<CatalogItemsPage />} />
             <Route path="/admin/catalogs/:type/:id/manage" element={<CatalogItemsPage />} />
           </Route>
