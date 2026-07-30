@@ -13,7 +13,6 @@ import { parsePage, parsePageSize, type PageSize } from '../shared/types/paginat
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { StudentEffectiveStatus, StudentPage } from '../shared/types/students'
-
 const statuses: Array<{ value: StudentEffectiveStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activo' },
   { value: 'ALL', label: 'Todos los estados' },
@@ -32,7 +31,6 @@ function formatDate(value: string | null) {
   if (!value) return 'Sin vencimiento'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
-
 export function AdminStudentsPage() {
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
@@ -49,7 +47,6 @@ export function AdminStudentsPage() {
   const size = parsePageSize(searchParams.get('size'))
   const organization = searchParams.get('organization') ?? ''
   const debouncedQuery = useDebouncedValue(query, 300)
-
   useEffect(() => {
     if (!administrator) return
     const controller = new AbortController()
@@ -58,7 +55,6 @@ export function AdminStudentsPage() {
       .catch(() => { if (!controller.signal.aborted) setOrganizations([]) })
     return () => controller.abort()
   }, [administrator])
-
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
     const currentStatus = statusFromQuery(searchParams.get('status'))
@@ -69,7 +65,6 @@ export function AdminStudentsPage() {
     if (status === 'ACTIVE') next.delete('status'); else next.set('status', status)
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, searchParams, setSearchParams, status])
-
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
@@ -87,7 +82,6 @@ export function AdminStudentsPage() {
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [administrator, organization, page, searchParams, size])
-
   function updateParam(name: string, value: string) {
     const next = new URLSearchParams(searchParams); next.delete('page')
     if (value) next.set(name, value); else next.delete(name)
@@ -104,11 +98,11 @@ export function AdminStudentsPage() {
     if (nextSize === 10) next.delete('size'); else next.set('size', String(nextSize))
     setSearchParams(next)
   }
-
   const columnCount = administrator ? 6 : 5
+  const canImport = certificationOperator && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div>{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</header>
+      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions">{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}{canImport && <Link className="secondary-button button-link" to="/admin/students/import">Importar colaboradores</Link>}</div></header>
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo o código" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
@@ -135,8 +129,6 @@ export function AdminStudentsPage() {
         </tbody></table></div>
         <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={goToPage} onPageSizeChange={changePageSize} />
       </section>
-
-
     </main>
   )
 }

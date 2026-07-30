@@ -3,7 +3,6 @@ import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
-import com.nexoskill.evaluation.questionbank.domain.model.QuestionAvailabilityMode;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
@@ -107,14 +106,14 @@ public final class QuestionServices {
     @Service
     public static class Duplicate {
         private final QuestionBankPort port;
-        private final QuestionSaveService save;
+        private final Create create;
         private final TenantContextResolver tenantContextResolver;
         private final HttpServletRequest request;
 
-        public Duplicate(QuestionBankPort port, QuestionSaveService save,
+        public Duplicate(QuestionBankPort port, Create create,
                 TenantContextResolver tenantContextResolver, HttpServletRequest request) {
             this.port = port;
-            this.save = save;
+            this.create = create;
             this.tenantContextResolver = tenantContextResolver;
             this.request = request;
         }
@@ -151,12 +150,12 @@ public final class QuestionServices {
                         "No fue posible identificar la organización propietaria de la pregunta.");
             }
 
-            List<QuestionOptionCommand> options = source.options().stream()
+            List<QuestionOptionCommand> options = (source.options() == null ? List.<QuestionOptionView>of() : source.options()).stream()
                     .sorted(Comparator.comparingInt(QuestionOptionView::order))
                     .map(option -> new QuestionOptionCommand(option.text(), mediaId(option.media()),
                             option.matchText(), mediaId(option.matchMedia()), option.correct(), option.feedback()))
                     .toList();
-            List<String> tags = source.tags().stream()
+            List<String> tags = (source.tags() == null ? List.<QuestionTagView>of() : source.tags()).stream()
                     .map(Duplicate::tagValue)
                     .filter(value -> value != null && !value.isBlank())
                     .toList();
@@ -172,10 +171,10 @@ public final class QuestionServices {
                     source.statement(), source.explanation(), mediaId(source.promptMedia()),
                     source.codeContent(), settings, options, scope.name(), ownerPublicId, actor);
 
-            QuestionAvailabilityMode availabilityMode = scope == ContentScope.GLOBAL
-                    ? QuestionAvailabilityMode.NONE : null;
-            return save.create(command, availabilityMode, List.of(), tenant,
-                    new QuestionSaveService.Actor(actor, null, null));
+            // Duplicar siempre crea un recurso nuevo dentro del mismo alcance. No ejecuta
+            // los flujos de disponibilidad ni clonación, por lo que una copia GLOBAL nace
+            // sin organizaciones asociadas y una copia organizacional conserva su propietario.
+            return create.execute(command);
         }
 
         private static void assertCanDuplicate(QuestionDetail source,
