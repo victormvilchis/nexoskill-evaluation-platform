@@ -9,7 +9,7 @@ import type {
   StudentEffectiveStatus,
   StudentIdentity,
   StudentPage,
-  StudentPasswordResetResult,
+  StudentCredentialResult,
   StudentSession,
   UpdateStudentPayload
 } from '../../../shared/types/students'
@@ -62,7 +62,7 @@ export function getStudent(publicId: string) {
 }
 
 export function createStudent(payload: CreateStudentPayload) {
-  return apiRequest<StudentDetail>('/admin/students', { method: 'POST', body: JSON.stringify(payload) })
+  return apiRequest<StudentCredentialResult>('/admin/students', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export function updateStudent(publicId: string, payload: UpdateStudentPayload) {
@@ -91,7 +91,7 @@ export function permanentlyDeleteStudent(publicId: string) {
 }
 
 export function resetStudentPassword(publicId: string) {
-  return apiRequest<StudentPasswordResetResult>(`/admin/students/${publicId}/reset-password`, { method: 'POST' })
+  return apiRequest<StudentCredentialResult>(`/admin/students/${publicId}/reset-password`, { method: 'POST' })
 }
 
 export function getStudentSessions(publicId: string) {

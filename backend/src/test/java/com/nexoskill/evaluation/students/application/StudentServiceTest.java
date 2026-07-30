@@ -25,6 +25,7 @@ import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepos
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionRepository;
 import com.nexoskill.evaluation.users.application.service.PasswordPolicy;
+import com.nexoskill.evaluation.users.application.service.SecureTemporaryPasswordGenerator;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
@@ -46,6 +47,7 @@ class StudentServiceTest {
     private StudentSessionRepository sessions;
     private OrganizationRepository organizations;
     private PasswordHasher passwords;
+    private SecureTemporaryPasswordGenerator passwordGenerator;
     private StudentService service;
 
     @BeforeEach
@@ -54,8 +56,10 @@ class StudentServiceTest {
         sessions = mock(StudentSessionRepository.class);
         organizations = mock(OrganizationRepository.class);
         passwords = mock(PasswordHasher.class);
+        passwordGenerator = mock(SecureTemporaryPasswordGenerator.class);
+        when(passwordGenerator.generate()).thenReturn("Generated1!");
         service = new StudentService(students, sessions, organizations, passwords, new PasswordPolicy(),
-                new AppProperties(), mock(AuditLogPort.class), CLOCK);
+                passwordGenerator, new AppProperties(), mock(AuditLogPort.class), CLOCK);
         OrganizationJpaEntity organization = OrganizationJpaEntity.create("org-public", "ACME", "Acme",
                 ContentMode.CLEAN, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), 1L, NOW);
         setId(organization, 20L);
@@ -88,12 +92,14 @@ class StudentServiceTest {
 
     @Test
     void shouldCreateAnInactiveStudentWithoutCreatingASession() {
-        StudentService.StudentDetail created = service.create(TENANT,
+        StudentService.CreateResult result = service.create(TENANT,
                 new StudentService.CreateCommand("stu-001", "ana@example.com", "Ana", "López", null,
-                        "StrongPass1!", StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30)),
+                        StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30)),
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
-        assertThat(created.studentCode()).isEqualTo("STU-001");
-        assertThat(created.status()).isEqualTo(StudentStatus.INACTIVE);
+        assertThat(result.temporaryPassword()).isEqualTo("Generated1!");
+        assertThat(result.student().studentCode()).isEqualTo("STU-001");
+        assertThat(result.student().status()).isEqualTo(StudentStatus.INACTIVE);
+        verify(passwords).encode("Generated1!");
         verify(sessions, never()).save(any(StudentSessionJpaEntity.class));
     }
 

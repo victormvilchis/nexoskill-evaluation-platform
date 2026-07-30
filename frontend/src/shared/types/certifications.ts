@@ -186,6 +186,5 @@ export interface CertificationAttemptPayload {
 }
 
 export interface SaveStudentCertificationPayload {
-  applicability: CertificationApplicability
   cycles: CertificationCyclePayload[]
 }

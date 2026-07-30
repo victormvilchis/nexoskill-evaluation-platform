@@ -98,7 +98,7 @@ public class StudentFoundationService {
     }
 
     @Transactional
-    public StudentView create(TenantContext tenant, CreateCommand command, StudentService.Actor actor) {
+    public CreateResult create(TenantContext tenant, CreateCommand command, StudentService.Actor actor) {
         TenantContext effective = resolveCreateTenant(tenant, command.organizationPublicId());
         OrganizationJpaEntity organization = organizationRepository.findById(effective.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
@@ -107,16 +107,17 @@ public class StudentFoundationService {
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile());
         StudentStatus initialStatus = command.status() == null ? StudentStatus.ACTIVE : command.status();
-        StudentService.StudentDetail created = studentService.create(effective,
+        StudentService.CreateResult creation = studentService.create(effective,
                 new StudentService.CreateCommand(command.studentCode(), command.email(), command.firstName(),
-                        command.lastName(), command.displayName(), command.temporaryPassword(), initialStatus,
+                        command.lastName(), command.displayName(), initialStatus,
                         command.validFrom(), command.expiresAt()), actor);
+        StudentService.StudentDetail created = creation.student();
         updateFoundation(created.publicId(), organization, command.admissionDate(),
                 command.professionalProfilePublicId(), command.technologicalProfilePublicId(),
                 command.appliesTechnologicalCertification(), command.appliesDevelopmentSecurity(),
                 command.appliesNormativeTesting(), command.appliesOne(), command.appliesAgile(), actor.userId(), false);
         recordFoundationAudit(actor, "STUDENT_FOUNDATION_CREATED", created.publicId(), organization, command);
-        return get(tenant, created.publicId());
+        return new CreateResult(get(tenant, created.publicId()), creation.temporaryPassword());
     }
 
     @Transactional
@@ -136,6 +137,7 @@ public class StudentFoundationService {
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), actor.userId(), !java.util.Objects.equals(previous.admissionDate(), command.admissionDate()));
+        recordApplicabilityChanges(actor, previous, command, organization);
         recordFoundationAudit(actor, "STUDENT_FOUNDATION_UPDATED", publicId, organization, command);
         return get(tenant, publicId);
     }
@@ -464,6 +466,36 @@ public class StudentFoundationService {
         }
     }
 
+
+    private void recordApplicabilityChanges(StudentService.Actor actor, StudentView previous,
+            UpdateCommand command, OrganizationJpaEntity organization) {
+        recordApplicabilityChange(actor, previous.publicId(), organization, "TECHNOLOGICAL",
+                previous.appliesTechnologicalCertification(), command.appliesTechnologicalCertification());
+        recordApplicabilityChange(actor, previous.publicId(), organization, "DEVELOPMENT_SECURITY",
+                previous.appliesDevelopmentSecurity(), command.appliesDevelopmentSecurity());
+        recordApplicabilityChange(actor, previous.publicId(), organization, "NORMATIVE_TESTING",
+                previous.appliesNormativeTesting(), command.appliesNormativeTesting());
+        recordApplicabilityChange(actor, previous.publicId(), organization, "ONE",
+                previous.appliesOne(), command.appliesOne());
+        recordApplicabilityChange(actor, previous.publicId(), organization, "AGILE",
+                previous.appliesAgile(), command.appliesAgile());
+    }
+
+    private void recordApplicabilityChange(StudentService.Actor actor, String studentPublicId,
+            OrganizationJpaEntity organization, String area, boolean previous, boolean current) {
+        if (previous == current) return;
+        Map<String, Object> data = new HashMap<>();
+        data.put("studentPublicId", studentPublicId);
+        data.put("organizationPublicId", organization.getPublicId());
+        data.put("area", area);
+        data.put("previousValue", previous);
+        data.put("newValue", current);
+        data.put("historyPreserved", true);
+        audit.record(actor.userId(), "STUDENT_CERTIFICATION_APPLICABILITY_CHANGED", "STUDENTS",
+                "Se modificó la aplicabilidad de un seguimiento de certificación.",
+                actor.ipAddress(), actor.userAgent(), data, clock.instant());
+    }
+
     private void recordFoundationAudit(StudentService.Actor actor, String event, String studentPublicId,
             OrganizationJpaEntity organization, Object command) {
         Map<String, Object> data = new HashMap<>();
@@ -504,7 +536,7 @@ public class StudentFoundationService {
             String organizationPublicId, String profilePublicId, String technologicalProfilePublicId,
             String technologyPublicId, Boolean certificationsEnabled, String sort, String direction) {}
     public record CreateCommand(String organizationPublicId, String studentCode, String email, String firstName,
-            String lastName, String displayName, String temporaryPassword, StudentStatus status, LocalDate validFrom,
+            String lastName, String displayName, StudentStatus status, LocalDate validFrom,
             LocalDate expiresAt, LocalDate admissionDate, String professionalProfilePublicId,
             String technologicalProfilePublicId, boolean appliesTechnologicalCertification,
             boolean appliesDevelopmentSecurity, boolean appliesNormativeTesting, boolean appliesOne,
@@ -514,6 +546,7 @@ public class StudentFoundationService {
             String technologicalProfilePublicId, boolean appliesTechnologicalCertification,
             boolean appliesDevelopmentSecurity, boolean appliesNormativeTesting, boolean appliesOne,
             boolean appliesAgile, Long version) {}
+    public record CreateResult(StudentView student, String temporaryPassword) {}
     public record CatalogRef(String publicId, String code, String name) {}
     public record CatalogBundle(OrganizationRef organization, boolean appliesCertifications,
             List<CatalogRef> profiles, List<CatalogRef> technologicalProfiles) {}

@@ -485,3 +485,44 @@
     width: 100%;
   }
 }
+
+.student-certification-flag:focus-within {
+  border-color: #3f78c5;
+  box-shadow: 0 0 0 3px rgba(63, 120, 197, .16);
+}
+
+.student-certification-flag label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  min-height: 32px;
+}
+
+.temporary-credentials > div {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.temporary-credentials > div > span,
+.temporary-credentials > div > code {
+  grid-column: 1;
+}
+
+.temporary-credentials > div > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+@media (max-width: 700px) {
+  .temporary-credentials > div {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .temporary-credentials > div > button {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+  }
+}

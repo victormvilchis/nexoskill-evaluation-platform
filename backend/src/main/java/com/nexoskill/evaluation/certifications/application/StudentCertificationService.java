@@ -26,7 +26,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -90,11 +89,10 @@ public class StudentCertificationService {
     public StudentCertificationDetail save(TenantContext tenant, String studentPublicId, SaveCommand command,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
-        if (command == null || command.applicability() == null) {
+        if (command == null) {
             throw new BusinessException("CERTIFICATION_CONFIGURATION_REQUIRED",
                     "La configuración de certificaciones es obligatoria.");
         }
-        updateApplicability(scope, command.applicability(), actor.internalId());
         if (command.cycles() != null) {
             for (CycleCommand cycle : command.cycles()) {
                 if (cycle == null) continue;
@@ -462,48 +460,6 @@ public class StudentCertificationService {
                         && c.active() && !Boolean.TRUE.equals(c.approved())).count());
     }
 
-    private void updateApplicability(Scope scope, Applicability flags, Long actorId) {
-        jdbc.update("""
-            UPDATE STUDENT
-               SET APPLIES_TECH_CERT = :technological,
-                   APPLIES_DEV_SECURITY = :developmentSecurity,
-                   APPLIES_NORMATIVE_TESTING = :normativeTesting,
-                   APPLIES_ONE = :one,
-                   APPLIES_AGILE = :agile,
-                   CERTIFICATIONS_ENABLED = CASE WHEN :sum > 0 THEN 1 ELSE 0 END,
-                   UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP
-             WHERE STUDENT_ID = :studentId AND ORGANIZATION_ID = :organizationId
-            """, new MapSqlParameterSource()
-                .addValue("technological", flags.technological() ? 1 : 0)
-                .addValue("developmentSecurity", flags.developmentSecurity() ? 1 : 0)
-                .addValue("normativeTesting", flags.normativeTesting() ? 1 : 0)
-                .addValue("one", flags.one() ? 1 : 0)
-                .addValue("agile", flags.agile() ? 1 : 0)
-                .addValue("sum", (flags.technological() ? 1 : 0) + (flags.developmentSecurity() ? 1 : 0)
-                        + (flags.normativeTesting() ? 1 : 0) + (flags.one() ? 1 : 0) + (flags.agile() ? 1 : 0))
-                .addValue("actorId", actorId).addValue("studentId", scope.student().getId())
-                .addValue("organizationId", scope.organizationId()));
-        Map<CertificationType, Boolean> byType = new EnumMap<>(CertificationType.class);
-        byType.put(CertificationType.TECHNOLOGICAL, flags.technological());
-        byType.put(CertificationType.DEVELOPMENT_SECURITY, flags.developmentSecurity());
-        byType.put(CertificationType.NORMATIVE_TESTING, flags.normativeTesting());
-        byType.put(CertificationType.ONE, flags.one());
-        byType.put(CertificationType.AGILE, flags.agile());
-        byType.forEach((type, active) -> jdbc.update("""
-            UPDATE STUDENT_CERTIFICATION_CYCLE
-               SET ACTIVE = CASE
-                       WHEN :active = 0 THEN 0
-                       WHEN TRACKING_STATUS <> 'CANCELLED' THEN 1
-                       ELSE ACTIVE
-                   END,
-                   UPDATED_BY = :actorId,
-                   UPDATED_AT = SYSTIMESTAMP
-             WHERE STUDENT_ID = :studentId AND CERTIFICATION_TYPE = :type
-            """, Map.of("active", active ? 1 : 0, "actorId", actorId,
-                "studentId", scope.student().getId(), "type", type.name())));
-        history(scope, null, null, "APPLICABILITY_CHANGED", null, flags.toString(), null, actorId);
-    }
-
     private String createCycle(Scope scope, CycleCommand command, Long actorId) {
         validateCycle(scope, command, null);
         CertificationProcessType process = processType(scope, command);
@@ -819,20 +775,12 @@ public class StudentCertificationService {
 
     private Scope resolveStudentScope(TenantContext tenant, String studentPublicId, AuthenticatedUser actor,
             boolean requireCertifications) {
-        if (!hasOperationalRole(actor)) throw new BusinessException("CERTIFICATION_ACCESS_FORBIDDEN",
-                "No tienes permisos para administrar certificaciones.");
-        StudentJpaEntity student;
-        if (tenant != null && tenant.globalAdministrator() && actor.roles().contains("ADMINISTRATOR")) {
-            student = students.findByPublicId(studentPublicId)
-                    .filter(item -> item.getStatus() != StudentStatus.DELETED)
-                    .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
-        } else {
-            if (tenant == null || !tenant.hasOrganization()) throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
-                    "No existe un contexto organizacional autorizado.");
-            student = students.findByOrganizationIdAndPublicId(tenant.organizationId(), studentPublicId)
-                    .filter(item -> item.getStatus() != StudentStatus.DELETED)
-                    .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
-        }
+        requireOperationalRole(actor, tenant, studentPublicId);
+        if (tenant == null || !tenant.hasOrganization()) throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
+                "No existe un contexto organizacional autorizado.");
+        StudentJpaEntity student = students.findByOrganizationIdAndPublicId(tenant.organizationId(), studentPublicId)
+                .filter(item -> item.getStatus() != StudentStatus.DELETED)
+                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
         OrganizationJpaEntity organization = organizations.findById(student.getOrganizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
         if (organization.getOrganizationType() != OrganizationType.CUSTOMER) {
@@ -846,7 +794,8 @@ public class StudentCertificationService {
     }
 
     private Scope requireTenantOrganization(TenantContext tenant, AuthenticatedUser actor) {
-        if (!hasOperationalRole(actor) || tenant == null || !tenant.hasOrganization()) {
+        requireOperationalRole(actor, tenant, null);
+        if (tenant == null || !tenant.hasOrganization()) {
             throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización autorizada.");
         }
         OrganizationJpaEntity organization = organizations.findById(tenant.organizationId())
@@ -857,8 +806,20 @@ public class StudentCertificationService {
     }
 
     private boolean hasOperationalRole(AuthenticatedUser actor) {
-        return actor != null && (actor.roles().contains("ADMINISTRATOR") || actor.roles().contains("MANAGER")
-                || actor.roles().contains("SUPERVISOR"));
+        return actor != null && (actor.roles().contains("MANAGER") || actor.roles().contains("SUPERVISOR"));
+    }
+
+    private void requireOperationalRole(AuthenticatedUser actor, TenantContext tenant, String studentPublicId) {
+        if (hasOperationalRole(actor)) return;
+        Map<String, Object> data = new HashMap<>();
+        if (studentPublicId != null) data.put("studentPublicId", studentPublicId);
+        if (tenant != null && tenant.hasOrganization()) data.put("organizationId", tenant.organizationId());
+        if (actor != null) data.put("roles", actor.roles());
+        audit.record(actor == null ? null : actor.internalId(), "STUDENT_CERTIFICATION_ACCESS_DENIED",
+                "STUDENT_CERTIFICATIONS", "Intento de acceso no autorizado a la gestión operativa de certificaciones.",
+                null, null, data, clock.instant());
+        throw new BusinessException("CERTIFICATION_OPERATION_FORBIDDEN",
+                "La gestión operativa de certificaciones corresponde únicamente a Gestores y Supervisores de la organización.");
     }
 
     private Policy policy(Long organizationId, CertificationType type) {

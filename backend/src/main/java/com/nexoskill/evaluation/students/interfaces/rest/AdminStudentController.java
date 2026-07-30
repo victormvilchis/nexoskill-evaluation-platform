@@ -107,23 +107,30 @@ public class AdminStudentController {
     @PreAuthorize("hasAuthority('STUDENT_CREATE')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateRequest body,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
+        TenantContext resolvedTenant = tenant(request);
         if (foundation == null) {
-            StudentService.StudentDetail created = service.create(tenant(request),
+            StudentService.CreateResult creation = service.create(resolvedTenant,
                     new StudentService.CreateCommand(body.studentCode(), body.email(), body.firstName(),
-                            body.lastName(), body.displayName(), body.temporaryPassword(),
+                            body.lastName(), body.displayName(),
                             body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(), body.expiresAt()),
                     actor(actor, request));
-            return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId())).body(created);
+            StudentService.StudentDetail created = creation.student();
+            return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId()))
+                    .body(credentialsResponse(credentialStudent(created), resolvedTenant.organizationCode(),
+                            created.email(), creation.temporaryPassword()));
         }
-        StudentFoundationService.StudentView created = foundation.create(tenant(request),
+        StudentFoundationService.CreateResult creation = foundation.create(resolvedTenant,
                 new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.studentCode(), body.email(),
-                        body.firstName(), body.lastName(), body.displayName(), body.temporaryPassword(), body.status(),
+                        body.firstName(), body.lastName(), body.displayName(), body.status(),
                         body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
                         Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
                         Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
                         Boolean.TRUE.equals(body.appliesAgile())), actor(actor, request));
-        return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId())).body(created);
+        StudentFoundationService.StudentView created = creation.student();
+        return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId()))
+                .body(credentialsResponse(credentialStudent(created), created.organization().code(),
+                        created.email(), creation.temporaryPassword()));
     }
 
     @PutMapping("/{publicId}")
@@ -201,9 +208,18 @@ public class AdminStudentController {
 
     @PostMapping("/{publicId}/reset-password")
     @PreAuthorize("hasAuthority('STUDENT_PASSWORD_RESET')")
-    public StudentService.PasswordResetResult resetPassword(@PathVariable String publicId,
+    public StudentCredentialResponse resetPassword(@PathVariable String publicId,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        return service.resetPassword(effectiveTenant(request, publicId), publicId, actor(actor, request));
+        TenantContext effective = effectiveTenant(request, publicId);
+        StudentService.PasswordResetResult reset = service.resetPassword(effective, publicId, actor(actor, request));
+        Object student = enriched(request, publicId, reset.student());
+        String organizationLogin = effective.organizationCode();
+        String email = reset.student().email();
+        if (student instanceof StudentFoundationService.StudentView view) {
+            organizationLogin = view.organization().code();
+            email = view.email();
+        }
+        return credentialsResponse(credentialStudent(student), organizationLogin, email, reset.temporaryPassword());
     }
 
     @GetMapping("/{publicId}/sessions")
@@ -244,6 +260,22 @@ public class AdminStudentController {
     private Object enriched(HttpServletRequest request, String publicId, StudentService.StudentDetail fallback) {
         return foundation == null ? fallback : foundation.get(tenant(request), publicId);
     }
+    private StudentCredentialResponse credentialsResponse(StudentCredentialStudentResponse student,
+            String organizationLogin, String email, String temporaryPassword) {
+        return new StudentCredentialResponse(student,
+                new TemporaryCredentialsResponse(organizationLogin, email, temporaryPassword, true));
+    }
+
+    private StudentCredentialStudentResponse credentialStudent(Object student) {
+        if (student instanceof StudentFoundationService.StudentView view) {
+            return new StudentCredentialStudentResponse(view.publicId(), view.displayName(), view.email(), view.status());
+        }
+        if (student instanceof StudentService.StudentDetail detail) {
+            return new StudentCredentialStudentResponse(detail.publicId(), detail.displayName(), detail.email(), detail.status());
+        }
+        throw new IllegalStateException("No fue posible construir la respuesta de credenciales del estudiante.");
+    }
+
     private StudentService.Actor actor(AuthenticatedUser actor, HttpServletRequest request) {
         return new StudentService.Actor(actor.internalId(), ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request));
     }
@@ -259,8 +291,6 @@ public class AdminStudentController {
             @NotBlank(message = "Los apellidos son obligatorios.")
             @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
             @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
-            @NotBlank(message = "La contraseña temporal es obligatoria.")
-            @Size(min = 10, max = 128, message = "La contraseña temporal debe tener entre 10 y 128 caracteres.") String temporaryPassword,
             StudentStatus status,
             @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
@@ -283,6 +313,13 @@ public class AdminStudentController {
             Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
             Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile,
             @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
+
+    public record StudentCredentialResponse(StudentCredentialStudentResponse student,
+            TemporaryCredentialsResponse temporaryCredentials) {}
+    public record StudentCredentialStudentResponse(String publicId, String fullName, String email,
+            StudentStatus status) {}
+    public record TemporaryCredentialsResponse(String organizationLogin, String email,
+            String temporaryPassword, boolean mustChangePassword) {}
 
     public record PermanentDeleteRequest(
             @NotNull(message = "Debes confirmar la eliminación permanente.")

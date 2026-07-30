@@ -51,7 +51,7 @@ public final class CertificationModels {
     public record StudentCertificationDetail(StudentSummary student, boolean appliesCertifications,
             Applicability applicability, Metrics metrics, List<CycleView> cycles) {}
 
-    public record SaveCommand(Applicability applicability, List<CycleCommand> cycles) {}
+    public record SaveCommand(List<CycleCommand> cycles) {}
     public record CycleCommand(String publicId, CertificationType type, String technologyPublicId,
             CertificationLevel certificationLevel, boolean primary, CertificationTrackingStatus trackingStatus,
             LocalDate scheduledDate, LocalDate applicationDate, Boolean approved,

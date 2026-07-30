@@ -43,14 +43,14 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/certification-settings/current")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public Availability availability(HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.availability(tenantContextResolver.resolve(request), actor);
     }
 
     @GetMapping("/certification-catalogs")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_CATALOG_VIEW')")
+    @PreAuthorize("isAuthenticated()")
     public Catalogs catalogs(@RequestParam(required = false) String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         TenantContext tenant = tenantContextResolver.resolve(request);
@@ -59,14 +59,14 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public StudentCertificationDetail get(@PathVariable String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.get(tenantContextResolver.resolve(request), studentPublicId, actor);
     }
 
     @PutMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public StudentCertificationDetail save(@PathVariable String studentPublicId,
             @Valid @RequestBody SaveRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -75,7 +75,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public CycleView createCycle(@PathVariable String studentPublicId, @Valid @RequestBody CycleRequest body,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.createCycle(tenantContextResolver.resolve(request), studentPublicId, body.toCommand(), actor,
@@ -83,7 +83,7 @@ public class StudentCertificationController {
     }
 
     @PutMapping("/students/{studentPublicId}/certifications/{certificationId}")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public CycleView updateCycle(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @Valid @RequestBody CycleRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -92,7 +92,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/make-primary")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public CycleView makePrimary(@PathVariable String studentPublicId, @PathVariable String certificationId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.makePrimary(tenantContextResolver.resolve(request), studentPublicId, certificationId,
@@ -100,7 +100,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/cancel")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public CycleView cancel(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @RequestBody(required = false) CancelRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -109,7 +109,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public PageResult<AttemptView> attempts(@PathVariable String studentPublicId,
             @PathVariable String certificationId, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size, HttpServletRequest request,
@@ -120,7 +120,7 @@ public class StudentCertificationController {
     }
 
     @PostMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public AttemptView addAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @Valid @RequestBody AttemptRequest body, HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -129,7 +129,7 @@ public class StudentCertificationController {
     }
 
     @PutMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts/{attemptId}")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public AttemptView updateAttempt(@PathVariable String studentPublicId, @PathVariable String certificationId,
             @PathVariable String attemptId, @Valid @RequestBody AttemptRequest body,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -138,7 +138,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/history")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("isAuthenticated()")
     public PageResult<HistoryView> history(@PathVariable String studentPublicId,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
@@ -146,17 +146,11 @@ public class StudentCertificationController {
         return service.history(tenantContextResolver.resolve(request), studentPublicId, page, size, actor);
     }
 
-    public record SaveRequest(@NotNull(message = "La configuración de aplicabilidad es obligatoria.")
-            ApplicabilityRequest applicability, List<CycleRequest> cycles) {
+    public record SaveRequest(List<CycleRequest> cycles) {
         SaveCommand toCommand() {
-            return new SaveCommand(applicability.toModel(), cycles == null ? List.of()
+            return new SaveCommand(cycles == null ? List.of()
                     : cycles.stream().map(CycleRequest::toCommand).toList());
         }
-    }
-
-    public record ApplicabilityRequest(boolean technological, boolean developmentSecurity,
-            boolean normativeTesting, boolean one, boolean agile) {
-        Applicability toModel() { return new Applicability(technological, developmentSecurity, normativeTesting, one, agile); }
     }
 
     public record CycleRequest(String publicId,

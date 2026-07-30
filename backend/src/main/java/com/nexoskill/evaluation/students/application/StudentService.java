@@ -92,7 +92,7 @@ public class StudentService {
     }
 
     @Transactional
-    public StudentDetail create(TenantContext tenant, CreateCommand command, Actor actor) {
+    public CreateResult create(TenantContext tenant, CreateCommand command, Actor actor) {
         Long organizationId = requireOperationalOrganization(tenant);
         validateRequired(command);
         validateDates(command.validFrom(), command.expiresAt());
@@ -111,7 +111,7 @@ public class StudentService {
             throw fieldError("STUDENT_EXPIRED", "No se puede crear un estudiante activo vencido.",
                     "expiresAt", "La fecha de vencimiento debe ser igual o posterior a la fecha actual.");
         }
-        validateTemporaryPassword(command.temporaryPassword(), command.email());
+        String temporaryPassword = generateValidTemporaryPassword(command.email());
         String normalizedEmail = EmailNormalizer.normalize(command.email());
         String code = normalizeCode(command.studentCode());
         if (studentRepository.existsByOrganizationIdAndNormalizedEmail(organizationId, normalizedEmail)) {
@@ -123,7 +123,7 @@ public class StudentService {
                     "studentCode", "Ya existe un estudiante con este código dentro de la organización.");
         }
         StudentJpaEntity student = StudentJpaEntity.create(UUID.randomUUID().toString(), organizationId, code,
-                command.email().trim(), normalizedEmail, passwordHasher.encode(command.temporaryPassword()),
+                command.email().trim(), normalizedEmail, passwordHasher.encode(temporaryPassword),
                 command.firstName().trim(), command.lastName().trim(),
                 displayName(command.displayName(), command.firstName(), command.lastName()), initialStatus,
                 command.validFrom(), command.expiresAt(),
@@ -135,8 +135,11 @@ public class StudentService {
                     "El correo o código del estudiante ya está registrado en la organización.",
                     Map.of("email", "Verifica que el correo y el código no estén registrados."));
         }
-        audit(actor, "STUDENT_CREATED", student, Map.of("initialStatus", initialStatus.name()), now);
-        return detail(student, now);
+        audit(actor, "STUDENT_CREATED", student,
+                Map.of("initialStatus", initialStatus.name(), "passwordChangeRequired", true), now);
+        audit(actor, "STUDENT_TEMPORARY_PASSWORD_GENERATED", student,
+                Map.of("oneTimeDisplay", true, "passwordChangeRequired", true), now);
+        return new CreateResult(detail(student, now), temporaryPassword);
     }
 
     @Transactional
@@ -218,8 +221,7 @@ public class StudentService {
     @Transactional
     public PasswordResetResult resetPassword(TenantContext tenant, String publicId, Actor actor) {
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
-        String temporaryPassword = passwordGenerator.generate();
-        validateTemporaryPassword(temporaryPassword, student.getEmail());
+        String temporaryPassword = generateValidTemporaryPassword(student.getEmail());
         Instant now = clock.instant();
         student.resetPassword(passwordHasher.encode(temporaryPassword),
                 now.plus(properties.getSecurity().getTemporaryPasswordDuration()), actor.userId(), now);
@@ -310,7 +312,6 @@ public class StudentService {
         if (blank(command.firstName())) throw fieldError("STUDENT_FIRST_NAME_REQUIRED", "El nombre es obligatorio.", "firstName", "El nombre es obligatorio.");
         if (blank(command.lastName())) throw fieldError("STUDENT_LAST_NAME_REQUIRED", "Los apellidos son obligatorios.", "lastName", "Los apellidos son obligatorios.");
         if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
-        if (blank(command.temporaryPassword())) throw fieldError("STUDENT_PASSWORD_REQUIRED", "La contraseña temporal es obligatoria.", "temporaryPassword", "La contraseña temporal es obligatoria.");
     }
 
     private void validateUpdateRequired(UpdateCommand command) {
@@ -329,14 +330,20 @@ public class StudentService {
         }
     }
 
-    private void validateTemporaryPassword(String password, String email) {
-        try {
-            passwordPolicy.validate(password, email);
-        } catch (BusinessException exception) {
-            throw new BusinessException(exception.getCode(), exception.getMessage(),
-                    Map.of("temporaryPassword", exception.getMessage()));
+    private String generateValidTemporaryPassword(String email) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String candidate = passwordGenerator.generate();
+            try {
+                passwordPolicy.validate(candidate, email);
+                return candidate;
+            } catch (BusinessException exception) {
+                if (!"PASSWORD_CONTAINS_EMAIL".equals(exception.getCode())) throw exception;
+            }
         }
+        throw new BusinessException("TEMPORARY_PASSWORD_GENERATION_FAILED",
+                "No fue posible generar una contraseña temporal segura. Intenta nuevamente.");
     }
+
 
     private void validateVersion(StudentJpaEntity student, Long version) {
         if (version == null || !version.equals(student.getVersion())) {
@@ -390,7 +397,7 @@ public class StudentService {
 
     public record Actor(Long userId, String ipAddress, String userAgent) {}
     public record CreateCommand(String studentCode, String email, String firstName, String lastName,
-            String displayName, String temporaryPassword, StudentStatus status, LocalDate validFrom, LocalDate expiresAt) {}
+            String displayName, StudentStatus status, LocalDate validFrom, LocalDate expiresAt) {}
     public record UpdateCommand(String email, String firstName, String lastName, String displayName,
             LocalDate validFrom, LocalDate expiresAt, Long version) {}
     public record StudentSummary(String publicId, String studentCode, String email, String displayName,
@@ -400,6 +407,7 @@ public class StudentService {
             String displayName, StudentStatus status, StudentEffectiveStatus effectiveStatus, LocalDate validFrom,
             LocalDate expiresAt, boolean passwordChangeRequired, Instant temporaryPasswordExpiresAt,
             Instant lastLoginAt, Instant createdAt, Instant updatedAt, Long version) {}
+    public record CreateResult(StudentDetail student, String temporaryPassword) {}
     public record PasswordResetResult(StudentDetail student, String temporaryPassword) {}
     public record SessionView(String publicId, StudentSessionStatus status, String ipAddress, String userAgent,
             Instant createdAt, Instant lastActivityAt, Instant expiresAt, Instant revokedAt, String revocationReason) {}

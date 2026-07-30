@@ -91,7 +91,6 @@ export interface CreateStudentPayload {
   firstName: string
   lastName: string
   displayName?: string
-  temporaryPassword: string
   status?: 'ACTIVE' | 'INACTIVE'
   validFrom: string
   expiresAt: string
@@ -129,9 +128,21 @@ export interface StudentDeletionResult {
   deletedAt: string
 }
 
-export interface StudentPasswordResetResult {
-  student: StudentDetail
+export interface StudentTemporaryCredentials {
+  organizationLogin: string
+  email: string
   temporaryPassword: string
+  mustChangePassword: boolean
+}
+
+export interface StudentCredentialResult {
+  student: {
+    publicId: string
+    fullName: string
+    email: string
+    status: StudentStatus
+  }
+  temporaryCredentials: StudentTemporaryCredentials
 }
 
 export interface AdministrativeHistoryItem {

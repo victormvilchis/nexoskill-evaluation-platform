@@ -36,6 +36,7 @@ function formatDate(value: string | null) {
 export function AdminStudentsPage() {
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
+  const certificationOperator = Boolean(user?.roles.some((role) => role === 'MANAGER' || role === 'SUPERVISOR'))
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
@@ -128,7 +129,7 @@ export function AdminStudentsPage() {
               <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />}
               {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Administrar" to={`/admin/students/${student.publicId}/manage`} tone="primary" />}
-              {student.certificationsEnabled && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
+              {certificationOperator && student.certificationsEnabled && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
             </TableActions></td>
           </tr>)}
         </tbody></table></div>

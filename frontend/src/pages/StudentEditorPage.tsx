@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { createStudent, getStudent, getStudentCatalogs, updateStudent } from '../features/students/api/studentApi'
+import { StudentTemporaryCredentialsDialog } from '../features/students/components/StudentTemporaryCredentialsDialog'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
-import type { StudentCatalogRef, StudentCatalogs, StudentDetail } from '../shared/types/students'
+import type { StudentCatalogRef, StudentCatalogs, StudentDetail, StudentTemporaryCredentials } from '../shared/types/students'
 
 interface Props { mode: 'create' | 'edit' | 'view' }
 
@@ -65,6 +66,7 @@ function hasCertificationData(
 
 export function StudentEditorPage({ mode }: Props) {
   const { publicId } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const toast = useToast()
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
@@ -90,7 +92,7 @@ export function StudentEditorPage({ mode }: Props) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [displayName, setDisplayName] = useState('')
-  const [temporaryPassword, setTemporaryPassword] = useState('')
+  const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
   const [validFrom, setValidFrom] = useState(todayInput())
   const [expiresAt, setExpiresAt] = useState('')
   const [admissionDate, setAdmissionDate] = useState('')
@@ -262,7 +264,6 @@ export function StudentEditorPage({ mode }: Props) {
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
     if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
     if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
-    if (mode === 'create' && !temporaryPassword) errors.temporaryPassword = 'La contraseña temporal es obligatoria.'
     if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
     if (!expiresAt) errors.expiresAt = 'La fecha de vencimiento es obligatoria.'
     if (validFrom && expiresAt && expiresAt < validFrom) {
@@ -289,23 +290,20 @@ export function StudentEditorPage({ mode }: Props) {
     } : {}
     try {
       if (mode === 'create') {
-        await createStudent({
+        const response = await createStudent({
           ...(administrator ? { organizationPublicId } : {}),
           studentCode: studentCode.trim(),
           email: email.trim(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           displayName: displayName.trim() || undefined,
-          temporaryPassword,
           status: 'ACTIVE',
           validFrom,
           expiresAt,
           ...certificationPayload
         })
-        completeSave({
-          title: 'Estudiante creado correctamente.',
-          message: 'La cuenta quedó registrada en la organización autorizada.'
-        })
+        setTemporaryCredentials(response.temporaryCredentials)
+        toast.success('Estudiante creado correctamente', 'Guarda las credenciales antes de cerrar esta vista.')
       } else if (student && publicId) {
         const admissionChanged = appliesCertifications && student.admissionDate !== admissionDate
         await updateStudent(publicId, {
@@ -421,14 +419,6 @@ export function StudentEditorPage({ mode }: Props) {
                       aria-invalid={Boolean(fieldErrors.displayName)} />}
                   {field('displayName')}
                 </label>
-                {mode === 'create' && (
-                  <label className="form-field"><span>Contraseña temporal</span>
-                    <input name="temporaryPassword" type="password" value={temporaryPassword}
-                      onChange={(event) => setTemporaryPassword(event.target.value)} minLength={10} required
-                      aria-invalid={Boolean(fieldErrors.temporaryPassword)} />
-                    {field('temporaryPassword')}
-                  </label>
-                )}
                 <label className="form-field"><span>Inicio de vigencia</span>
                   {readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> :
                     <input name="validFrom" type="date" value={validFrom} onChange={(event) => setValidFrom(event.target.value)}
@@ -504,11 +494,18 @@ export function StudentEditorPage({ mode }: Props) {
                       <strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong>
                     </div>
                   ) : (
-                    <label className="student-certification-flag" key={option.key}>
-                      <input name={option.key} type="checkbox" checked={flags[option.key]}
-                        onChange={(event) => setFlags((current) => ({ ...current, [option.key]: event.target.checked }))} />
-                      <span>{option.label}</span>
-                    </label>
+                    <div className="student-certification-flag" key={option.key}>
+                      <input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]}
+                        onChange={(event) => {
+                          const nextValue = event.target.checked
+                          if (mode === 'edit' && !nextValue && flags[option.key]) {
+                            const accepted = window.confirm('Esta área dejará de estar disponible para nuevos seguimientos. Si ya tiene ciclos, intentos o resultados, su historial se conservará.')
+                            if (!accepted) return
+                          }
+                          setFlags((current) => ({ ...current, [option.key]: nextValue }))
+                        }} />
+                      <label htmlFor={`student-${option.key}`}>{option.label}</label>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -525,6 +522,14 @@ export function StudentEditorPage({ mode }: Props) {
           </div>
         )}
       </form>
+      {temporaryCredentials && (
+        <StudentTemporaryCredentialsDialog title="Estudiante creado correctamente"
+          credentials={temporaryCredentials}
+          onClose={() => {
+            setTemporaryCredentials(undefined)
+            navigate('/admin/students', { replace: true })
+          }} />
+      )}
     </main>
   )
 }

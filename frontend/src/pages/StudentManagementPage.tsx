@@ -12,6 +12,7 @@ import {
   revokeStudentSession
 } from '../features/students/api/studentApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { StudentTemporaryCredentialsDialog } from '../features/students/components/StudentTemporaryCredentialsDialog'
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
@@ -21,7 +22,8 @@ import type { PageSize } from '../shared/types/pagination'
 import type {
   AdministrativeHistoryPage,
   StudentAdministrationView,
-  StudentSession
+  StudentSession,
+  StudentTemporaryCredentials
 } from '../shared/types/students'
 
 type PendingAction = 'ACTIVATE' | 'DEACTIVATE' | 'RESET_PASSWORD'
@@ -67,7 +69,7 @@ export function StudentManagementPage() {
   const [pendingAction, setPendingAction] = useState<PendingAction>()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
-  const [temporaryPassword, setTemporaryPassword] = useState<string>()
+  const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
 
   async function loadAdministration() {
     const response = await getStudentAdministration(publicId)
@@ -129,7 +131,7 @@ export function StudentManagementPage() {
     setError(undefined)
     try {
       const response = await resetStudentPassword(publicId)
-      setTemporaryPassword(response.temporaryPassword)
+      setTemporaryCredentials(response.temporaryCredentials)
       setPendingAction(undefined)
       await loadAdministration()
       setHistoryPage(0)
@@ -142,14 +144,6 @@ export function StudentManagementPage() {
     }
   }
 
-  async function copyText(value: string, successMessage: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(successMessage)
-    } catch {
-      toast.warning('No fue posible copiar automáticamente', 'Selecciona el texto y cópialo manualmente.')
-    }
-  }
 
   async function revokeSession(sessionPublicId: string) {
     setBusy(true)
@@ -336,27 +330,10 @@ export function StudentManagementPage() {
         </label>
       </ConfirmDialog>
 
-      {temporaryPassword && (
-        <div className="dialog-backdrop" role="presentation">
-          <section className="confirm-dialog student-credentials-dialog" role="dialog" aria-modal="true" aria-labelledby="temporary-password-title">
-            <div>
-              <p className="eyebrow">Visualización única</p>
-              <h2 id="temporary-password-title">Contraseña temporal generada</h2>
-              <p>Guarda estas credenciales antes de cerrar. La contraseña no podrá recuperarse posteriormente.</p>
-            </div>
-            <div className="temporary-credentials">
-              <label><span>Usuario</span><code>{student.email}</code></label>
-              <label><span>Contraseña</span><code>{temporaryPassword}</code></label>
-            </div>
-            <div className="dialog-actions student-credentials-actions">
-              <button className="secondary-button" type="button"
-                onClick={() => void copyText(temporaryPassword, 'Contraseña copiada')}>Copiar contraseña</button>
-              <button className="secondary-button" type="button"
-                onClick={() => void copyText(`Usuario: ${student.email}\nContraseña temporal: ${temporaryPassword}`, 'Credenciales copiadas')}>Copiar credenciales</button>
-              <button className="primary-button" type="button" onClick={() => setTemporaryPassword(undefined)}>Cerrar</button>
-            </div>
-          </section>
-        </div>
+      {temporaryCredentials && (
+        <StudentTemporaryCredentialsDialog title="Contraseña temporal generada"
+          credentials={temporaryCredentials}
+          onClose={() => setTemporaryCredentials(undefined)} />
       )}
     </main>
   )

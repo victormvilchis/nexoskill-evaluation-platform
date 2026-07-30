@@ -31,7 +31,7 @@ import type {
 } from '../shared/types/certifications'
 import type { PageSize } from '../shared/types/pagination'
 
-type TabId = 'SUMMARY' | 'APPLICABILITY' | CertificationType | 'ATTEMPTS' | 'EXPIRATIONS' | 'HISTORY'
+type TabId = 'SUMMARY' | CertificationType | 'ATTEMPTS' | 'EXPIRATIONS' | 'HISTORY'
 
 type EditableCycle = CertificationCyclePayload & {
   key: string
@@ -65,6 +65,13 @@ const TRACKING_LABELS: Record<CertificationTrackingStatus, string> = {
   CANCELLED: 'Cancelada'
 }
 
+const STUDENT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Activo',
+  INACTIVE: 'Desactivado',
+  EXPIRED: 'Vencido',
+  DELETED: 'Eliminado'
+}
+
 const VALIDITY_LABELS: Record<CertificationValidityStatus, string> = {
   NOT_OBTAINED: 'Aún no obtenida',
   VALID: 'Vigente',
@@ -93,7 +100,6 @@ const FLAG_OPTIONS: Array<{ key: keyof CertificationApplicability; type: Certifi
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'SUMMARY', label: 'Resumen' },
-  { id: 'APPLICABILITY', label: 'Certificaciones aplicables' },
   { id: 'TECHNOLOGICAL', label: 'Tecnológica' },
   { id: 'DEVELOPMENT_SECURITY', label: 'Desarrollo Seguro' },
   { id: 'NORMATIVE_TESTING', label: 'Normativa y Testing' },
@@ -289,29 +295,35 @@ export function StudentCertificationsPage() {
     return () => { active = false }
   }, [activeTab, historyPage, historySize, publicId])
 
+  const applicableTypes = useMemo(() => FLAG_OPTIONS
+    .filter((item) => applicability[item.key])
+    .map((item) => item.type), [applicability])
+
+  const hasAttemptSection = applicableTypes.some(supportsAttempts)
+  const hasExpirationSection = applicableTypes.some(hasExpiration)
+
   const visibleTabs = useMemo(() => TABS.filter((tab) => {
+    if (tab.id === 'ATTEMPTS') return hasAttemptSection
+    if (tab.id === 'EXPIRATIONS') return hasExpirationSection
     if (!Object.prototype.hasOwnProperty.call(TYPE_LABELS, tab.id)) return true
-    const type = tab.id as CertificationType
-    const flag = FLAG_OPTIONS.find((item) => item.type === type)
-    return flag ? applicability[flag.key] : false
-  }), [applicability])
+    return applicableTypes.includes(tab.id as CertificationType)
+  }), [applicableTypes, hasAttemptSection, hasExpirationSection])
 
-  const expirationCycles = useMemo(() => cycles.filter((cycle) => hasExpiration(cycle.type)
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) setActiveTab('SUMMARY')
+  }, [activeTab, visibleTabs])
+
+  const expirationCycles = useMemo(() => cycles.filter((cycle) => cycle.active !== false
+    && applicableTypes.includes(cycle.type)
+    && hasExpiration(cycle.type)
     && (cycle.expirationDate || cycle.validityStatus === 'EXPIRED' || cycle.validityStatus === 'EXPIRING_SOON')),
-  [cycles])
+  [applicableTypes, cycles])
 
-  const attemptCycles = useMemo(() => cycles.filter((cycle) => Boolean(cycle.publicId) && supportsAttempts(cycle.type)), [cycles])
+  const attemptCycles = useMemo(() => cycles.filter((cycle) => cycle.active !== false
+    && applicableTypes.includes(cycle.type)
+    && Boolean(cycle.publicId)
+    && supportsAttempts(cycle.type)), [applicableTypes, cycles])
 
-  function updateApplicability(key: keyof CertificationApplicability, value: boolean) {
-    const type = FLAG_OPTIONS.find((item) => item.key === key)?.type
-    if (!value && type && cycles.some((cycle) => cycle.type === type && Boolean(cycle.publicId))) {
-      const accepted = window.confirm('Esta certificación ya tiene información de seguimiento registrada. Al desactivarla dejará de aplicar para nuevos seguimientos, pero se conservarán sus intentos, resultados e historial.')
-      if (!accepted) return
-    }
-    setApplicability((current) => ({ ...current, [key]: value }))
-    setDirty(true)
-    if (!value && type && activeTab === type) setActiveTab('APPLICABILITY')
-  }
 
   function updateCycle(key: string, changes: Partial<EditableCycle>) {
     setCycles((current) => current.map((cycle) => cycle.key === key ? { ...cycle, ...changes } : cycle))
@@ -431,7 +443,6 @@ export function StudentCertificationsPage() {
     })
     try {
       await saveStudentCertifications(publicId, {
-        applicability,
         cycles: applicableCycles.map((cycle) => ({
           ...(cycle.publicId ? { publicId: cycle.publicId } : {}),
           type: cycle.type,
@@ -490,7 +501,7 @@ export function StudentCertificationsPage() {
       <section className="ns-card certification-student-summary">
         <div><span>Estudiante</span><strong>{detail.student.displayName}</strong></div>
         <div><span>Organización</span><strong>{detail.student.organizationName}</strong></div>
-        <div><span>Estado</span><strong>{detail.student.status}</strong></div>
+        <div><span>Estado</span><strong>{STUDENT_STATUS_LABELS[detail.student.status] ?? detail.student.status}</strong></div>
         <div><span>Inicio de vigencia</span><strong>{formatDate(detail.student.validFrom)}</strong></div>
         <div><span>Vencimiento de acceso</span><strong>{formatDate(detail.student.expiresAt)}</strong></div>
         <div><span>Fecha de alta</span><strong>{formatDate(detail.student.admissionDate)}</strong></div>
@@ -529,20 +540,6 @@ export function StudentCertificationsPage() {
             </section>
           )}
 
-          {activeTab === 'APPLICABILITY' && (
-            <section className="ns-card certification-panel">
-              <div className="ns-card-heading"><div><h2>Certificaciones aplicables</h2><p className="muted">Los cambios se persisten únicamente al usar Guardar cambios.</p></div></div>
-              <div className="certification-applicability-grid">
-                {FLAG_OPTIONS.map((option) => (
-                  <label className="certification-toggle-card" key={option.key}>
-                    <input type="checkbox" checked={applicability[option.key]}
-                      onChange={(event) => updateApplicability(option.key, event.target.checked)} />
-                    <span><strong>{option.label}</strong><small>{applicability[option.key] ? 'Seguimiento habilitado' : 'No aplica actualmente'}</small></span>
-                  </label>
-                ))}
-              </div>
-            </section>
-          )}
 
           {FLAG_OPTIONS.map((option) => activeTab === option.type && applicability[option.key] ? (
             <CertificationSection key={option.type} type={option.type} cycles={cycles.filter((cycle) => cycle.type === option.type)}
