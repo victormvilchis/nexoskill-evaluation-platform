@@ -60,7 +60,6 @@ function formatDate(value?: string) {
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(value))
 }
 
-
 export function AdminQuestionsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -70,7 +69,6 @@ export function AdminQuestionsPage() {
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const supervisor = Boolean(user?.roles.includes('SUPERVISOR'))
   const canWriteQuestions = permissions.has('QUESTION_CREATE') || permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')
-
   const query = searchParams.get('q') ?? ''
   const organizationPublicId = globalAdministrator ? searchParams.get('organization') ?? '' : ''
   const categoryPublicId = searchParams.get('category') ?? ''
@@ -81,7 +79,6 @@ export function AdminQuestionsPage() {
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const debouncedQuery = useDebouncedValue(query, 300)
-
   const [data, setData] = useState<QuestionPage>()
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [categories, setCategories] = useState<Array<{ id: string; name: string; organizationName?: string }>>([])
@@ -146,7 +143,7 @@ export function AdminQuestionsPage() {
       })
       .catch(() => setCategories([]))
     return () => controller.abort()
-  }, [globalAdministrator, organizationPublicId, updateFilter])
+  }, [categoryPublicId, globalAdministrator, organizationPublicId, updateFilter])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -189,8 +186,7 @@ export function AdminQuestionsPage() {
     globalAdministrator || question.ownership.scope === 'ORGANIZATION', [globalAdministrator])
 
   function clearFilters() {
-    const next = new URLSearchParams({ status: 'ACTIVE' })
-    setSearchParams(next, { replace: true })
+    setSearchParams(new URLSearchParams({ status: 'ACTIVE' }), { replace: true })
   }
 
   function setPage(nextPage: number) {
@@ -201,6 +197,7 @@ export function AdminQuestionsPage() {
       return next
     }, { replace: true })
   }
+
   function setPageSize(nextSize: PageSize) {
     setSearchParams((current) => {
       const next = new URLSearchParams(current)
@@ -215,10 +212,12 @@ export function AdminQuestionsPage() {
     setBusyId(question.publicId)
     try {
       const copy = await duplicateQuestion(question.publicId)
-      toast.success('Pregunta duplicada', 'La copia quedó disponible para editarse.')
+      toast.success('Pregunta duplicada', 'La copia se creó dentro del mismo alcance y propietario.')
       navigate(`/admin/questions/${copy.publicId}/edit`)
     } catch (requestError) {
-      toast.error('No fue posible duplicar la pregunta', requestError instanceof ApiRequestError ? requestError.message : undefined)
+      toast.error('No fue posible duplicar la pregunta', requestError instanceof ApiRequestError
+        ? requestError.message
+        : 'No fue posible duplicar la pregunta dentro del contexto actual.')
     } finally {
       setBusyId(undefined)
     }
@@ -228,7 +227,7 @@ export function AdminQuestionsPage() {
     setBusyId(question.publicId)
     try {
       const copy = await createQuestionOrganizationCopy(question.publicId)
-      toast.success('Copia organizacional creada', 'La pregunta GLOBAL permaneció sin cambios.')
+      toast.success('Copia organizacional creada', 'La pregunta quedó disponible para editarse en tu organización.')
       navigate(`/admin/questions/${copy.publicId}/edit`)
     } catch (requestError) {
       toast.error('No fue posible crear la copia organizacional',
@@ -260,7 +259,7 @@ export function AdminQuestionsPage() {
         includeDependencies: cloneState.includeDependencies,
         notes: cloneState.notes.trim() || undefined
       })
-      toast.success('Pregunta clonada a GLOBAL', 'El contenido original permaneció sin cambios.')
+      toast.success('Pregunta clonada a GLOBAL', 'La pregunta organizacional original permaneció sin cambios.')
       setCloneState(undefined)
       reload()
       navigate(`/admin/questions/${result.globalQuestionPublicId}`)
@@ -279,14 +278,14 @@ export function AdminQuestionsPage() {
     setBusyId(question.publicId)
     try {
       if (type === 'DELETE') {
-        await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación administrativa')
-        toast.success('Pregunta eliminada')
+        await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación lógica desde el Banco de Preguntas')
+        toast.success('Pregunta eliminada', 'La información histórica se conservó.')
       } else if (type === 'RESTORE') {
         await restoreQuestion(question.publicId, question.entityVersion)
-        toast.success('Pregunta restaurada como archivada')
+        toast.success('Pregunta restaurada como inactiva')
       } else {
         await changeQuestionStatus(question.publicId, type === 'ACTIVATE' ? 'ACTIVE' : 'ARCHIVED', question.entityVersion)
-        toast.success(type === 'ACTIVATE' ? 'Pregunta reactivada' : 'Pregunta inactivada')
+        toast.success(type === 'ACTIVATE' ? 'Pregunta activada' : 'Pregunta inactivada')
       }
       setPendingAction(null)
       reload()
@@ -299,7 +298,7 @@ export function AdminQuestionsPage() {
         const title = type === 'DELETE' ? 'No fue posible eliminar la pregunta'
           : type === 'RESTORE' ? 'No fue posible restaurar la pregunta'
             : type === 'ARCHIVE' ? 'No fue posible inactivar la pregunta'
-              : 'No fue posible reactivar la pregunta'
+              : 'No fue posible activar la pregunta'
         toast.error(title, message)
       }
     } finally {
@@ -309,12 +308,14 @@ export function AdminQuestionsPage() {
 
   const dialogTitle = pendingAction?.type === 'DELETE' ? 'Eliminar pregunta'
     : pendingAction?.type === 'RESTORE' ? 'Restaurar pregunta'
-      : pendingAction?.type === 'ARCHIVE' ? 'Inactivar pregunta' : 'Reactivar pregunta'
+      : pendingAction?.type === 'ARCHIVE' ? 'Inactivar pregunta' : 'Activar pregunta'
   const dialogDescription = pendingAction?.type === 'DELETE'
-    ? 'La pregunta dejará de aparecer en los listados operativos. Sus relaciones, intentos, resultados e historial permanecerán intactos.'
-    : pendingAction?.type === 'RESTORE' ? 'La pregunta volverá como archivada.'
-      : pendingAction?.type === 'ARCHIVE' ? 'La pregunta dejará de estar disponible para contenido nuevo. Los usos existentes permanecerán intactos.'
-        : 'La pregunta volverá a estar disponible.'
+    ? 'La eliminación será lógica. Si la pregunta se utiliza en formularios activos, la operación será rechazada. Formularios, colecciones, intentos, resultados e historial no se eliminarán.'
+    : pendingAction?.type === 'RESTORE'
+      ? 'La pregunta se restaurará como inactiva. Después podrás activarla cuando su configuración sea válida.'
+      : pendingAction?.type === 'ARCHIVE'
+        ? 'La pregunta no podrá agregarse a contenido nuevo. Sus relaciones, usos e historial existentes permanecerán intactos.'
+        : 'La pregunta volverá a estar disponible para configuraciones nuevas.'
 
   return (
     <main className="content-page resource-page ns-list-page question-bank-page">
@@ -325,30 +326,76 @@ export function AdminQuestionsPage() {
           <p className="muted">{globalAdministrator
             ? 'Consulta el contenido global y organizacional con filtros compactos y contexto explícito.'
             : canWriteQuestions
-              ? 'Consulta y administra únicamente las preguntas propias de tu organización.'
-              : 'Consulta las preguntas propias y el contenido GLOBAL habilitado para tu organización.'}</p>
+              ? 'Consulta y administra únicamente las preguntas de tu organización.'
+              : 'Consulta las preguntas disponibles para tu organización.'}</p>
         </div>
-        {permissions.has('QUESTION_CREATE') && <Link className="primary-button button-link" to="/admin/questions/new"><Icon name="plus" size={16} /> Nueva pregunta</Link>}
+        {permissions.has('QUESTION_CREATE') && (
+          <Link className="primary-button button-link" to="/admin/questions/new">
+            <Icon name="plus" size={16} /> Nueva pregunta
+          </Link>
+        )}
       </header>
 
       <FilterToolbar hasActiveFilters={hasFilters} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={(value) => updateFilter('q', value)} placeholder="Buscar por texto de la pregunta" />
-        {globalAdministrator && <ResourceSelectField label="Organización" value={organizationPublicId} onChange={(value) => updateFilter('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((organization) => <option value={organization.publicId} key={organization.publicId}>{organization.name}</option>)}</ResourceSelectField>}
-        <ResourceSelectField label="Categoría" value={categoryPublicId} onChange={(value) => updateFilter('category', value)}><option value="">Todas las categorías</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}{globalAdministrator && category.organizationName ? ` · ${category.organizationName}` : ''}</option>)}</ResourceSelectField>
-        <ResourceSelectField label="Estado" value={status} onChange={(value) => updateFilter('status', value || 'ALL')}><option value="ACTIVE">Activas</option><option value="ARCHIVED">Inactivas</option><option value="DELETED">Eliminadas</option><option value="">Todas</option></ResourceSelectField>
-        <ResourceSelectField label="Dificultad" value={difficultyCode} onChange={(value) => updateFilter('difficulty', value)}><option value="">Todas las dificultades</option>{catalogs?.difficulties.map((difficulty) => <option value={difficulty.code} key={difficulty.code}>{difficulty.name}</option>)}</ResourceSelectField>
-        <ResourceSelectField label="Año de creación" value={creationYear} onChange={(value) => updateFilter('year', value)}><option value="">Todos los años</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</ResourceSelectField>
+        {globalAdministrator && (
+          <ResourceSelectField label="Organización" value={organizationPublicId} onChange={(value) => updateFilter('organization', value)}>
+            <option value="">Todas las organizaciones</option>
+            {organizations.map((organization) => <option value={organization.publicId} key={organization.publicId}>{organization.name}</option>)}
+          </ResourceSelectField>
+        )}
+        <ResourceSelectField label="Categoría" value={categoryPublicId} onChange={(value) => updateFilter('category', value)}>
+          <option value="">Todas las categorías</option>
+          {categories.map((category) => (
+            <option value={category.id} key={category.id}>
+              {category.name}{globalAdministrator && category.organizationName ? ` · ${category.organizationName}` : ''}
+            </option>
+          ))}
+        </ResourceSelectField>
+        <ResourceSelectField label="Estado" value={status} onChange={(value) => updateFilter('status', value || 'ALL')}>
+          <option value="ACTIVE">Activas</option>
+          <option value="ARCHIVED">Inactivas</option>
+          <option value="DELETED">Eliminadas</option>
+          <option value="">Todas</option>
+        </ResourceSelectField>
+        <ResourceSelectField label="Dificultad" value={difficultyCode} onChange={(value) => updateFilter('difficulty', value)}>
+          <option value="">Todas las dificultades</option>
+          {catalogs?.difficulties.map((difficulty) => <option value={difficulty.code} key={difficulty.code}>{difficulty.name}</option>)}
+        </ResourceSelectField>
+        <ResourceSelectField label="Año de creación" value={creationYear} onChange={(value) => updateFilter('year', value)}>
+          <option value="">Todos los años</option>
+          {years.map((year) => <option value={year} key={year}>{year}</option>)}
+        </ResourceSelectField>
       </FilterToolbar>
 
-      {error && <section className="inline-error-panel" role="alert"><div className="inline-error-icon"><Icon name="error" size={20} /></div><div><strong>No fue posible cargar el banco de preguntas</strong><p>{error}</p></div><button className="secondary-button compact-button" type="button" onClick={reload}>Reintentar</button></section>}
+      {error && (
+        <section className="inline-error-panel" role="alert">
+          <div className="inline-error-icon"><Icon name="error" size={20} /></div>
+          <div><strong>No fue posible cargar el banco de preguntas</strong><p>{error}</p></div>
+          <button className="secondary-button compact-button" type="button" onClick={reload}>Reintentar</button>
+        </section>
+      )}
 
       <section className="ns-data-panel" aria-busy={loading}>
         <div className="ns-data-table-wrap">
           <table className="ns-data-table ns-question-table question-governance-table">
-            <thead><tr><th>Pregunta</th>{globalAdministrator && <th>Organización</th>}<th>Categoría</th><th>Dificultad</th><th>Estado</th><th>Creación</th><th>Actualización</th><th className="ns-actions-column">Acciones</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Pregunta</th>
+                {globalAdministrator && <th>Organización</th>}
+                <th>Categoría</th>
+                <th>Dificultad</th>
+                <th>Estado</th>
+                <th>Creación</th>
+                <th>Actualización</th>
+                <th className="ns-actions-column">Acciones</th>
+              </tr>
+            </thead>
             <tbody>
               {loading && <tr><td colSpan={globalAdministrator ? 8 : 7} className="ns-table-empty">Consultando preguntas…</td></tr>}
-              {!loading && !error && questions.length === 0 && <tr><td colSpan={globalAdministrator ? 8 : 7} className="ns-table-empty"><strong>No encontramos preguntas</strong><span>Ajusta los filtros o crea contenido nuevo.</span></td></tr>}
+              {!loading && !error && questions.length === 0 && (
+                <tr><td colSpan={globalAdministrator ? 8 : 7} className="ns-table-empty"><strong>No encontramos preguntas</strong><span>Ajusta los filtros o crea contenido nuevo.</span></td></tr>
+              )}
               {!loading && questions.map((question) => (
                 <tr className={question.status === 'DELETED' ? 'ns-row-muted' : ''} key={question.publicId}>
                   <td className="ns-primary-cell question-statement-cell">
@@ -363,31 +410,125 @@ export function AdminQuestionsPage() {
                       </span>
                     )}
                   </td>
-                  {globalAdministrator && <td><strong>{question.ownership.organizationName ?? 'GLOBAL'}</strong><small>{question.ownership.scope === 'GLOBAL' ? 'Global' : 'Organizacional'}</small></td>}
+                  {globalAdministrator && (
+                    <td>
+                      <strong>{question.ownership.organizationName ?? 'GLOBAL'}</strong>
+                      <small>{question.ownership.scope === 'GLOBAL' ? 'Global' : 'Organizacional'}</small>
+                    </td>
+                  )}
                   <td>{question.categories.length ? question.categories.map((category) => category.name).join(', ') : 'Sin categoría'}</td>
                   <td>{question.difficultyName ?? 'Sin dificultad'}</td>
                   <td><span className={`status-badge status-${question.status.toLowerCase()}`}>{statusLabel[question.status]}</span></td>
                   <td>{formatDate(question.createdAt)}</td>
                   <td>{formatDate(question.updatedAt ?? question.createdAt)}</td>
-                  <td><TableActions>
-                    <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
-                    {supervisor && question.ownership.scope === 'GLOBAL' && question.status === 'ACTIVE' && permissions.has('QUESTION_CREATE') && <TableActionButton label="Crear copia para mi organización" icon="copy" disabled={busyId === question.publicId} onClick={() => void createOrganizationCopy(question)} />}
-                    {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />}
-                    {canManageQuestion(question) && (permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')) && <TableActionLink to={`/admin/questions/${question.publicId}/manage`} label="Administrar" icon="archive" />}
-                    {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />}
-                    {globalAdministrator && permissions.has('GLOBAL_CONTENT_PROMOTE') && question.ownership.scope === 'ORGANIZATION' && question.status !== 'DELETED' && <TableActionButton label="Clonar a GLOBAL" icon="copy" tone="primary" onClick={() => void openClone(question)} />}
-                  </TableActions></td>
+                  <td>
+                    <TableActions>
+                      <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
+                      {supervisor && question.ownership.scope === 'GLOBAL' && question.status === 'ACTIVE' && permissions.has('QUESTION_CREATE') && (
+                        <TableActionButton label="Crear copia para mi organización" icon="copy" disabled={busyId === question.publicId} onClick={() => void createOrganizationCopy(question)} />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && (
+                        <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && (
+                        <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_ARCHIVE') && question.status === 'ACTIVE' && (
+                        <TableActionButton label="Inactivar" icon="archive" disabled={busyId === question.publicId} onClick={() => setPendingAction({ type: 'ARCHIVE', question })} />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status === 'ARCHIVED' && (
+                        <TableActionButton label="Activar" icon="check" disabled={busyId === question.publicId} onClick={() => setPendingAction({ type: 'ACTIVATE', question })} />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_ARCHIVE') && question.status !== 'DELETED' && (
+                        <TableActionButton label="Eliminar" icon="trash" tone="danger" disabled={busyId === question.publicId} onClick={() => setPendingAction({ type: 'DELETE', question })} />
+                      )}
+                      {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status === 'DELETED' && (
+                        <TableActionButton label="Restaurar" icon="restore" disabled={busyId === question.publicId} onClick={() => setPendingAction({ type: 'RESTORE', question })} />
+                      )}
+                      {globalAdministrator && permissions.has('GLOBAL_CONTENT_PROMOTE') && question.ownership.scope === 'ORGANIZATION' && question.status !== 'DELETED' && (
+                        <TableActionButton label="Clonar a GLOBAL" icon="copy" tone="primary" disabled={busyId === question.publicId} onClick={() => void openClone(question)} />
+                      )}
+                    </TableActions>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <TablePagination
+          currentPage={page}
+          pageSize={data?.size ?? size}
+          totalElements={data?.totalElements ?? 0}
+          totalPages={data?.totalPages ?? 0}
+          isLoading={loading}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
 
-      <ConfirmDialog open={pendingAction !== null} title={dialogTitle} description={dialogDescription} confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar' : pendingAction?.type === 'RESTORE' ? 'Restaurar' : pendingAction?.type === 'ARCHIVE' ? 'Inactivar' : 'Reactivar'} tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'} onCancel={() => setPendingAction(null)} onConfirm={() => void executePendingAction()} />
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={dialogTitle}
+        description={dialogDescription}
+        confirmLabel={pendingAction?.type === 'DELETE' ? 'Eliminar'
+          : pendingAction?.type === 'RESTORE' ? 'Restaurar'
+            : pendingAction?.type === 'ARCHIVE' ? 'Inactivar' : 'Activar'}
+        tone={pendingAction?.type === 'DELETE' || pendingAction?.type === 'ARCHIVE' ? 'danger' : 'primary'}
+        busy={Boolean(pendingAction && busyId === pendingAction.question.publicId)}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => void executePendingAction()}
+      />
 
-      {cloneState && <div className="ns-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !cloneState.busy) setCloneState(undefined) }}><section className="ns-modal-card question-clone-dialog" role="dialog" aria-modal="true" aria-labelledby="clone-title"><header><div><p className="eyebrow">Banco de Preguntas Global</p><h2 id="clone-title">Clonar a GLOBAL</h2></div><button className="icon-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}><Icon name="close" /></button></header>{cloneState.loading && <p className="muted">Analizando pregunta, dependencias y posibles duplicados…</p>}{cloneState.error && <div className="inline-error-panel"><div className="inline-error-icon"><Icon name="error" /></div><div><strong>No fue posible preparar la clonación</strong><p>{cloneState.error}</p></div></div>}{cloneState.preview && <><div className="clone-preview-summary"><div><span>Organización de origen</span><strong>{cloneState.question.ownership.organizationName}</strong></div><div><span>Versión</span><strong>{cloneState.question.entityVersion}</strong></div><div><span>Dependencias</span><strong>{cloneState.preview.dependencies.length}</strong></div><div><span>Posibles duplicados</span><strong>{cloneState.preview.possibleDuplicates.length}</strong></div></div><p className="clone-source-statement">{cloneState.question.statement}</p>{cloneState.preview.warnings.length > 0 && <ul className="clone-warning-list">{cloneState.preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}<label className="org-check-row"><input type="checkbox" checked={cloneState.includeDependencies} onChange={(event) => setCloneState((current) => current ? { ...current, includeDependencies: event.target.checked } : current)} />Clonar también las dependencias necesarias</label><label className="ns-field"><span>Notas de clonación</span><textarea rows={3} maxLength={1000} value={cloneState.notes} onChange={(event) => setCloneState((current) => current ? { ...current, notes: event.target.value } : current)} /></label><p className="muted">Se creará un registro GLOBAL nuevo. La pregunta original permanecerá en su organización sin cambios.</p></>}<footer><button className="secondary-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}>Cancelar</button><button className="primary-button" type="button" disabled={cloneState.busy || cloneState.loading || !cloneState.preview?.promotable} onClick={() => void executeClone()}>{cloneState.busy ? 'Clonando…' : 'Confirmar clonación'}</button></footer></section></div>}
+      {cloneState && (
+        <div className="ns-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !cloneState.busy) setCloneState(undefined)
+        }}>
+          <section className="ns-modal-card question-clone-dialog" role="dialog" aria-modal="true" aria-labelledby="clone-title">
+            <header>
+              <div><p className="eyebrow">Banco de Preguntas Global</p><h2 id="clone-title">Clonar a GLOBAL</h2></div>
+              <button className="icon-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}><Icon name="close" /></button>
+            </header>
+            {cloneState.loading && <p className="muted">Analizando pregunta, dependencias y posibles duplicados…</p>}
+            {cloneState.error && (
+              <div className="inline-error-panel">
+                <div className="inline-error-icon"><Icon name="error" /></div>
+                <div><strong>No fue posible preparar la clonación</strong><p>{cloneState.error}</p></div>
+              </div>
+            )}
+            {cloneState.preview && (
+              <>
+                <div className="clone-preview-summary">
+                  <div><span>Organización de origen</span><strong>{cloneState.question.ownership.organizationName}</strong></div>
+                  <div><span>Versión</span><strong>{cloneState.question.entityVersion}</strong></div>
+                  <div><span>Dependencias</span><strong>{cloneState.preview.dependencies.length}</strong></div>
+                  <div><span>Posibles duplicados</span><strong>{cloneState.preview.possibleDuplicates.length}</strong></div>
+                </div>
+                <p className="clone-source-statement">{cloneState.question.statement}</p>
+                {cloneState.preview.warnings.length > 0 && (
+                  <ul className="clone-warning-list">{cloneState.preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                )}
+                <label className="org-check-row">
+                  <input type="checkbox" checked={cloneState.includeDependencies} onChange={(event) => setCloneState((current) => current ? { ...current, includeDependencies: event.target.checked } : current)} />
+                  Clonar también las dependencias necesarias
+                </label>
+                <label className="ns-field">
+                  <span>Notas de clonación</span>
+                  <textarea rows={3} maxLength={1000} value={cloneState.notes} onChange={(event) => setCloneState((current) => current ? { ...current, notes: event.target.value } : current)} />
+                </label>
+                <p className="muted">Se creará un registro GLOBAL nuevo. La pregunta original permanecerá en su organización sin cambios.</p>
+              </>
+            )}
+            <footer>
+              <button className="secondary-button" type="button" disabled={cloneState.busy} onClick={() => setCloneState(undefined)}>Cancelar</button>
+              {cloneState.preview && (
+                <button className="primary-button" type="button" disabled={cloneState.busy || !cloneState.preview.promotable} onClick={() => void executeClone()}>
+                  {cloneState.busy ? 'Clonando…' : 'Confirmar clonación'}
+                </button>
+              )}
+            </footer>
+          </section>
+        </div>
+      )}
     </main>
   )
 }

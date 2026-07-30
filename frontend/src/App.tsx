@@ -13,7 +13,6 @@ import { CreateQuestionPage } from './pages/CreateQuestionPage'
 import { CreateUserPage } from './pages/CreateUserPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EditQuestionPage } from './pages/EditQuestionPage'
-import { QuestionManagementPage } from './pages/QuestionManagementPage'
 import { AdminFormsPage } from './pages/AdminFormsPage'
 import { FormBuilderPage } from './pages/FormBuilderPage'
 import { LoginPage } from './pages/LoginPage'
@@ -38,7 +37,6 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/student-login" element={<StudentLoginPage />} />
-
       <Route element={<StudentProtectedRoute />}>
         <Route path="/student" element={<StudentPortalPage />} />
         <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
@@ -48,7 +46,6 @@ export default function App() {
 
         <Route element={<ApplicationLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
-
           <Route element={<PermissionRoute permission="PROFILE_VIEW" />}>
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
@@ -94,10 +91,10 @@ export default function App() {
           <Route element={<PermissionRoute permission="USER_CREATE" />}>
             <Route path="/admin/users/new" element={<CreateUserPage />} />
           </Route>
-
           <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>
             <Route path="/admin/questions" element={<AdminQuestionsPage />} />
             <Route path="/admin/questions/:publicId" element={<AdminQuestionDetailPage />} />
+            <Route path="/admin/questions/:publicId/manage" element={<Navigate to="/admin/questions" replace />} />
           </Route>
           <Route element={<PermissionRoute permission="QUESTION_CREATE" />}>
             <Route path="/admin/questions/new" element={<CreateQuestionPage />} />
@@ -105,10 +102,6 @@ export default function App() {
           <Route element={<PermissionRoute permission="QUESTION_UPDATE" />}>
             <Route path="/admin/questions/:publicId/edit" element={<EditQuestionPage />} />
           </Route>
-          <Route element={<PermissionRoute anyOf={['QUESTION_UPDATE', 'QUESTION_ARCHIVE']} />}>
-            <Route path="/admin/questions/:publicId/manage" element={<QuestionManagementPage />} />
-          </Route>
-
           <Route element={<PermissionRoute permission="COLLECTION_VIEW" />}>
             <Route path="/admin/collections" element={<AdminCollectionsPage />} />
             <Route path="/admin/collections/:publicId" element={<CollectionDetailPage readOnly />} />
@@ -120,7 +113,6 @@ export default function App() {
           <Route path="/admin/question-collections" element={<Navigate to="/admin/collections" replace />} />
           <Route path="/admin/question-collections/new" element={<Navigate to="/admin/collections/new" replace />} />
           <Route path="/admin/question-collections/:publicId" element={<Navigate to="/admin/collections" replace />} />
-
           <Route element={<PermissionRoute permission="FORM_VIEW" />}>
             <Route path="/admin/forms" element={<AdminFormsPage />} />
             <Route path="/admin/forms/:id" element={<FormBuilderPage readOnly />} />
@@ -131,7 +123,6 @@ export default function App() {
           <Route element={<PermissionRoute permission="FORM_UPDATE" />}>
             <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />
           </Route>
-
           <Route element={<PermissionRoute permission="CATALOG_VIEW" />}>
             <Route path="/admin/catalogs" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />
             <Route path="/admin/catalogs/QUESTION_TYPES" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />

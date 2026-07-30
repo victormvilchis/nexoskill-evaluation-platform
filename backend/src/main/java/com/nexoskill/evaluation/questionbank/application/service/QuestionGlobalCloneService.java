@@ -1,5 +1,4 @@
 package com.nexoskill.evaluation.questionbank.application.service;
-
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.PromoteCommand;
 import com.nexoskill.evaluation.globalcontent.application.service.ContentPromotionService;
@@ -18,7 +17,6 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 @Service
 public class QuestionGlobalCloneService {
     private final SpringDataQuestionRepository questions;
@@ -29,7 +27,6 @@ public class QuestionGlobalCloneService {
     private final HttpServletRequest request;
     private final AuditLogPort audit;
     private final Clock clock;
-
     @Autowired
     public QuestionGlobalCloneService(SpringDataQuestionRepository questions,
             QuestionTagStore tagStore,
@@ -48,7 +45,6 @@ public class QuestionGlobalCloneService {
         this.audit = audit;
         this.clock = clock;
     }
-
     public QuestionGlobalCloneService(SpringDataQuestionRepository questions,
             GlobalContentPromotionRepository promotions,
             ContentPromotionService promotionService,
@@ -61,12 +57,10 @@ public class QuestionGlobalCloneService {
     }
 
     @Transactional(readOnly = true)
-
     public com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.PromotionPreview preview(String questionPublicId) {
         ensureGlobalAdministrator();
         return promotionService.preview(GlobalContentType.QUESTION, questionPublicId);
     }
-
     @Transactional
     public CloneResult cloneToGlobal(String questionPublicId, boolean includeDependencies,
                                      String notes, Long actorUserId) {
@@ -85,7 +79,6 @@ public class QuestionGlobalCloneService {
             throw new BusinessException("QUESTION_GLOBAL_CLONE_EXISTS",
                     "Ya existe una pregunta global relacionada con este contenido.");
         }
-
         var promotion = promotionService.promote(new PromoteCommand(GlobalContentType.QUESTION,
                 source.getPublicId(), includeDependencies, DuplicateResolution.CREATE_DISTINCT,
                 null, notes), actorUserId);
@@ -106,15 +99,13 @@ public class QuestionGlobalCloneService {
                         "sourceOrganizationId", source.getOwnerOrganizationId()), clock.instant());
         return new CloneResult(promotion.publicId(), source.getPublicId(), global.getPublicId());
     }
-
     private void ensureGlobalAdministrator() {
         var tenant = tenantContextResolver.resolve(request);
-        if (!tenant.globalAdministrator() || !tenant.globalScope()) {
+        if (!tenant.globalAdministrator()) {
             throw new BusinessException("QUESTION_GLOBAL_CLONE_FORBIDDEN",
                     "Solo el Administrador global puede clonar preguntas al catálogo global.");
         }
     }
-
     public record CloneResult(String promotionPublicId, String sourceQuestionPublicId,
                               String globalQuestionPublicId) { }
 }
