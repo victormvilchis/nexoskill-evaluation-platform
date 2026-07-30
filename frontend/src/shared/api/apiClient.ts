@@ -6,6 +6,31 @@ export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
 export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
 export const STUDENT_AUTH_INVALID_EVENT = 'nexoskill:student-auth-invalid'
 
+const COLLABORATOR_TERMINOLOGY: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bPersonas estudiantes\b/g, 'Colaboradores'],
+  [/\bpersonas estudiantes\b/g, 'colaboradores'],
+  [/\bPersona estudiante\b/g, 'Persona colaboradora'],
+  [/\bpersona estudiante\b/g, 'persona colaboradora'],
+  [/\bEstudiantes\b/g, 'Colaboradores'],
+  [/\bestudiantes\b/g, 'colaboradores'],
+  [/\bEstudiante\b/g, 'Colaborador'],
+  [/\bestudiante\b/g, 'colaborador']
+]
+
+function applyCollaboratorTerminology(value: string): string {
+  return COLLABORATOR_TERMINOLOGY.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    value
+  )
+}
+
+function normalizeFieldErrors(fieldErrors?: Record<string, string>): Record<string, string> | undefined {
+  if (!fieldErrors) return undefined
+  return Object.fromEntries(
+    Object.entries(fieldErrors).map(([field, message]) => [field, applyCollaboratorTerminology(message)])
+  )
+}
+
 export interface AuthInvalidEventDetail {
   code: string
   message: string
@@ -101,13 +126,13 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const error = body as ApiError | null
     const code = error?.code ?? 'REQUEST_FAILED'
-    const message = error?.message ?? 'No fue posible completar la solicitud.'
+    const message = applyCollaboratorTerminology(error?.message ?? 'No fue posible completar la solicitud.')
     publishAuthenticationFailure(code, message)
     throw new ApiRequestError(
       message,
       code,
       response.status,
-      error?.fieldErrors
+      normalizeFieldErrors(error?.fieldErrors)
     )
   }
 

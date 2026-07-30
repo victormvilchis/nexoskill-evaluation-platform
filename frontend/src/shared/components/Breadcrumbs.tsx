@@ -18,8 +18,8 @@ function resolveCrumbs(pathname: string): Crumb[] {
   if (pathname === '/profile') return [{ label: 'Cuenta' }, { label: 'Perfil' }]
   if (pathname === '/change-password') return [{ label: 'Cuenta' }, { label: 'Contraseña' }]
   if (pathname.startsWith('/admin/students')) {
-    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Estudiantes', to: '/admin/students' }]
-    if (pathname.endsWith('/new')) base.push({ label: 'Nuevo estudiante' })
+    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Colaboradores', to: '/admin/students' }]
+    if (pathname.endsWith('/new')) base.push({ label: 'Nuevo colaborador' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
     else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
     else if (pathname.endsWith('/certifications')) base.push({ label: 'Administrar certificaciones' })

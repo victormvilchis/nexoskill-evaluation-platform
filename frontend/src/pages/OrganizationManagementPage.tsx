@@ -32,10 +32,10 @@ const CONSEQUENCES: Record<Action, { title: string; description: string; items: 
     title: 'Desactivar organización',
     description: 'La desactivación bloquea la operación sin modificar los estados individuales ni eliminar información.',
     items: [
-      'Gestores, Supervisores y Estudiantes perderán acceso inmediatamente.',
+      'Gestores, Supervisores y Colaboradores perderán acceso inmediatamente.',
       'Todas las sesiones activas serán revocadas.',
       'No se podrán crear nuevos registros operativos.',
-      'Usuarios, estudiantes, contenido, avances, resultados y auditoría se conservarán.',
+      'Usuarios, colaboradores, contenido, avances, resultados y auditoría se conservarán.',
       'La organización podrá reactivarse posteriormente.'
     ],
     confirm: 'Desactivar organización'
@@ -46,7 +46,7 @@ const CONSEQUENCES: Record<Action, { title: string; description: string; items: 
     items: [
       'La organización dejará de aparecer en los listados operativos.',
       'Todos los accesos permanecerán bloqueados y las sesiones serán revocadas.',
-      'No se eliminarán usuarios, estudiantes, preguntas, categorías, resultados ni configuraciones.',
+      'No se eliminarán usuarios, colaboradores, preguntas, categorías, resultados ni configuraciones.',
       'La auditoría y las relaciones históricas permanecerán disponibles.',
       'Para volver a utilizarla deberá restaurarse primero como inactiva.'
     ],
@@ -54,9 +54,9 @@ const CONSEQUENCES: Record<Action, { title: string; description: string; items: 
   },
   ACTIVATE: {
     title: 'Activar organización',
-    description: 'La organización volverá a operar conforme a su vigencia y a los estados individuales de sus usuarios y estudiantes.',
+    description: 'La organización volverá a operar conforme a su vigencia y a los estados individuales de sus usuarios y colaboradores.',
     items: [
-      'Los usuarios y estudiantes elegibles podrán autenticarse nuevamente.',
+      'Los usuarios y colaboradores elegibles podrán autenticarse nuevamente.',
       'Se habilitarán las operaciones permitidas por su plan y permisos.',
       'No se modificarán registros históricos.'
     ],
@@ -196,7 +196,7 @@ export function OrganizationManagementPage() {
       <section className="ns-card org-management-summary">
         <div><span>Nombre</span><strong>{organization.name}</strong></div>
         <div><span>Código</span><strong>{organization.code}</strong></div>
-        <div><span>Estudiantes registrados</span><strong>{organization.studentCount ?? 0}</strong></div>
+        <div><span>Colaboradores registrados</span><strong>{organization.studentCount ?? 0}</strong></div>
         <div><span>Último cambio de estado</span><strong>{formatDateTime(organization.statusChangedAt)}</strong></div>
         <div className="org-management-wide"><span>Motivo actual</span><strong>{organization.statusReason || 'Sin motivo registrado'}</strong></div>
       </section>

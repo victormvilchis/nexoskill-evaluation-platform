@@ -33,12 +33,12 @@ export function StudentLoginPage() {
     <main className="login-page student-login-page">
       <section className="login-brand">
         <div className="brand-mark" aria-hidden="true">NS</div>
-        <p className="eyebrow">Portal de estudiantes</p>
+        <p className="eyebrow">Portal de colaboradores</p>
         <h1>Tu espacio de aprendizaje</h1>
         <p className="login-description">Acceso independiente y protegido para evaluaciones, colecciones y rutas asignadas.</p>
       </section>
       <section className="login-card" aria-labelledby="student-login-title">
-        <p className="eyebrow">Estudiantes</p>
+        <p className="eyebrow">Colaboradores</p>
         <h2 id="student-login-title">Inicia sesión</h2>
         <p className="muted">Usa el código de tu organización y las credenciales proporcionadas.</p>
         {searchParams.get('passwordChanged') === '1' && (

@@ -16,7 +16,7 @@ export function StudentPortalPage() {
         <button className="secondary-button" onClick={() => void handleLogout()}>Cerrar sesión</button>
       </header>
       <section className="student-welcome-card">
-        <p className="eyebrow">Portal de estudiantes</p>
+        <p className="eyebrow">Portal de colaboradores</p>
         <h1>Hola, {student.firstName}</h1>
         <p>Tu cuenta está activa. Las asignaciones, avances y resultados se habilitarán en la Parte 5.</p>
         <dl className="student-portal-metadata">

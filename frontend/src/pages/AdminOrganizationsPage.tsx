@@ -206,7 +206,7 @@ export function AdminOrganizationsPage() {
                 <th>Organización</th>
                 <th>Modalidad</th>
                 <th>Estado</th>
-                <th>Estudiantes</th>
+                <th>Colaboradores</th>
                 <th>Vigencia</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>

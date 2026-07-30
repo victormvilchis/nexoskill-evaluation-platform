@@ -81,7 +81,7 @@ export function LoginPage() {
           </div>
         )}
         <LoginForm />
-        <Link className="student-internal-login-link" to="/student-login">Acceso para estudiantes</Link>
+        <Link className="student-internal-login-link" to="/student-login">Acceso para colaboradores</Link>
       </section>
     </main>
   )

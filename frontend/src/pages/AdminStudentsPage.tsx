@@ -83,7 +83,7 @@ export function AdminStudentsPage() {
       setData({ ...response, content: response.content ?? [] })
       if (response.totalPages > 0 && page >= response.totalPages) goToPage(response.totalPages - 1)
     }).catch((requestError) => {
-      if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar estudiantes.')
+      if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar colaboradores.')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [administrator, organization, page, searchParams, size])
@@ -108,7 +108,7 @@ export function AdminStudentsPage() {
   const columnCount = administrator ? 6 : 5
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Estudiantes</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div>{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear estudiante</Link>}</header>
+      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div>{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</header>
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo o código" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
@@ -116,9 +116,9 @@ export function AdminStudentsPage() {
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="ns-data-panel" aria-busy={loading}>
-        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Estudiante</th>{administrator && <th>Organización</th>}<th>Estado</th><th>Vencimiento</th><th>Certificaciones</th><th className="ns-actions-column">Acciones</th></tr></thead><tbody>
-          {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando estudiantes…</td></tr>}
-          {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron estudiantes con los filtros seleccionados.</td></tr>}
+        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}<th>Estado</th><th>Vencimiento</th><th>Certificaciones</th><th className="ns-actions-column">Acciones</th></tr></thead><tbody>
+          {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
+          {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
             <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>
             {administrator && <td>{student.organization ? <><strong>{student.organization.name}</strong><small>{student.organization.code}</small></> : '—'}</td>}

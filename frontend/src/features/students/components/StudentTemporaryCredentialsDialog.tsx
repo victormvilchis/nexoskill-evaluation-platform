@@ -29,7 +29,7 @@ export function StudentTemporaryCredentialsDialog({ title, credentials, onClose 
         <div>
           <p className="eyebrow">Visualización única</p>
           <h2 id="student-credentials-title">{title}</h2>
-          <p>La contraseña temporal se mostrará una sola vez. Compártela de forma segura. El estudiante deberá cambiarla durante su primer inicio de sesión.</p>
+          <p>La contraseña temporal se mostrará una sola vez. Compártela de forma segura. El colaborador deberá cambiarla durante su primer inicio de sesión.</p>
         </div>
         <div className="temporary-credentials">
           <div><span>Organización</span><code>{credentials.organizationLogin}</code>

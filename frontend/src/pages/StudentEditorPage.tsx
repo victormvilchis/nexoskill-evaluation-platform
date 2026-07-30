@@ -168,7 +168,7 @@ export function StudentEditorPage({ mode }: Props) {
       .catch((requestError) => {
         if (active) setError(requestError instanceof ApiRequestError
           ? requestError.message
-          : 'No fue posible cargar al estudiante.')
+          : 'No fue posible cargar al colaborador.')
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -260,7 +260,7 @@ export function StudentEditorPage({ mode }: Props) {
   function validateForm() {
     const errors: Record<string, string> = {}
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
-    if (!studentCode.trim() && mode === 'create') errors.studentCode = 'El código del estudiante es obligatorio.'
+    if (!studentCode.trim() && mode === 'create') errors.studentCode = 'El código del colaborador es obligatorio.'
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
     if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
     if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
@@ -303,7 +303,7 @@ export function StudentEditorPage({ mode }: Props) {
           ...certificationPayload
         })
         setTemporaryCredentials(response.temporaryCredentials)
-        toast.success('Estudiante creado correctamente', 'Guarda las credenciales antes de cerrar esta vista.')
+        toast.success('Colaborador creado correctamente', 'Guarda las credenciales antes de cerrar esta vista.')
       } else if (student && publicId) {
         const admissionChanged = appliesCertifications && student.admissionDate !== admissionDate
         await updateStudent(publicId, {
@@ -317,7 +317,7 @@ export function StudentEditorPage({ mode }: Props) {
           version: student.version
         })
         completeSave({
-          title: 'Estudiante actualizado correctamente.',
+          title: 'Colaborador actualizado correctamente.',
           message: admissionChanged
             ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
             : undefined
@@ -330,7 +330,7 @@ export function StudentEditorPage({ mode }: Props) {
         setFieldErrors(errors)
         focusFirstFieldError(errors)
       } else {
-        setError('No fue posible guardar al estudiante.')
+        setError('No fue posible guardar al colaborador.')
       }
     } finally {
       setSaving(false)
@@ -348,8 +348,8 @@ export function StudentEditorPage({ mode }: Props) {
       <BackButton fallback="/admin/students" />
       <header className="page-heading compact">
         <div>
-          <p className="eyebrow">Estudiantes</p>
-          <h1>{mode === 'create' ? 'Nueva persona estudiante' : mode === 'edit' ? 'Editar estudiante' : 'Ver estudiante'}</h1>
+          <p className="eyebrow">Colaboradores</p>
+          <h1>{mode === 'create' ? 'Nuevo colaborador' : mode === 'edit' ? 'Editar colaborador' : 'Ver colaborador'}</h1>
           <p className="muted">Inicio de vigencia y vencimiento controlan el acceso; la fecha de alta se usa únicamente para el seguimiento de certificaciones.</p>
         </div>
       </header>
@@ -517,13 +517,13 @@ export function StudentEditorPage({ mode }: Props) {
           <div className="form-actions">
             <button className="primary-button" type="submit"
               disabled={saving || catalogLoading || Boolean(catalogError)}>
-              {saving ? 'Guardando…' : mode === 'create' ? 'Crear estudiante' : 'Guardar cambios'}
+              {saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}
             </button>
           </div>
         )}
       </form>
       {temporaryCredentials && (
-        <StudentTemporaryCredentialsDialog title="Estudiante creado correctamente"
+        <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente"
           credentials={temporaryCredentials}
           onClose={() => {
             setTemporaryCredentials(undefined)

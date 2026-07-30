@@ -86,7 +86,7 @@ export function StudentManagementPage() {
       .catch((requestError) => {
         if (active) setError(requestError instanceof ApiRequestError
           ? requestError.message
-          : 'No fue posible consultar la administración del estudiante.')
+          : 'No fue posible consultar la administración del colaborador.')
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -120,7 +120,7 @@ export function StudentManagementPage() {
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
-        : 'No fue posible actualizar el estado del estudiante.')
+        : 'No fue posible actualizar el estado del colaborador.')
     } finally {
       setBusy(false)
     }
@@ -181,13 +181,13 @@ export function StudentManagementPage() {
     setError(undefined)
     try {
       await permanentlyDeleteStudent(publicId)
-      toast.success('Estudiante eliminado permanentemente',
-        'La cuenta y la información exclusiva del estudiante fueron eliminadas. La operación no puede deshacerse.')
+      toast.success('Colaborador eliminado permanentemente',
+        'La cuenta y la información exclusiva del colaborador fueron eliminadas. La operación no puede deshacerse.')
       navigate('/admin/students', { replace: true })
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
-        : 'No fue posible eliminar permanentemente al estudiante.')
+        : 'No fue posible eliminar permanentemente al colaborador.')
     } finally {
       setBusy(false)
     }
@@ -196,7 +196,7 @@ export function StudentManagementPage() {
   if (loading) return <LoadingScreen />
   if (!administration) {
     return <main className="content-page"><BackButton fallback="/admin/students" />
-      <div className="error-message" role="alert">{error ?? 'El estudiante no existe.'}</div></main>
+      <div className="error-message" role="alert">{error ?? 'El colaborador no existe.'}</div></main>
   }
 
   const { student, sessions, seat, activeSessions, lastAdministrativeChange } = administration
@@ -208,7 +208,7 @@ export function StudentManagementPage() {
       <BackButton fallback="/admin/students" />
       <header className="ns-page-header">
         <div>
-          <p className="eyebrow">Administración · Estudiante</p>
+          <p className="eyebrow">Administración · Colaborador</p>
           <h1>Administrar {student.displayName}</h1>
           <p className="muted">Las acciones sensibles de cuenta, acceso, contraseña, sesiones y eliminación se concentran en esta vista.</p>
         </div>
@@ -230,7 +230,7 @@ export function StudentManagementPage() {
 
       <section className="ns-card student-administration-section">
         <div className="ns-card-heading"><div><span className="ns-step">1</span><h2>Estado y acceso</h2></div></div>
-        <p className="muted">Las fechas se modifican únicamente desde Editar estudiante. Cambiarlas no activa automáticamente una cuenta vencida.</p>
+        <p className="muted">Las fechas se modifican únicamente desde Editar colaborador. Cambiarlas no activa automáticamente una cuenta vencida.</p>
         <div className="student-management-actions">
           {canActivate && permissions.has('STUDENT_STATUS_CHANGE') && (
             <button className="primary-button" type="button" disabled={busy} onClick={() => setPendingAction('ACTIVATE')}>Activar</button>
@@ -244,7 +244,7 @@ export function StudentManagementPage() {
       {permissions.has('STUDENT_PASSWORD_RESET') && (
         <section className="ns-card student-administration-section">
           <div className="ns-card-heading"><div><span className="ns-step">2</span><h2>Contraseña y credenciales</h2></div></div>
-          <p className="muted">Se generará una contraseña temporal segura, se revocarán las sesiones y el estudiante deberá cambiarla en el siguiente inicio.</p>
+          <p className="muted">Se generará una contraseña temporal segura, se revocarán las sesiones y el colaborador deberá cambiarla en el siguiente inicio.</p>
           <button className="secondary-button" type="button" disabled={busy} onClick={() => setPendingAction('RESET_PASSWORD')}>Restablecer contraseña</button>
         </section>
       )}
@@ -298,19 +298,19 @@ export function StudentManagementPage() {
       {permissions.has('STUDENT_DELETE') && (
         <section className="ns-card student-administration-section student-permanent-delete-zone">
           <div className="ns-card-heading"><div><span className="ns-step">5</span><h2>Zona de eliminación permanente</h2></div></div>
-          <p>La eliminación borra la cuenta, credenciales, sesiones, asignaciones, avances, intentos, resultados, certificaciones y datos personales exclusivos del estudiante. No elimina contenido maestro ni información de otras personas.</p>
+          <p>La eliminación borra la cuenta, credenciales, sesiones, asignaciones, avances, intentos, resultados, certificaciones y datos personales exclusivos del colaborador. No elimina contenido maestro ni información de otras personas.</p>
           <button className="danger-button" type="button" disabled={busy}
             onClick={() => { setDeleteConfirmed(false); setDeleteOpen(true) }}>Eliminar permanentemente</button>
         </section>
       )}
 
-      <ConfirmDialog open={pendingAction === 'ACTIVATE'} title="Activar estudiante"
+      <ConfirmDialog open={pendingAction === 'ACTIVATE'} title="Activar colaborador"
         description="Se validarán la organización, el inicio de vigencia, el vencimiento y la disponibilidad de asiento. Las sesiones anteriores no se restaurarán."
         confirmLabel="Activar" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
-      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Desactivar estudiante"
-        description="El estudiante perderá el acceso inmediatamente. Sus sesiones serán revocadas y el asiento entrará en el proceso de liberación; sus avances, resultados, asignaciones y certificaciones se conservarán."
+      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Desactivar colaborador"
+        description="El colaborador perderá el acceso inmediatamente. Sus sesiones serán revocadas y el asiento entrará en el proceso de liberación; sus avances, resultados, asignaciones y certificaciones se conservarán."
         confirmLabel="Desactivar" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
@@ -319,14 +319,14 @@ export function StudentManagementPage() {
         confirmLabel="Generar contraseña" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executePasswordReset()} />
 
-      <ConfirmDialog open={deleteOpen} title="Eliminar permanentemente al estudiante"
-        description="Esta acción eliminará permanentemente al estudiante y toda su información asociada. Esta operación no se puede deshacer."
+      <ConfirmDialog open={deleteOpen} title="Eliminar permanentemente al colaborador"
+        description="Esta acción eliminará permanentemente al colaborador y toda su información asociada. Esta operación no se puede deshacer."
         confirmLabel="Eliminar permanentemente" tone="danger" busy={busy} confirmDisabled={!deleteConfirmed}
         onCancel={() => { setDeleteOpen(false); setDeleteConfirmed(false) }}
         onConfirm={() => void executePermanentDelete()}>
         <label className="student-delete-confirmation">
           <input type="checkbox" checked={deleteConfirmed} onChange={(event) => setDeleteConfirmed(event.target.checked)} />
-          <span>Entiendo que esta acción eliminará permanentemente al estudiante y toda su información.</span>
+          <span>Entiendo que esta acción eliminará permanentemente al colaborador y toda su información.</span>
         </label>
       </ConfirmDialog>
 

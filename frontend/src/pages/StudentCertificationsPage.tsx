@@ -490,7 +490,7 @@ export function StudentCertificationsPage() {
       <BackButton fallback="/admin/students" />
       <header className="ns-page-header">
         <div>
-          <p className="eyebrow">Estudiantes · Certificaciones</p>
+          <p className="eyebrow">Colaboradores · Certificaciones</p>
           <h1>Administrar certificaciones</h1>
           <p className="muted">Los datos generales son de solo lectura. El tipo Certificación o Recertificación, las fechas límite y los vencimientos se calculan en backend.</p>
         </div>
@@ -499,7 +499,7 @@ export function StudentCertificationsPage() {
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="ns-card certification-student-summary">
-        <div><span>Estudiante</span><strong>{detail.student.displayName}</strong></div>
+        <div><span>Colaborador</span><strong>{detail.student.displayName}</strong></div>
         <div><span>Organización</span><strong>{detail.student.organizationName}</strong></div>
         <div><span>Estado</span><strong>{STUDENT_STATUS_LABELS[detail.student.status] ?? detail.student.status}</strong></div>
         <div><span>Inicio de vigencia</span><strong>{formatDate(detail.student.validFrom)}</strong></div>
