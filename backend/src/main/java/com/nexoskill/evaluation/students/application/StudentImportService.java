@@ -54,7 +54,8 @@ public class StudentImportService {
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     private static final int MAX_FILE_BYTES = 15 * 1024 * 1024;
     private static final int TOKEN_MINUTES = 30;
-    private static final Set<String> OPERATOR_ROLES = Set.of("MANAGER", "SUPERVISOR");
+    private static final Set<String> ORGANIZATION_OPERATOR_ROLES = Set.of("MANAGER", "SUPERVISOR");
+    private static final String GLOBAL_ADMINISTRATOR_ROLE = "ADMINISTRATOR";
     private static final List<String> CERT_TYPES = List.of(
             "TECHNOLOGICAL", "DEVELOPMENT_SECURITY", "NORMATIVE_TESTING", "ONE", "AGILE");
 
@@ -84,8 +85,9 @@ public class StudentImportService {
     }
 
     @Transactional(readOnly = true)
-    public Preview preview(TenantContext tenant, AuthenticatedUser actor, String fileName, byte[] content) {
-        assertOperator(tenant, actor);
+    public Preview preview(TenantContext tenant, AuthenticatedUser actor, String organizationPublicId,
+            String fileName, byte[] content) {
+        TenantContext effectiveTenant = resolveImportTenant(tenant, actor, organizationPublicId);
         cleanupExpired();
         if (content == null || content.length == 0) {
             throw new BusinessException("STUDENT_IMPORT_FILE_REQUIRED", "Selecciona un archivo Excel para continuar.");
@@ -103,18 +105,18 @@ public class StudentImportService {
         Integer receiptCount = jdbc.queryForObject("""
             SELECT COUNT(*) FROM STUDENT_IMPORT_RECEIPT
              WHERE ORGANIZATION_ID = :organizationId AND FILE_SHA256 = :digest
-            """, Map.of("organizationId", tenant.organizationId(), "digest", digest), Integer.class);
+            """, Map.of("organizationId", effectiveTenant.organizationId(), "digest", digest), Integer.class);
         if (receiptCount != null && receiptCount > 0) {
             throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED",
                     "Este archivo ya fue iniciado o aplicado para la organización actual.");
         }
 
-        Organization organization = organization(tenant.organizationId());
+        Organization organization = organization(effectiveTenant.organizationId());
         XlsxCertificationReader.SheetData sheet = reader.read(new ByteArrayInputStream(content));
-        Catalogs catalogs = catalogs(tenant);
-        List<ExistingStudent> existing = existingStudents(tenant.organizationId());
-        Map<Long, Map<String, CertificationData>> existingCertifications = existingCertifications(tenant.organizationId());
-        Map<Long, ExperienceSnapshot> existingExperience = existingExperience(tenant.organizationId());
+        Catalogs catalogs = catalogs(effectiveTenant);
+        List<ExistingStudent> existing = existingStudents(effectiveTenant.organizationId());
+        Map<Long, Map<String, CertificationData>> existingCertifications = existingCertifications(effectiveTenant.organizationId());
+        Map<Long, ExperienceSnapshot> existingExperience = existingExperience(effectiveTenant.organizationId());
 
         List<ImportedStudent> parsed = new ArrayList<>();
         List<Issue> errors = new ArrayList<>();
@@ -207,7 +209,7 @@ public class StudentImportService {
                                 .collect(java.util.stream.Collectors.toUnmodifiableSet())));
         Set<String> previewPossibleLows = possibleLows.stream().map(PossibleLowPreview::studentPublicId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        PendingImport state = new PendingImport(token, actor.internalId(), tenant.organizationId(), digest,
+        PendingImport state = new PendingImport(token, actor.internalId(), effectiveTenant.organizationId(), digest,
                 java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, parsed,
                 Map.copyOf(matches), previewNewRows, previewChangeFields, previewPossibleLows,
                 List.copyOf(errors), List.copyOf(conflicts));
@@ -219,7 +221,6 @@ public class StudentImportService {
 
     public ApplyResult apply(TenantContext tenant, AuthenticatedUser actor, ApplyCommand command,
             StudentService.Actor requestActor) {
-        assertOperator(tenant, actor);
         if (command == null || command.token() == null || command.token().isBlank()) {
             throw new BusinessException("STUDENT_IMPORT_TOKEN_REQUIRED", "La vista previa ya no es válida.");
         }
@@ -230,13 +231,9 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_TOKEN_EXPIRED",
                     "La vista previa caducó o ya fue aplicada. Vuelve a seleccionar el archivo.");
         }
-        if (!Objects.equals(state.actorId(), actor.internalId())
-                || !Objects.equals(state.organizationId(), tenant.organizationId())) {
-            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "La vista previa pertenece a otro usuario u organización.");
-        }
+        TenantContext effectiveTenant = effectiveTenantForState(tenant, actor, state);
         Integer receiptCount = jdbc.queryForObject("SELECT COUNT(*) FROM STUDENT_IMPORT_RECEIPT WHERE ORGANIZATION_ID = :organizationId AND FILE_SHA256 = :digest",
-                Map.of("organizationId", tenant.organizationId(), "digest", state.digest()), Integer.class);
+                Map.of("organizationId", effectiveTenant.organizationId(), "digest", state.digest()), Integer.class);
         if (receiptCount != null && receiptCount > 0) {
             throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED",
                     "Esta importación ya fue iniciada o aplicada y no puede ejecutarse dos veces.");
@@ -245,13 +242,13 @@ public class StudentImportService {
         Map<String, NewSelection> newSelections = indexNew(command.newStudents());
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
-        validateSelectedEmails(tenant.organizationId(), state, newSelections);
+        validateSelectedEmails(effectiveTenant.organizationId(), state, newSelections);
         validateSelections(state, newSelections, changeSelections, lowSelections);
         if (!pending.remove(normalizedToken, state)) {
             throw new BusinessException("STUDENT_IMPORT_TOKEN_EXPIRED",
                     "La vista previa ya fue utilizada o descartada. Vuelve a seleccionar el archivo.");
         }
-        String receiptPublicId = claimImport(state, tenant, actor);
+        String receiptPublicId = claimImport(state, effectiveTenant, actor);
         List<Credential> credentials = new ArrayList<>();
         List<Issue> applyErrors = new ArrayList<>();
         int created = 0;
@@ -262,7 +259,7 @@ public class StudentImportService {
             Match match = state.matches().get(imported.rowKey());
             if (match == null || imported.hasBlockingErrors()) continue;
             try {
-                RowOutcome outcome = rowTransaction.execute(status -> applyRow(tenant, state, imported, match,
+                RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, imported, match,
                         newSelections, changeSelections, requestActor, actor));
                 if (outcome == null) continue;
                 if (outcome.credential() != null) credentials.add(outcome.credential());
@@ -276,11 +273,11 @@ public class StudentImportService {
             }
         }
 
-        for (ExistingStudent current : existingStudents(tenant.organizationId())) {
+        for (ExistingStudent current : existingStudents(effectiveTenant.organizationId())) {
             LowSelection selection = lowSelections.get(current.publicId());
             if (selection == null || !"DEACTIVATE".equals(selection.action())) continue;
             try {
-                rowTransaction.executeWithoutResult(status -> studentService.deactivate(tenant, current.publicId(), requestActor));
+                rowTransaction.executeWithoutResult(status -> studentService.deactivate(effectiveTenant, current.publicId(), requestActor));
                 deactivated++;
             } catch (BusinessException exception) {
                 applyErrors.add(new Issue(0, exception.getCode(),
@@ -301,7 +298,7 @@ public class StudentImportService {
                    AND FILE_SHA256 = :digest AND STATUS_CODE = 'PROCESSING'
                 """, new MapSqlParameterSource()
                     .addValue("publicId", receiptPublicId)
-                    .addValue("organizationId", tenant.organizationId())
+                    .addValue("organizationId", effectiveTenant.organizationId())
                     .addValue("digest", state.digest())
                     .addValue("createdCount", createdCount)
                     .addValue("updatedCount", updatedCount)
@@ -340,10 +337,10 @@ public class StudentImportService {
     }
 
     public void discard(TenantContext tenant, AuthenticatedUser actor, String token) {
-        assertOperator(tenant, actor);
         PendingImport state = pending.get(token);
-        if (state != null && Objects.equals(state.actorId(), actor.internalId())
-                && Objects.equals(state.organizationId(), tenant.organizationId())) pending.remove(token);
+        if (state == null) return;
+        effectiveTenantForState(tenant, actor, state);
+        pending.remove(token, state);
     }
 
     private RowOutcome applyRow(TenantContext tenant, PendingImport state, ImportedStudent imported, Match match,
@@ -352,23 +349,28 @@ public class StudentImportService {
         if (match.existing() == null) {
             NewSelection selection = newSelections.get(imported.rowKey());
             if (selection == null || !selection.selected()) return RowOutcome.none();
-            String email = requireEmail(selection.email(), imported.rowNumber());
+            ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(), null);
+            String email = requireEmail(selection.email(), resolved.rowNumber());
+            String ownerPublicId = tenant.globalAdministrator() ? state.organization().publicId() : null;
             StudentFoundationService.CreateResult result = foundation.create(tenant,
-                    new StudentFoundationService.CreateCommand(null, generatedStudentCode(state.digest(), imported),
-                            email, imported.firstName(), imported.lastName(), imported.fullName(), StudentStatus.ACTIVE,
-                            LocalDate.now(clock), accessExpiry(state.organization()), imported.admissionDate(),
-                            imported.profilePublicId(), imported.technologicalProfilePublicId(),
-                            imported.flag("TECHNOLOGICAL"), imported.flag("DEVELOPMENT_SECURITY"),
-                            imported.flag("NORMATIVE_TESTING"), imported.flag("ONE"), imported.flag("AGILE")),
+                    new StudentFoundationService.CreateCommand(ownerPublicId,
+                            generatedStudentCode(state.digest(), resolved),
+                            email, resolved.firstName(), resolved.lastName(), resolved.fullName(), StudentStatus.ACTIVE,
+                            LocalDate.now(clock), accessExpiry(state.organization()), resolved.admissionDate(),
+                            resolved.profilePublicId(), resolved.technologicalProfilePublicId(),
+                            resolved.flag("TECHNOLOGICAL"), resolved.flag("DEVELOPMENT_SECURITY"),
+                            resolved.flag("NORMATIVE_TESTING"), resolved.flag("ONE"), resolved.flag("AGILE")),
                     requestActor);
             Long studentId = studentId(result.student().publicId(), tenant.organizationId());
-            persistImportedDetails(tenant, result.student().publicId(), studentId, imported, actor);
+            persistImportedDetails(tenant, result.student().publicId(), studentId, resolved, actor);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
-                    imported.fullName(), email, result.temporaryPassword()));
+                    resolved.fullName(), email, result.temporaryPassword()));
         }
         ChangeSelection selection = changeSelections.get(match.existing().publicId());
         if (selection == null || selection.fields().isEmpty()) return RowOutcome.none();
-        updateExisting(tenant, match.existing(), imported, selection.fields(), requestActor, actor);
+        ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(),
+                selection.fields());
+        updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
         return new RowOutcome(0, 1, null);
     }
 
@@ -457,7 +459,9 @@ public class StudentImportService {
             ImportedStudent imported, AuthenticatedUser actor) {
         if (data == null || !data.applies()) return;
         CertificationType type = CertificationType.valueOf(data.type());
-        CertificationModels.StudentCertificationDetail detail = certificationService.get(tenant, studentPublicId, actor);
+        AuthenticatedUser certificationActor = certificationImportActor(actor, tenant);
+        CertificationModels.StudentCertificationDetail detail = certificationService.get(
+                tenant, studentPublicId, certificationActor);
         CertificationModels.CycleView existing = detail.cycles().stream()
                 .filter(cycle -> cycle.type() == type && cycle.active())
                 .findFirst()
@@ -476,7 +480,7 @@ public class StudentImportService {
         }
 
         List<CertificationModels.AttemptCommand> attempts = attemptCommands(
-                tenant, studentPublicId, existing, data, actor);
+                tenant, studentPublicId, existing, data, certificationActor);
         CertificationModels.CycleCommand command = new CertificationModels.CycleCommand(
                 existing == null ? null : existing.publicId(), type, technologyPublicId, level,
                 type == CertificationType.TECHNOLOGICAL,
@@ -488,7 +492,7 @@ public class StudentImportService {
                 existing == null ? null : existing.version(), attempts);
 
         CertificationModels.StudentCertificationDetail saved = certificationService.save(
-                tenant, studentPublicId, new CertificationModels.SaveCommand(List.of(command)), actor,
+                tenant, studentPublicId, new CertificationModels.SaveCommand(List.of(command)), certificationActor,
                 null, null);
         CertificationModels.CycleView savedCycle = saved.cycles().stream()
                 .filter(cycle -> existing != null ? cycle.publicId().equals(existing.publicId())
@@ -661,10 +665,14 @@ public class StudentImportService {
         NameParts names = splitName(fullName, row.rowNumber(), errors);
         CatalogRef profileRef = resolveCatalog(catalogs.profiles(), profile);
         CatalogRef techProfileRef = resolveCatalog(catalogs.technologicalProfiles(), technologicalProfile);
-        if (profile != null && profileRef == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_PROFILE_NOT_FOUND",
-                "El perfil '" + profile + "' no está disponible para la organización."));
-        if (technologicalProfile != null && techProfileRef == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_TECH_PROFILE_NOT_FOUND",
-                "El perfil tecnológico '" + technologicalProfile + "' no está disponible para la organización."));
+        if (profile != null && profileRef == null) {
+            warnings.add("El perfil '" + profile
+                    + "' se creará en los catálogos de la organización al confirmar.");
+        }
+        if (technologicalProfile != null && techProfileRef == null) {
+            warnings.add("El perfil tecnológico '" + technologicalProfile
+                    + "' se creará en los catálogos de la organización al confirmar.");
+        }
 
         Map<String, CertificationData> certifications = new LinkedHashMap<>();
         certifications.put("DEVELOPMENT_SECURITY", certification(row, "DEVELOPMENT_SECURITY", "¿APLICA DS?",
@@ -690,10 +698,9 @@ public class StudentImportService {
             errors.add(new Issue(row.rowNumber(), "STUDENT_CERTIFICATIONS_NOT_ENABLED",
                     "La organización no tiene habilitada la gestión de certificaciones."));
         }
-        if (certifications.get("TECHNOLOGICAL").applies()
-                && resolveQuestionTechnologyPublicId(organization.id(), technology) == null) {
-            errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_TECHNOLOGY_NOT_FOUND",
-                    "La tecnología principal '" + technology + "' no está disponible en los catálogos de la organización."));
+        if (technology != null && resolveQuestionTechnologyPublicId(organization.id(), technology) == null) {
+            warnings.add("La tecnología principal '" + technology
+                    + "' se creará en los catálogos de la organización al confirmar.");
         }
 
         List<StudentExperienceService.ImportedItem> current = parseExperience(
@@ -1002,14 +1009,38 @@ public class StudentImportService {
 
     private Organization organization(Long organizationId) {
         List<Organization> rows = jdbc.query("""
-            SELECT ORGANIZATION_ID, ORGANIZATION_NAME, ORGANIZATION_CODE, EXPIRES_ON, APPLIES_CERTIFICATIONS
+            SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME, ORGANIZATION_CODE,
+                   EXPIRES_ON, APPLIES_CERTIFICATIONS
               FROM ORGANIZATION
              WHERE ORGANIZATION_ID = :organizationId AND ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
             """, Map.of("organizationId", organizationId), (rs, rowNum) -> new Organization(
-                rs.getLong("ORGANIZATION_ID"), rs.getString("ORGANIZATION_NAME"), rs.getString("ORGANIZATION_CODE"),
-                localDate(rs, "EXPIRES_ON"), rs.getBoolean("APPLIES_CERTIFICATIONS")));
+                rs.getLong("ORGANIZATION_ID"), rs.getString("PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
+                rs.getString("ORGANIZATION_CODE"), localDate(rs, "EXPIRES_ON"),
+                rs.getBoolean("APPLIES_CERTIFICATIONS")));
         if (rows.isEmpty()) throw new BusinessException("ORGANIZATION_INACTIVE", "La organización actual no está disponible.");
         return rows.getFirst();
+    }
+
+    private Organization organizationByPublicId(String publicId) {
+        List<Organization> rows = jdbc.query("""
+            SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME, ORGANIZATION_CODE,
+                   EXPIRES_ON, APPLIES_CERTIFICATIONS
+              FROM ORGANIZATION
+             WHERE PUBLIC_ID = :publicId AND ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
+            """, Map.of("publicId", publicId), (rs, rowNum) -> new Organization(
+                rs.getLong("ORGANIZATION_ID"), rs.getString("PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
+                rs.getString("ORGANIZATION_CODE"), localDate(rs, "EXPIRES_ON"),
+                rs.getBoolean("APPLIES_CERTIFICATIONS")));
+        if (rows.isEmpty()) {
+            throw new BusinessException("ORGANIZATION_NOT_FOUND",
+                    "La organización seleccionada no existe o no está activa.");
+        }
+        Organization organization = rows.getFirst();
+        if (organization.expiresOn() != null && organization.expiresOn().isBefore(LocalDate.now(clock))) {
+            throw new BusinessException("ORGANIZATION_NOT_OPERATIONAL",
+                    "La organización seleccionada está vencida y no puede recibir colaboradores.");
+        }
+        return organization;
     }
 
     private Long studentId(String publicId, Long organizationId) {
@@ -1019,12 +1050,67 @@ public class StudentImportService {
         return ids.getFirst();
     }
 
-    private void assertOperator(TenantContext tenant, AuthenticatedUser actor) {
-        boolean role = actor != null && actor.roles() != null && actor.roles().stream().anyMatch(OPERATOR_ROLES::contains);
-        if (!role || tenant == null || tenant.globalScope() || !tenant.hasOrganization() || tenant.globalAdministrator()) {
-            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "Solo Gestores y Supervisores pueden importar colaboradores de su propia organización.");
+    static AuthenticatedUser certificationImportActor(AuthenticatedUser actor, TenantContext tenant) {
+        if (actor == null || actor.roles() == null || !actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)) {
+            return actor;
         }
+        if (tenant == null || !tenant.hasOrganization() || !tenant.globalAdministrator()) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "El Administrador global debe seleccionar una organización autorizada para importar certificaciones.");
+        }
+        Set<String> operationalRoles = new LinkedHashSet<>(actor.roles());
+        operationalRoles.add("MANAGER");
+        return new AuthenticatedUser(actor.internalId(), actor.publicId(), actor.email(), actor.firstName(),
+                actor.lastName(), actor.displayName(), Set.copyOf(operationalRoles), actor.permissions(),
+                actor.lastLoginAt(), actor.accessStatus(), actor.accessStartsAt(), actor.accessExpiresAt(),
+                actor.passwordChangeRequired(), actor.passwordChangedAt(), actor.temporaryPasswordExpiresAt());
+    }
+
+    private TenantContext resolveImportTenant(TenantContext tenant, AuthenticatedUser actor,
+            String organizationPublicId) {
+        if (tenant == null || actor == null || actor.roles() == null) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "No tienes permisos para importar colaboradores.");
+        }
+        if (actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE) && tenant.globalAdministrator()) {
+            if (organizationPublicId == null || organizationPublicId.isBlank()) {
+                throw new BusinessException("STUDENT_IMPORT_ORGANIZATION_REQUIRED",
+                        "Selecciona la organización a la que se cargarán los colaboradores.");
+            }
+            Organization organization = organizationByPublicId(organizationPublicId.trim());
+            return TenantContext.organization(organization.id(), organization.publicId(), organization.code(), true);
+        }
+        boolean organizationOperator = actor.roles().stream().anyMatch(ORGANIZATION_OPERATOR_ROLES::contains);
+        if (!organizationOperator || tenant.globalScope() || !tenant.hasOrganization()
+                || tenant.globalAdministrator()) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "Solo el Administrador global, Gestores y Supervisores autorizados pueden importar colaboradores.");
+        }
+        if (organizationPublicId != null && !organizationPublicId.isBlank()
+                && !organizationPublicId.trim().equals(tenant.organizationPublicId())) {
+            throw new BusinessException("STUDENT_IMPORT_ORGANIZATION_FORBIDDEN",
+                    "La organización se obtiene de tu sesión y no puede modificarse durante la carga.");
+        }
+        return tenant;
+    }
+
+    private TenantContext effectiveTenantForState(TenantContext tenant, AuthenticatedUser actor,
+            PendingImport state) {
+        if (state == null || actor == null || !Objects.equals(state.actorId(), actor.internalId())) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "La vista previa pertenece a otro usuario.");
+        }
+        if (actor.roles() != null && actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)
+                && tenant != null && tenant.globalAdministrator()) {
+            return TenantContext.organization(state.organization().id(), state.organization().publicId(),
+                    state.organization().code(), true);
+        }
+        TenantContext effective = resolveImportTenant(tenant, actor, null);
+        if (!Objects.equals(state.organizationId(), effective.organizationId())) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "La vista previa pertenece a otra organización.");
+        }
+        return effective;
     }
 
     private void cleanupExpired() {
@@ -1103,6 +1189,216 @@ public class StudentImportService {
         return "IMP-" + sha256(source.getBytes(StandardCharsets.UTF_8)).substring(0, 12).toUpperCase(Locale.ROOT);
     }
 
+    private ImportedStudent materializeCatalogs(Long organizationId, ImportedStudent imported, Long actorId,
+            Set<String> selectedFields) {
+        boolean completeRow = selectedFields == null;
+        boolean resolveProfile = completeRow || selectedFields.contains("profile");
+        boolean resolveTechnologicalProfile = completeRow || selectedFields.contains("technologicalProfile");
+        boolean resolveTechnology = completeRow || selectedFields.contains("primaryTechnology")
+                || selectedFields.stream().anyMatch(field -> field.startsWith("cert:TECHNOLOGICAL:"));
+
+        CatalogRef profile = resolveProfile
+                ? ensureProfessionalProfile(organizationId, imported.profileName(), actorId)
+                : imported.profilePublicId() == null ? null
+                        : new CatalogRef(imported.profilePublicId(), null, imported.profileName());
+        CatalogRef technologicalProfile = resolveTechnologicalProfile
+                ? ensureTechnologicalProfile(organizationId, imported.technologicalProfileName(), actorId)
+                : imported.technologicalProfilePublicId() == null ? null
+                        : new CatalogRef(imported.technologicalProfilePublicId(), null,
+                                imported.technologicalProfileName());
+        if (resolveTechnology && imported.primaryTechnology() != null) {
+            ensureQuestionTechnology(organizationId, imported.primaryTechnology(), actorId);
+        }
+        return new ImportedStudent(imported.rowKey(), imported.rowNumber(), imported.fullName(),
+                imported.firstName(), imported.lastName(), imported.normalizedName(), imported.email(),
+                imported.normalizedEmail(), imported.matchKey(), imported.profileName(),
+                profile == null ? null : profile.publicId(), imported.admissionDate(),
+                imported.primaryTechnology(), imported.technologicalProfileName(),
+                technologicalProfile == null ? null : technologicalProfile.publicId(),
+                imported.certificationLevel(), imported.certifications(), imported.currentTechnologies(),
+                imported.languages(), imported.knownTechnologies(), imported.warnings(),
+                imported.hasBlockingErrors());
+    }
+
+    private CatalogRef ensureProfessionalProfile(Long organizationId, String name, Long actorId) {
+        if (name == null || name.isBlank()) return null;
+        String code = catalogCode("PRF", name, organizationId, 120);
+        CatalogState existing = resolveCatalogAnyStatus("CERTIFICATION_PROFILE_CATALOG",
+                "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
+                "perfil profesional");
+        if (existing != null) return activateCatalogIfNecessary(
+                "CERTIFICATION_PROFILE_CATALOG", organizationId, existing, actorId);
+        String publicId = UUID.randomUUID().toString();
+        try {
+            jdbc.update("""
+                INSERT INTO CERTIFICATION_PROFILE_CATALOG
+                    (PUBLIC_ID, PROFILE_CODE, PROFILE_NAME, DESCRIPTION, STATUS,
+                     SUGGESTED_TECH_PROFILE, SORT_ORDER, CREATED_BY, UPDATED_BY,
+                     CREATED_AT, UPDATED_AT, VERSION_NO, CONTENT_SCOPE, OWNER_ORGANIZATION_ID)
+                VALUES (:publicId, :code, :name, :description, 'ACTIVE',
+                        NULL, (SELECT NVL(MAX(SORT_ORDER), 0) + 10
+                                 FROM CERTIFICATION_PROFILE_CATALOG
+                                WHERE CONTENT_SCOPE = 'ORGANIZATION'
+                                  AND OWNER_ORGANIZATION_ID = :organizationId),
+                        :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0,
+                        'ORGANIZATION', :organizationId)
+                """, new MapSqlParameterSource()
+                    .addValue("publicId", publicId)
+                    .addValue("code", code)
+                    .addValue("name", name)
+                    .addValue("description", "Creado durante la carga confirmada de colaboradores.")
+                    .addValue("actorId", actorId)
+                    .addValue("organizationId", organizationId));
+        } catch (DataIntegrityViolationException exception) {
+            CatalogState concurrent = resolveCatalogAnyStatus("CERTIFICATION_PROFILE_CATALOG",
+                    "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
+                    "perfil profesional");
+            if (concurrent != null) return activateCatalogIfNecessary(
+                    "CERTIFICATION_PROFILE_CATALOG", organizationId, concurrent, actorId);
+            throw new BusinessException("STUDENT_IMPORT_PROFILE_CREATE_CONFLICT",
+                    "No fue posible crear el perfil '" + name + "' en la organización.");
+        }
+        return new CatalogRef(publicId, code, name);
+    }
+
+    private CatalogRef ensureTechnologicalProfile(Long organizationId, String name, Long actorId) {
+        if (name == null || name.isBlank()) return null;
+        String code = catalogCode("TPR", name, organizationId, 40);
+        CatalogState existing = resolveCatalogAnyStatus("TECHNOLOGICAL_PROFILE_CATALOG",
+                "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
+                "perfil tecnológico");
+        if (existing != null) return activateCatalogIfNecessary(
+                "TECHNOLOGICAL_PROFILE_CATALOG", organizationId, existing, actorId);
+        String publicId = UUID.randomUUID().toString();
+        try {
+            jdbc.update("""
+                INSERT INTO TECHNOLOGICAL_PROFILE_CATALOG
+                    (PUBLIC_ID, PROFILE_CODE, PROFILE_NAME, DESCRIPTION, STATUS,
+                     DISPLAY_ORDER, CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT,
+                     VERSION_NO, CONTENT_SCOPE, OWNER_ORGANIZATION_ID)
+                VALUES (:publicId, :code, :name, :description, 'ACTIVE',
+                        (SELECT NVL(MAX(DISPLAY_ORDER), 0) + 10
+                           FROM TECHNOLOGICAL_PROFILE_CATALOG
+                          WHERE CONTENT_SCOPE = 'ORGANIZATION'
+                            AND OWNER_ORGANIZATION_ID = :organizationId),
+                        :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0,
+                        'ORGANIZATION', :organizationId)
+                """, new MapSqlParameterSource()
+                    .addValue("publicId", publicId)
+                    .addValue("code", code)
+                    .addValue("name", name)
+                    .addValue("description", "Creado durante la carga confirmada de colaboradores.")
+                    .addValue("actorId", actorId)
+                    .addValue("organizationId", organizationId));
+        } catch (DataIntegrityViolationException exception) {
+            CatalogState concurrent = resolveCatalogAnyStatus("TECHNOLOGICAL_PROFILE_CATALOG",
+                    "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
+                    "perfil tecnológico");
+            if (concurrent != null) return activateCatalogIfNecessary(
+                    "TECHNOLOGICAL_PROFILE_CATALOG", organizationId, concurrent, actorId);
+            throw new BusinessException("STUDENT_IMPORT_TECH_PROFILE_CREATE_CONFLICT",
+                    "No fue posible crear el perfil tecnológico '" + name + "' en la organización.");
+        }
+        return new CatalogRef(publicId, code, name);
+    }
+
+    private CatalogRef ensureQuestionTechnology(Long organizationId, String name, Long actorId) {
+        if (name == null || name.isBlank()) return null;
+        String code = catalogCode("TEC", name, organizationId, 80);
+        CatalogState existing = resolveCatalogAnyStatus("QUESTION_TECHNOLOGY",
+                "TECHNOLOGY_CODE", "TECHNOLOGY_NAME", organizationId, name, code,
+                "tecnología");
+        if (existing != null) return activateCatalogIfNecessary(
+                "QUESTION_TECHNOLOGY", organizationId, existing, actorId);
+        String publicId = UUID.randomUUID().toString();
+        try {
+            jdbc.update("""
+                INSERT INTO QUESTION_TECHNOLOGY
+                    (PUBLIC_ID, TECHNOLOGY_CODE, TECHNOLOGY_NAME, DESCRIPTION, STATUS,
+                     DISPLAY_ORDER, CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT,
+                     VERSION_NO, CONTENT_SCOPE, OWNER_ORGANIZATION_ID)
+                VALUES (:publicId, :code, :name, :description, 'ACTIVE',
+                        (SELECT NVL(MAX(DISPLAY_ORDER), 0) + 10
+                           FROM QUESTION_TECHNOLOGY
+                          WHERE CONTENT_SCOPE = 'ORGANIZATION'
+                            AND OWNER_ORGANIZATION_ID = :organizationId),
+                        :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0,
+                        'ORGANIZATION', :organizationId)
+                """, new MapSqlParameterSource()
+                    .addValue("publicId", publicId)
+                    .addValue("code", code)
+                    .addValue("name", name)
+                    .addValue("description", "Creada durante la carga confirmada de colaboradores.")
+                    .addValue("actorId", actorId)
+                    .addValue("organizationId", organizationId));
+        } catch (DataIntegrityViolationException exception) {
+            CatalogState concurrent = resolveCatalogAnyStatus("QUESTION_TECHNOLOGY",
+                    "TECHNOLOGY_CODE", "TECHNOLOGY_NAME", organizationId, name, code,
+                    "tecnología");
+            if (concurrent != null) return activateCatalogIfNecessary(
+                    "QUESTION_TECHNOLOGY", organizationId, concurrent, actorId);
+            throw new BusinessException("STUDENT_IMPORT_TECHNOLOGY_CREATE_CONFLICT",
+                    "No fue posible crear la tecnología principal '" + name + "' en la organización.");
+        }
+        return new CatalogRef(publicId, code, name);
+    }
+
+    private CatalogState resolveCatalogAnyStatus(String table, String codeColumn, String nameColumn,
+            Long organizationId, String value, String generatedCode, String catalogLabel) {
+        List<CatalogState> rows = jdbc.query("SELECT PUBLIC_ID, " + codeColumn + " CODE, "
+                        + nameColumn + " NAME, STATUS FROM " + table
+                        + " WHERE CONTENT_SCOPE = 'ORGANIZATION'"
+                        + " AND OWNER_ORGANIZATION_ID = :organizationId",
+                Map.of("organizationId", organizationId),
+                (rs, rowNum) -> new CatalogState(rs.getString("PUBLIC_ID"), rs.getString("CODE"),
+                        rs.getString("NAME"), rs.getString("STATUS")));
+        String normalizedValue = StudentExperienceService.normalizeKey(value);
+        List<CatalogState> byName = rows.stream()
+                .filter(item -> normalizedValue.equals(StudentExperienceService.normalizeKey(item.name())))
+                .toList();
+        if (byName.size() == 1) return byName.getFirst();
+        if (byName.size() > 1) {
+            List<CatalogState> deterministic = byName.stream()
+                    .filter(item -> generatedCode.equalsIgnoreCase(item.code()))
+                    .toList();
+            if (deterministic.size() == 1) return deterministic.getFirst();
+            throw new BusinessException("STUDENT_IMPORT_CATALOG_AMBIGUOUS",
+                    "Existen varios registros equivalentes para el " + catalogLabel + " '" + value
+                            + "' en la organización. Revisa el catálogo antes de continuar.");
+        }
+        return rows.stream().filter(item -> generatedCode.equalsIgnoreCase(item.code()))
+                .findFirst().orElse(null);
+    }
+
+    private CatalogRef activateCatalogIfNecessary(String table, Long organizationId,
+            CatalogState existing, Long actorId) {
+        if (!"ACTIVE".equals(existing.status())) {
+            int updated = jdbc.update("UPDATE " + table
+                            + " SET STATUS = 'ACTIVE', UPDATED_BY = :actorId,"
+                            + " UPDATED_AT = SYSTIMESTAMP, VERSION_NO = VERSION_NO + 1"
+                            + " WHERE PUBLIC_ID = :publicId AND CONTENT_SCOPE = 'ORGANIZATION'"
+                            + " AND OWNER_ORGANIZATION_ID = :organizationId",
+                    new MapSqlParameterSource()
+                            .addValue("actorId", actorId)
+                            .addValue("publicId", existing.publicId())
+                            .addValue("organizationId", organizationId));
+            if (updated != 1) {
+                throw new BusinessException("STUDENT_IMPORT_CATALOG_ACTIVATION_CONFLICT",
+                        "El catálogo cambió durante la importación. Vuelve a analizar el archivo.");
+            }
+        }
+        return new CatalogRef(existing.publicId(), existing.code(), existing.name());
+    }
+
+    private String catalogCode(String prefix, String name, Long organizationId, int maxLength) {
+        String normalized = StudentExperienceService.normalizeKey(name).replace(' ', '_');
+        String suffix = "_" + sha256((organizationId + ":" + normalized)
+                .getBytes(StandardCharsets.UTF_8)).substring(0, 10).toUpperCase(Locale.ROOT);
+        int available = Math.max(1, maxLength - prefix.length() - suffix.length() - 1);
+        String base = normalized.length() > available ? normalized.substring(0, available) : normalized;
+        return prefix + "_" + base + suffix;
+    }
+
     private CatalogRef resolveCatalog(List<CatalogRef> catalogs, String value) {
         if (value == null || value.isBlank()) return null;
         String key = StudentExperienceService.normalizeKey(value);
@@ -1143,11 +1439,19 @@ public class StudentImportService {
         return List.copyOf(unique.values());
     }
 
-    private Boolean parseBoolean(String value, String field, int row, List<Issue> errors) {
+    static Boolean parseImportBoolean(String value) {
         if (value == null || value.isBlank()) return false;
         String normalized = StudentExperienceService.normalizeKey(value);
-        if (Set.of("SI", "S", "YES", "1", "APLICA").contains(normalized)) return true;
-        if (Set.of("NO", "N", "0", "NO APLICA", "NA").contains(normalized)) return false;
+        if (Set.of("SI", "S", "YES", "1", "APLICA").contains(normalized)
+                || normalized.startsWith("SI ")) return true;
+        if (Set.of("NO", "N", "0", "NO APLICA", "NA").contains(normalized)
+                || normalized.startsWith("NO ")) return false;
+        return null;
+    }
+
+    private Boolean parseBoolean(String value, String field, int row, List<Issue> errors) {
+        Boolean parsed = parseImportBoolean(value);
+        if (parsed != null) return parsed;
         errors.add(new Issue(row, "STUDENT_IMPORT_BOOLEAN_INVALID", field + " debe contener Sí, No o No aplica."));
         return false;
     }
@@ -1352,6 +1656,7 @@ public class StudentImportService {
     private record ParseResult(ImportedStudent student, List<Issue> errors) {}
     private record NameParts(String firstName, String lastName) {}
     private record CatalogRef(String publicId, String code, String name) {}
+    private record CatalogState(String publicId, String code, String name, String status) {}
     private record Catalogs(List<CatalogRef> profiles, List<CatalogRef> technologicalProfiles,
             Map<String, CertificationPolicy> policies) {
         CertificationPolicy policy(String type) {
@@ -1368,7 +1673,7 @@ public class StudentImportService {
         }
     }
     private record CertificationPolicy(Integer deadlineMonths, Integer deadlineDays, Integer validityYears) {}
-    private record Organization(Long id, String name, String code, LocalDate expiresOn, boolean appliesCertifications) {}
+    private record Organization(Long id, String publicId, String name, String code, LocalDate expiresOn, boolean appliesCertifications) {}
     private record ExistingStudent(Long id, Long organizationId, String publicId, String studentCode, String email,
             String normalizedEmail, String firstName, String lastName, String displayName, String normalizedName,
             String status, LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate,

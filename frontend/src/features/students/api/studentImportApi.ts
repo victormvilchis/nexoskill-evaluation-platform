@@ -6,9 +6,10 @@ import type {
   StudentImportPreview
 } from '../types/studentImport'
 
-export function previewStudentImport(file: File, signal?: AbortSignal) {
+export function previewStudentImport(file: File, organizationPublicId?: string, signal?: AbortSignal) {
   const body = new FormData()
   body.append('file', file)
+  if (organizationPublicId) body.append('organizationPublicId', organizationPublicId)
   return apiRequest<StudentImportPreview>('/admin/students/import/preview', {
     method: 'POST',
     body,

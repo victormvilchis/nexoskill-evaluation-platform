@@ -99,10 +99,13 @@ export function AdminStudentsPage() {
     setSearchParams(next)
   }
   const columnCount = administrator ? 6 : 5
-  const canImport = certificationOperator && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
+  const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
+  const importTarget = administrator && organization
+    ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
+    : '/admin/students/import'
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions">{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}{canImport && <Link className="secondary-button button-link" to="/admin/students/import">Importar colaboradores</Link>}</div></header>
+      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions">{canImport && <Link className="button-link ns-excel-import-button" to={importTarget} aria-label="Cargar Excel de colaboradores"><svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m8 13 4 5"/><path d="m12 13-4 5"/><path d="M16 13v5"/></svg> Cargar Excel</Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</div></header>
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo o código" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}

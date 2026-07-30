@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../features/authentication/context/AuthContext'
+import { searchOrganizations } from '../features/organizations/api/organizationApi'
+import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import { applyStudentImport, discardStudentImport, previewStudentImport } from '../features/students/api/studentImportApi'
 import type {
   ChangedStudentPreview,
@@ -31,8 +34,14 @@ async function copyText(value: string) {
 
 export function StudentImportPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { user } = useAuth()
   const toast = useToast()
+  const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const inputRef = useRef<HTMLInputElement>(null)
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [organizationsLoading, setOrganizationsLoading] = useState(false)
+  const [selectedOrganization, setSelectedOrganization] = useState(searchParams.get('organization') ?? '')
   const [file, setFile] = useState<File>()
   const [preview, setPreview] = useState<StudentImportPreview>()
   const [newRows, setNewRows] = useState<NewState[]>([])
@@ -43,6 +52,22 @@ export function StudentImportPage() {
   const [error, setError] = useState<string>()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [result, setResult] = useState<StudentImportApplyResult>()
+
+
+  useEffect(() => {
+    if (!administrator) return
+    const controller = new AbortController()
+    setOrganizationsLoading(true)
+    searchOrganizations({ status: 'ACTIVE', page: 0, size: 100, signal: controller.signal })
+      .then((response) => setOrganizations(response.content.filter((item) => item.organizationType === 'CUSTOMER')))
+      .catch(() => { if (!controller.signal.aborted) setOrganizations([]) })
+      .finally(() => { if (!controller.signal.aborted) setOrganizationsLoading(false) })
+    return () => controller.abort()
+  }, [administrator])
+
+  const studentsPath = administrator && selectedOrganization
+    ? `/admin/students?organization=${encodeURIComponent(selectedOrganization)}`
+    : '/admin/students'
 
   useEffect(() => () => {
     if (preview?.token && !result) void discardStudentImport(preview.token).catch(() => undefined)
@@ -74,7 +99,11 @@ export function StudentImportPage() {
     setError(undefined)
     setResult(undefined)
     try {
-      const response = await previewStudentImport(file)
+      if (administrator && !selectedOrganization) {
+        setError('Selecciona la organización que recibirá la carga antes de analizar el archivo.')
+        return
+      }
+      const response = await previewStudentImport(file, administrator ? selectedOrganization : undefined)
       setPreview(response)
       setNewRows(response.newStudents.map((row) => ({
         ...row,
@@ -94,6 +123,17 @@ export function StudentImportPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function changeOrganization(next: string) {
+    if (preview?.token && !result) await discardStudentImport(preview.token).catch(() => undefined)
+    setSelectedOrganization(next)
+    setPreview(undefined)
+    setNewRows([])
+    setChangedRows([])
+    setLowActions({})
+    setResult(undefined)
+    setError(undefined)
   }
 
   async function changeFile(next?: File) {
@@ -139,7 +179,7 @@ export function StudentImportPage() {
 
   function closeResult() {
     setResult(undefined)
-    navigate('/admin/students', { replace: true })
+    navigate(studentsPath, { replace: true })
   }
 
   if (result) {
@@ -175,15 +215,16 @@ export function StudentImportPage() {
 
   return (
     <main className="content-page student-import-page">
-      <BackButton fallback="/admin/students" />
-      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Importar colaboradores</h1><p className="muted">Selecciona un Excel que contenga la hoja CERTIFICACIONES. El archivo no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
+      <BackButton fallback={studentsPath} />
+      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la primera hoja del archivo. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="editor-card ns-import-file-card">
-        <div className="section-heading"><div><p className="eyebrow">Paso 1</p><h2>Seleccionar Excel</h2></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Paso 1</p><h2>Seleccionar archivo</h2></div></div>
+        {administrator && <label className="field-group ns-import-organization-field"><span>Organización destino</span><select value={selectedOrganization} disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}><option value="">Selecciona una organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select><small>La carga y cualquier catálogo nuevo pertenecerán únicamente a la organización seleccionada.</small></label>}
         <input ref={inputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           onChange={(event) => void changeFile(event.target.files?.[0])} />
         {file && <div className="ns-selected-file"><strong>{file.name}</strong><span>{Math.ceil(file.size / 1024)} KB</span></div>}
-        <button type="button" className="primary-button" disabled={!file || loading} onClick={() => void analyze()}>{loading ? 'Analizando…' : 'Validar y comparar'}</button>
+        <button type="button" className="primary-button" disabled={!file || loading || (administrator && !selectedOrganization)} onClick={() => void analyze()}>{loading ? 'Analizando…' : 'Validar y comparar'}</button>
       </section>
 
       {preview && <>

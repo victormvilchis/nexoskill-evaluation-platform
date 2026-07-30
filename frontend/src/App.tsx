@@ -83,7 +83,7 @@ export default function App() {
           <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
             <Route path="/admin/students/:publicId/edit" element={<StudentEditorPage mode="edit" />} />
           </Route>
-          <Route element={<PermissionRoute permission="STUDENT_CREATE" roles={['MANAGER', 'SUPERVISOR']} />}>
+          <Route element={<PermissionRoute permission="STUDENT_CREATE" roles={['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR']} />}>
             <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
               <Route path="/admin/students/import" element={<StudentImportPage />} />
             </Route>

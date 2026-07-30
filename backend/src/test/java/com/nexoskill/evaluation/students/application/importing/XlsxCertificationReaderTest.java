@@ -18,8 +18,8 @@ class XlsxCertificationReaderTest {
     private final XlsxCertificationReader reader = new XlsxCertificationReader();
 
     @Test
-    void readsCertificationSheetIgnoringCaseOrderAndExtraColumns() throws Exception {
-        byte[] workbook = workbook("  certificaciones.  ", Map.of(
+    void readsFirstSheetRegardlessOfNameOrderAndExtraColumns() throws Exception {
+        byte[] workbook = workbook(new SheetDefinition("TABLERO", Map.of(
                 0, "PERFIL TECNOLOGICO",
                 1, "COLUMNA ADICIONAL",
                 2, "NOMBRE EXTERNO",
@@ -31,11 +31,11 @@ class XlsxCertificationReaderTest {
                 2, "María López",
                 3, "APX",
                 4, "45800",
-                5, "Analista Programador"));
+                5, "Analista Programador")));
 
         XlsxCertificationReader.SheetData result = reader.read(new ByteArrayInputStream(workbook));
 
-        assertEquals("certificaciones.", result.sheetName());
+        assertEquals("TABLERO", result.sheetName());
         assertEquals(1, result.rows().size());
         assertEquals("María López", result.rows().getFirst().value("NOMBRE EXTERNO"));
         assertEquals("APX", result.rows().getFirst().value("TECNOLOGÍA EN LA QUE SE CERTIFICA"));
@@ -43,14 +43,14 @@ class XlsxCertificationReaderTest {
     }
 
     @Test
-    void reportsAllMissingRequiredHeaders() throws Exception {
-        byte[] workbook = workbook("CERTIFICACIONES", Map.of(
+    void reportsAllMissingRequiredHeadersFromFirstSheet() throws Exception {
+        byte[] workbook = workbook(new SheetDefinition("RESUMEN", Map.of(
                 0, "NOMBRE EXTERNO",
                 1, "PERFIL",
                 2, "FECHA DE ALTA"), Map.of(
                 0, "Víctor Vilchis",
                 1, "Analista",
-                2, "2026-07-01"));
+                2, "2026-07-01")));
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> reader.read(new ByteArrayInputStream(workbook)));
@@ -61,45 +61,76 @@ class XlsxCertificationReaderTest {
     }
 
     @Test
-    void rejectsWorkbookWithoutCertificationSheet() throws Exception {
-        byte[] workbook = workbook("TABLERO", Map.of(
+    void doesNotSearchAnotherSheetWhenTheFirstOneIsInvalid() throws Exception {
+        byte[] workbook = workbook(
+                new SheetDefinition("RESUMEN", Map.of(
+                        0, "NOMBRE EXTERNO",
+                        1, "PERFIL"), Map.of(
+                        0, "Víctor Vilchis",
+                        1, "Analista")),
+                validSheet("CERTIFICACIONES", "Otra Persona"));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> reader.read(new ByteArrayInputStream(workbook)));
+
+        assertEquals("STUDENT_IMPORT_HEADERS_MISSING", exception.getCode());
+    }
+
+    @Test
+    void usesTheFirstSheetEvenWhenItsNameIsNotCertificaciones() throws Exception {
+        byte[] workbook = workbook(
+                validSheet("TABLERO", "Primera Persona"),
+                validSheet("CERTIFICACIONES", "Segunda Persona"));
+
+        XlsxCertificationReader.SheetData result = reader.read(new ByteArrayInputStream(workbook));
+
+        assertEquals("TABLERO", result.sheetName());
+        assertEquals("Primera Persona", result.rows().getFirst().value("NOMBRE EXTERNO"));
+    }
+
+    private SheetDefinition validSheet(String name, String collaborator) {
+        return new SheetDefinition(name, Map.of(
                 0, "NOMBRE EXTERNO",
                 1, "PERFIL",
                 2, "FECHA DE ALTA",
                 3, "TECNOLOGÍA EN LA QUE SE CERTIFICA",
                 4, "PERFIL TECNOLOGICO"), Map.of(
-                0, "Víctor Vilchis",
-                1, "Analista",
+                0, collaborator,
+                1, "Analista Programador",
                 2, "2026-07-01",
                 3, "Java",
                 4, "DESARROLLADOR"));
-
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> reader.read(new ByteArrayInputStream(workbook)));
-
-        assertEquals("STUDENT_IMPORT_SHEET_REQUIRED", exception.getCode());
-        assertTrue(exception.getMessage().contains("CERTIFICACIONES"));
     }
 
-    private byte[] workbook(String sheetName, Map<Integer, String> headers, Map<Integer, String> values)
-            throws Exception {
+    private byte[] workbook(SheetDefinition... sheets) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            StringBuilder workbookSheets = new StringBuilder();
+            StringBuilder relationships = new StringBuilder();
+            for (int index = 0; index < sheets.length; index++) {
+                int number = index + 1;
+                workbookSheets.append("<sheet name=\"").append(escape(sheets[index].name()))
+                        .append("\" sheetId=\"").append(number).append("\" r:id=\"rId")
+                        .append(number).append("\"/>");
+                relationships.append("<Relationship Id=\"rId").append(number)
+                        .append("\" Target=\"worksheets/sheet").append(number)
+                        .append(".xml\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\"/>");
+                put(zip, "xl/worksheets/sheet" + number + ".xml",
+                        sheet(sheets[index].headers(), sheets[index].values()));
+            }
             put(zip, "xl/workbook.xml", """
                     <?xml version="1.0" encoding="UTF-8"?>
                     <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
                               xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-                      <sheets><sheet name="%s" sheetId="1" r:id="rId1"/></sheets>
+                      <sheets>%s</sheets>
                     </workbook>
-                    """.formatted(escape(sheetName)));
+                    """.formatted(workbookSheets));
             put(zip, "xl/_rels/workbook.xml.rels", """
                     <?xml version="1.0" encoding="UTF-8"?>
                     <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-                      <Relationship Id="rId1" Target="worksheets/sheet1.xml"
-                        Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/>
+                      %s
                     </Relationships>
-                    """);
-            put(zip, "xl/worksheets/sheet1.xml", sheet(headers, values));
+                    """.formatted(relationships));
         }
         return bytes.toByteArray();
     }
@@ -140,4 +171,6 @@ class XlsxCertificationReaderTest {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 .replace("\"", "&quot;");
     }
+
+    private record SheetDefinition(String name, Map<Integer, String> headers, Map<Integer, String> values) {}
 }

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,9 +37,11 @@ public class StudentImportController {
     @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('STUDENT_CREATE') and hasAuthority('STUDENT_UPDATE')")
     public StudentImportService.Preview preview(@RequestPart("file") MultipartFile file,
+            @RequestParam(value = "organizationPublicId", required = false) String organizationPublicId,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
         try {
-            return service.preview(tenant(request), actor, file.getOriginalFilename(), file.getBytes());
+            return service.preview(tenant(request), actor, organizationPublicId,
+                    file.getOriginalFilename(), file.getBytes());
         } catch (IOException exception) {
             throw new BusinessException("STUDENT_IMPORT_FILE_READ",
                     "No fue posible leer el archivo seleccionado.");
