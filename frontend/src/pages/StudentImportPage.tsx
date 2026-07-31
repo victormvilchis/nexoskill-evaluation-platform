@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
@@ -32,6 +32,12 @@ async function copyText(value: string) {
   await navigator.clipboard.writeText(value)
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function StudentImportPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -43,6 +49,7 @@ export function StudentImportPage() {
   const [organizationsLoading, setOrganizationsLoading] = useState(false)
   const [selectedOrganization, setSelectedOrganization] = useState(searchParams.get('organization') ?? '')
   const [file, setFile] = useState<File>()
+  const [dragging, setDragging] = useState(false)
   const [preview, setPreview] = useState<StudentImportPreview>()
   const [newRows, setNewRows] = useState<NewState[]>([])
   const [changedRows, setChangedRows] = useState<ChangeState[]>([])
@@ -147,6 +154,17 @@ export function StudentImportPage() {
     setError(undefined)
   }
 
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setDragging(false)
+    const next = event.dataTransfer.files?.[0]
+    if (next) void changeFile(next)
+  }
+
+  function openFilePicker() {
+    if (!loading && !applying) inputRef.current?.click()
+  }
+
   async function applyChanges() {
     if (!preview || applying || emailError) return
     setApplying(true)
@@ -219,12 +237,44 @@ export function StudentImportPage() {
       <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la primera hoja del archivo. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="editor-card ns-import-file-card">
-        <div className="section-heading"><div><p className="eyebrow">Paso 1</p><h2>Seleccionar archivo</h2></div></div>
-        {administrator && <label className="field-group ns-import-organization-field"><span>Organización destino</span><select value={selectedOrganization} disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}><option value="">Selecciona una organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select><small>La carga y cualquier catálogo nuevo pertenecerán únicamente a la organización seleccionada.</small></label>}
-        <input ref={inputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(event) => void changeFile(event.target.files?.[0])} />
-        {file && <div className="ns-selected-file"><strong>{file.name}</strong><span>{Math.ceil(file.size / 1024)} KB</span></div>}
-        <button type="button" className="primary-button" disabled={!file || loading || (administrator && !selectedOrganization)} onClick={() => void analyze()}>{loading ? 'Analizando…' : 'Validar y comparar'}</button>
+        <div className="ns-import-step-heading">
+          <div><p className="eyebrow">Paso 1</p><h2>Selecciona el archivo de colaboradores</h2><p className="muted">Se leerá la primera hoja del libro y podrás volver a cargar el mismo archivo las veces que sea necesario.</p></div>
+          <span className="ns-import-step-number" aria-hidden="true">01</span>
+        </div>
+        {administrator && <label className="field-group ns-import-organization-field"><span>Organización destino</span><select value={selectedOrganization} disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}><option value="">Selecciona una organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select><small>Los colaboradores y los catálogos que falten se crearán únicamente dentro de esta organización.</small></label>}
+        <input ref={inputRef} className="ns-import-file-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(event) => { const next = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void changeFile(next) }} />
+        <div
+          className={`ns-import-dropzone${dragging ? ' is-dragging' : ''}${file ? ' has-file' : ''}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Seleccionar o arrastrar archivo Excel"
+          onClick={openFilePicker}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openFilePicker() } }}
+          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true) }}
+          onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false) }}
+          onDrop={handleDrop}
+        >
+          <span className="ns-import-dropzone-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none"><path d="M10 5.5h19l9 9v27a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-34a2 2 0 0 1 2-2Z" fill="currentColor" opacity=".12"/><path d="M29 5.5v9h9M10 5.5h19l9 9v27a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-34a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/><path d="M15.5 22.5 22 33m0-10.5L15.5 33M27 22.5h6M27 27.75h5M27 33h6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
+          </span>
+          <div className="ns-import-dropzone-copy">
+            <strong>{file ? 'Archivo listo para analizar' : 'Arrastra tu archivo Excel aquí'}</strong>
+            <span>{file ? 'Haz clic para reemplazarlo por otro archivo' : 'o haz clic para seleccionarlo desde tu equipo'}</span>
+            <small>Formato admitido: .xlsx · Primera hoja del libro</small>
+          </div>
+          <span className="ns-import-select-file">{file ? 'Cambiar archivo' : 'Seleccionar archivo'}</span>
+        </div>
+        {file && <div className="ns-selected-file">
+          <span className="ns-selected-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3.5h9l5 5v12H5v-17Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M14 3.5v5h5M8.5 12l3 5m0-5-3 5M14.5 12v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span>
+          <div><strong>{file.name}</strong><span>{formatFileSize(file.size)} · Se procesará la primera hoja</span></div>
+          <button type="button" className="ns-selected-file-remove" disabled={loading || applying} onClick={(event) => { event.stopPropagation(); void changeFile(undefined) }} aria-label="Quitar archivo">×</button>
+        </div>}
+        <div className="ns-import-analyze-actions">
+          <p><strong>Vista previa obligatoria.</strong> No se guardará información hasta que confirmes los cambios.</p>
+          <button type="button" className="primary-button ns-import-analyze-button" disabled={!file || loading || (administrator && !selectedOrganization)} onClick={() => void analyze()}>{loading ? 'Analizando archivo…' : 'Validar y comparar'}</button>
+        </div>
       </section>
 
       {preview && <>
@@ -241,7 +291,7 @@ export function StudentImportPage() {
         {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores</h2></div></div>
           <p className="muted">Completa el correo de cada cuenta seleccionada. No se generan direcciones automáticamente.</p>
           <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Colaborador</th><th>Perfil</th><th>Tecnología principal</th><th>Correo</th></tr></thead><tbody>
-            {newRows.map((row, index) => <tr key={row.rowKey}><td><input type="checkbox" checked={row.selected} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td><td><strong>{row.collaborator}</strong>{row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td><td>{row.profile || '—'}</td><td>{row.primaryTechnology || '—'}</td><td><input type="email" value={row.email} disabled={!row.selected} placeholder="correo@dominio.com" onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} /></td></tr>)}
+            {newRows.map((row, index) => <tr key={row.rowKey}><td><input type="checkbox" checked={row.selected} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td><td><strong>{row.collaborator}</strong>{row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td><td>{row.profile || '—'}</td><td>{row.primaryTechnology || '—'}</td><td><label className="ns-import-email-field"><span className="sr-only">Correo de {row.collaborator}</span><input className={`ns-import-email-input${row.selected && row.email && !validEmail(row.email) ? ' is-invalid' : ''}`} type="email" value={row.email} disabled={!row.selected} placeholder="nombre@dominio.com" autoComplete="off" aria-invalid={row.selected && row.email !== '' && !validEmail(row.email)} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} /></label></td></tr>)}
           </tbody></table></div>{emailError && <div className="error-message" role="alert">{emailError}</div>}
         </section>}
 

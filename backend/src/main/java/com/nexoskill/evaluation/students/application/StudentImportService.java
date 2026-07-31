@@ -12,6 +12,8 @@ import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.application.importing.XlsxCertificationReader;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
+import jakarta.persistence.EntityManager;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -66,13 +68,14 @@ public class StudentImportService {
     private final StudentCertificationService certificationService;
     private final NamedParameterJdbcTemplate jdbc;
     private final Clock clock;
+    private final EntityManager entityManager;
     private final TransactionTemplate rowTransaction;
     private final Map<String, PendingImport> pending = new ConcurrentHashMap<>();
 
     public StudentImportService(XlsxCertificationReader reader, StudentFoundationService foundation,
             StudentService studentService, StudentExperienceService experienceService,
             StudentCertificationService certificationService, NamedParameterJdbcTemplate jdbc, Clock clock,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager, EntityManager entityManager) {
         this.reader = reader;
         this.foundation = foundation;
         this.studentService = studentService;
@@ -80,6 +83,7 @@ public class StudentImportService {
         this.certificationService = certificationService;
         this.jdbc = jdbc;
         this.clock = clock;
+        this.entityManager = entityManager;
         this.rowTransaction = new TransactionTemplate(transactionManager);
         this.rowTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -102,15 +106,6 @@ public class StudentImportService {
         }
 
         String digest = sha256(content);
-        Integer receiptCount = jdbc.queryForObject("""
-            SELECT COUNT(*) FROM STUDENT_IMPORT_RECEIPT
-             WHERE ORGANIZATION_ID = :organizationId AND FILE_SHA256 = :digest
-            """, Map.of("organizationId", effectiveTenant.organizationId(), "digest", digest), Integer.class);
-        if (receiptCount != null && receiptCount > 0) {
-            throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED",
-                    "Este archivo ya fue iniciado o aplicado para la organización actual.");
-        }
-
         Organization organization = organization(effectiveTenant.organizationId());
         XlsxCertificationReader.SheetData sheet = reader.read(new ByteArrayInputStream(content));
         Catalogs catalogs = catalogs(effectiveTenant);
@@ -232,12 +227,6 @@ public class StudentImportService {
                     "La vista previa caducó o ya fue aplicada. Vuelve a seleccionar el archivo.");
         }
         TenantContext effectiveTenant = effectiveTenantForState(tenant, actor, state);
-        Integer receiptCount = jdbc.queryForObject("SELECT COUNT(*) FROM STUDENT_IMPORT_RECEIPT WHERE ORGANIZATION_ID = :organizationId AND FILE_SHA256 = :digest",
-                Map.of("organizationId", effectiveTenant.organizationId(), "digest", state.digest()), Integer.class);
-        if (receiptCount != null && receiptCount > 0) {
-            throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED",
-                    "Esta importación ya fue iniciada o aplicada y no puede ejecutarse dos veces.");
-        }
 
         Map<String, NewSelection> newSelections = indexNew(command.newStudents());
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
@@ -248,7 +237,6 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_TOKEN_EXPIRED",
                     "La vista previa ya fue utilizada o descartada. Vuelve a seleccionar el archivo.");
         }
-        String receiptPublicId = claimImport(state, effectiveTenant, actor);
         List<Credential> credentials = new ArrayList<>();
         List<Issue> applyErrors = new ArrayList<>();
         int created = 0;
@@ -285,55 +273,9 @@ public class StudentImportService {
             }
         }
 
-        final int createdCount = created;
-        final int updatedCount = updated;
-        final int deactivatedCount = deactivated;
-        rowTransaction.executeWithoutResult(status -> {
-            int completed = jdbc.update("""
-                UPDATE STUDENT_IMPORT_RECEIPT
-                   SET CREATED_COUNT = :createdCount, UPDATED_COUNT = :updatedCount,
-                       DEACTIVATED_COUNT = :deactivatedCount, ERROR_COUNT = :errorCount,
-                       STATUS_CODE = 'COMPLETED', COMPLETED_AT = SYSTIMESTAMP
-                 WHERE PUBLIC_ID = :publicId AND ORGANIZATION_ID = :organizationId
-                   AND FILE_SHA256 = :digest AND STATUS_CODE = 'PROCESSING'
-                """, new MapSqlParameterSource()
-                    .addValue("publicId", receiptPublicId)
-                    .addValue("organizationId", effectiveTenant.organizationId())
-                    .addValue("digest", state.digest())
-                    .addValue("createdCount", createdCount)
-                    .addValue("updatedCount", updatedCount)
-                    .addValue("deactivatedCount", deactivatedCount)
-                    .addValue("errorCount", applyErrors.size()));
-            if (completed != 1) {
-                throw new BusinessException("STUDENT_IMPORT_RECEIPT_CONFLICT",
-                        "La importación fue aplicada, pero no fue posible cerrar su recibo técnico.");
-            }
-        });
         return new ApplyResult(created, updated, deactivated, applyErrors, credentials,
                 credentials.isEmpty() ? null
                         : "Las contraseñas temporales se muestran una sola vez. Cópialas antes de cerrar esta vista.");
-    }
-
-    private String claimImport(PendingImport state, TenantContext tenant, AuthenticatedUser actor) {
-        String publicId = UUID.randomUUID().toString();
-        try {
-            rowTransaction.executeWithoutResult(status -> jdbc.update("""
-                INSERT INTO STUDENT_IMPORT_RECEIPT
-                    (PUBLIC_ID, ORGANIZATION_ID, FILE_SHA256, TOTAL_ROWS, CREATED_COUNT, UPDATED_COUNT,
-                     DEACTIVATED_COUNT, ERROR_COUNT, STATUS_CODE, APPLIED_BY, APPLIED_AT)
-                VALUES (:publicId, :organizationId, :digest, :totalRows, 0, 0, 0, 0,
-                        'PROCESSING', :actorId, SYSTIMESTAMP)
-                """, new MapSqlParameterSource()
-                    .addValue("publicId", publicId)
-                    .addValue("organizationId", tenant.organizationId())
-                    .addValue("digest", state.digest())
-                    .addValue("totalRows", state.imported().size())
-                    .addValue("actorId", actor.internalId())));
-        } catch (DataIntegrityViolationException exception) {
-            throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED",
-                    "Esta importación ya fue iniciada o aplicada y no puede ejecutarse dos veces.");
-        }
-        return publicId;
     }
 
     public void discard(TenantContext tenant, AuthenticatedUser actor, String token) {
@@ -362,6 +304,8 @@ public class StudentImportService {
                             resolved.flag("NORMATIVE_TESTING"), resolved.flag("ONE"), resolved.flag("AGILE")),
                     requestActor);
             Long studentId = studentId(result.student().publicId(), tenant.organizationId());
+            synchronizeStudentFoundationForCertification(studentId, tenant.organizationId(),
+                    result.student().publicId(), resolved.admissionDate());
             persistImportedDetails(tenant, result.student().publicId(), studentId, resolved, actor);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
                     resolved.fullName(), email, result.temporaryPassword()));
@@ -372,6 +316,57 @@ public class StudentImportService {
                 selection.fields());
         updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
         return new RowOutcome(0, 1, null);
+    }
+
+
+    /**
+     * StudentService persists the account with JPA and StudentFoundationService completes the
+     * certification foundation with JDBC in the same row transaction. Flush first, reapply the
+     * imported admission date with the full tenant key, clear the persistence context and reload
+     * the entity before any certification deadline is calculated.
+     */
+    void synchronizeStudentFoundationForCertification(Long studentId, Long organizationId,
+            String studentPublicId, LocalDate admissionDate) {
+        if (studentId == null || organizationId == null || studentPublicId == null || studentPublicId.isBlank()) {
+            throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
+                    "No fue posible identificar al colaborador antes de aplicar sus certificaciones.");
+        }
+        if (admissionDate == null) {
+            throw new BusinessException("STUDENT_IMPORT_ADMISSION_DATE_REQUIRED",
+                    "La fecha de alta importada es obligatoria para aplicar las certificaciones.");
+        }
+
+        entityManager.flush();
+        int updated = jdbc.update("""
+            UPDATE STUDENT
+               SET ADMISSION_DATE = :admissionDate,
+                   CERTIFICATION_ENROLLMENT_DATE = :admissionDate
+             WHERE STUDENT_ID = :studentId
+               AND ORGANIZATION_ID = :organizationId
+               AND PUBLIC_ID = :studentPublicId
+            """, new MapSqlParameterSource()
+                .addValue("admissionDate", java.sql.Date.valueOf(admissionDate), java.sql.Types.DATE)
+                .addValue("studentId", studentId)
+                .addValue("organizationId", organizationId)
+                .addValue("studentPublicId", studentPublicId));
+        if (updated != 1) {
+            throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
+                    "No fue posible sincronizar la fecha de alta antes de aplicar las certificaciones.");
+        }
+
+        entityManager.clear();
+        StudentJpaEntity reloaded = entityManager.find(StudentJpaEntity.class, studentId);
+        if (reloaded == null
+                || !organizationId.equals(reloaded.getOrganizationId())
+                || !studentPublicId.equals(reloaded.getPublicId())) {
+            throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
+                    "No fue posible volver a consultar al colaborador dentro de la organización destino.");
+        }
+        entityManager.refresh(reloaded);
+        if (!admissionDate.equals(reloaded.getAdmissionDate())) {
+            throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
+                    "La fecha de alta no quedó disponible para calcular las certificaciones. No se aplicó la fila.");
+        }
     }
 
     private void validateSelectedEmails(Long organizationId, PendingImport state,
@@ -409,13 +404,14 @@ public class StudentImportService {
         boolean identity = intersects(selectedFields, Set.of("name", "admissionDate", "profile", "technologicalProfile",
                 "applies:TECHNOLOGICAL", "applies:DEVELOPMENT_SECURITY", "applies:NORMATIVE_TESTING",
                 "applies:ONE", "applies:AGILE"));
+        LocalDate effectiveAdmissionDate = selectedFields.contains("admissionDate")
+                ? imported.admissionDate() : detail.admissionDate();
         if (identity) {
             foundation.update(tenant, current.publicId(), new StudentFoundationService.UpdateCommand(
                     detail.email(), selectedFields.contains("name") ? imported.firstName() : detail.firstName(),
                     selectedFields.contains("name") ? imported.lastName() : detail.lastName(),
                     selectedFields.contains("name") ? imported.fullName() : detail.displayName(),
-                    detail.validFrom(), detail.expiresAt(),
-                    selectedFields.contains("admissionDate") ? imported.admissionDate() : detail.admissionDate(),
+                    detail.validFrom(), detail.expiresAt(), effectiveAdmissionDate,
                     selectedFields.contains("profile") ? imported.profilePublicId()
                             : detail.professionalProfile() == null ? null : detail.professionalProfile().publicId(),
                     selectedFields.contains("technologicalProfile") ? imported.technologicalProfilePublicId()
@@ -436,6 +432,11 @@ public class StudentImportService {
                     selectedFields.contains("experience:languages") ? imported.languages() : before.languages(),
                     selectedFields.contains("experience:known") ? imported.knownTechnologies() : before.known(),
                     actor.internalId());
+        }
+        boolean certificationChanges = selectedFields.stream().anyMatch(field -> field.startsWith("cert:"));
+        if (identity || certificationChanges) {
+            synchronizeStudentFoundationForCertification(studentId, current.organizationId(),
+                    current.publicId(), effectiveAdmissionDate);
         }
         for (String type : CERT_TYPES) {
             if (selectedFields.stream().anyMatch(field -> field.startsWith("cert:" + type))) {
@@ -1456,25 +1457,36 @@ public class StudentImportService {
         return false;
     }
 
-    private LocalDate parseDate(String value, String field, int row, List<Issue> errors, boolean required) {
-        if (value == null || value.isBlank()) {
-            if (required) errors.add(new Issue(row, "STUDENT_IMPORT_DATE_REQUIRED", field + " es obligatoria."));
-            return null;
-        }
+    static LocalDate parseImportDateValue(String value) {
+        if (value == null || value.isBlank()) return null;
         String text = value.trim();
         try {
             BigDecimal serial = new BigDecimal(text.replace(",", "."));
             if (serial.compareTo(BigDecimal.valueOf(1000)) > 0) {
-                return LocalDate.of(1899, 12, 30).plusDays(serial.setScale(0, RoundingMode.DOWN).longValue());
+                return LocalDate.of(1899, 12, 30)
+                        .plusDays(serial.setScale(0, RoundingMode.DOWN).longValue());
             }
         } catch (NumberFormatException ignored) { }
         List<DateTimeFormatter> formats = List.of(DateTimeFormatter.ISO_LOCAL_DATE,
                 DateTimeFormatter.ofPattern("d/M/uuuu"), DateTimeFormatter.ofPattern("d-M-uuuu"),
                 DateTimeFormatter.ofPattern("d.M.uuuu"));
         for (DateTimeFormatter formatter : formats) {
-            try { return LocalDate.parse(text, formatter); } catch (DateTimeParseException ignored) { }
+            try {
+                return LocalDate.parse(text, formatter);
+            } catch (DateTimeParseException ignored) { }
         }
-        errors.add(new Issue(row, "STUDENT_IMPORT_DATE_INVALID", field + " contiene una fecha inválida: " + text + "."));
+        return null;
+    }
+
+    private LocalDate parseDate(String value, String field, int row, List<Issue> errors, boolean required) {
+        if (value == null || value.isBlank()) {
+            if (required) errors.add(new Issue(row, "STUDENT_IMPORT_DATE_REQUIRED", field + " es obligatoria."));
+            return null;
+        }
+        LocalDate parsed = parseImportDateValue(value);
+        if (parsed != null) return parsed;
+        errors.add(new Issue(row, "STUDENT_IMPORT_DATE_INVALID",
+                field + " contiene una fecha inválida: " + value.trim() + "."));
         return null;
     }
 

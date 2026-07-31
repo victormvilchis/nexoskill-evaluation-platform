@@ -1,9 +1,11 @@
 package com.nexoskill.evaluation.students.application;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 class StudentImportServiceParsingTest {
@@ -20,5 +22,20 @@ class StudentImportServiceParsingTest {
     @Test
     void rejectsUnknownApplicabilityValues() {
         assertNull(StudentImportService.parseImportBoolean("POR REVISAR"));
+    }
+
+    @Test
+    void parsesTheExactExcelSerialDatesFromTheReportedWorkbook() {
+        assertEquals(LocalDate.of(2007, 12, 18), StudentImportService.parseImportDateValue("39434"));
+        assertEquals(LocalDate.of(2015, 10, 2), StudentImportService.parseImportDateValue("42279"));
+        assertEquals(LocalDate.of(2004, 12, 20), StudentImportService.parseImportDateValue("38341"));
+    }
+
+    @Test
+    void parsesTextDatesUsedByTheLayout() {
+        assertEquals(LocalDate.of(2007, 12, 18), StudentImportService.parseImportDateValue("18/12/2007"));
+        assertEquals(LocalDate.of(2015, 10, 2), StudentImportService.parseImportDateValue("02/10/2015"));
+        assertEquals(LocalDate.of(2004, 12, 20), StudentImportService.parseImportDateValue("2004-12-20"));
+        assertNull(StudentImportService.parseImportDateValue("fecha pendiente"));
     }
 }
