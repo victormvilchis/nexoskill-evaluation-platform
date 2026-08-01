@@ -13,6 +13,7 @@ import type {
 } from '../features/students/types/studentImport'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
 
 type LowAction = 'KEEP' | 'DEACTIVATE' | 'IGNORE'
@@ -29,7 +30,27 @@ function credentialText(value: StudentImportCredential) {
 }
 
 async function copyText(value: string) {
-  await navigator.clipboard.writeText(value)
+  if (!value) throw new Error('No hay contenido para copiar.')
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  textarea.style.pointerEvents = 'none'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) throw new Error('El navegador bloqueó el acceso al portapapeles.')
+}
+
+function CopyButtonContent({ copied, label }: { copied: boolean; label: string }) {
+  return <><Icon name={copied ? 'check' : 'copy'} size={15} />{copied ? 'Copiado' : label}</>
 }
 
 function formatFileSize(bytes: number) {
@@ -45,6 +66,8 @@ export function StudentImportPage() {
   const toast = useToast()
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const inputRef = useRef<HTMLInputElement>(null)
+  const copyResetTimer = useRef<number | undefined>(undefined)
+  const [copiedKey, setCopiedKey] = useState<string>()
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [organizationsLoading, setOrganizationsLoading] = useState(false)
   const [selectedOrganization, setSelectedOrganization] = useState(searchParams.get('organization') ?? '')
@@ -60,6 +83,10 @@ export function StudentImportPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [result, setResult] = useState<StudentImportApplyResult>()
 
+
+  useEffect(() => () => {
+    if (copyResetTimer.current !== undefined) window.clearTimeout(copyResetTimer.current)
+  }, [])
 
   useEffect(() => {
     if (!administrator) return
@@ -170,6 +197,20 @@ export function StudentImportPage() {
     if (!loading && !applying) inputRef.current?.click()
   }
 
+  async function copyValue(value: string, description: string, key: string) {
+    try {
+      await copyText(value)
+      setCopiedKey(key)
+      if (copyResetTimer.current !== undefined) window.clearTimeout(copyResetTimer.current)
+      copyResetTimer.current = window.setTimeout(() => {
+        setCopiedKey((current) => current === key ? undefined : current)
+      }, 1800)
+      toast.success('Copiado al portapapeles', `${description} se copió correctamente.`)
+    } catch {
+      toast.error('No se pudo copiar', 'El navegador bloqueó el portapapeles. Selecciona el texto y cópialo manualmente.')
+    }
+  }
+
   async function applyChanges() {
     if (!preview || applying || emailError) return
     setApplying(true)
@@ -231,12 +272,49 @@ export function StudentImportPage() {
           <div className="section-heading"><div><p className="eyebrow">Accesos generados</p><h2>Credenciales temporales</h2></div></div>
           <div className="warning-message" role="alert">{result.credentialsNotice}</div>
           <div className="ns-import-copy-actions">
-            <button type="button" className="secondary-button" onClick={() => void copyText(all)}>Copiar todos los accesos</button>
-            <button type="button" className="secondary-button" onClick={() => void copyText(result.credentials.map((item) => item.email).join('\n'))}>Copiar correos</button>
-            <button type="button" className="secondary-button" onClick={() => void copyText(result.credentials.map((item) => item.temporaryPassword).join('\n'))}>Copiar contraseñas</button>
+            <button type="button" className={`secondary-button ns-copy-action-button${copiedKey === 'all' ? ' is-copied' : ''}`}
+              onClick={() => void copyValue(all, 'Todos los accesos', 'all')}>
+              <CopyButtonContent copied={copiedKey === 'all'} label="Copiar todos los accesos" />
+            </button>
+            <button type="button" className={`secondary-button ns-copy-action-button${copiedKey === 'emails' ? ' is-copied' : ''}`}
+              onClick={() => void copyValue(result.credentials.map((item) => item.email).join('\n'), 'Los correos', 'emails')}>
+              <CopyButtonContent copied={copiedKey === 'emails'} label="Copiar correos" />
+            </button>
+            <button type="button" className={`secondary-button ns-copy-action-button${copiedKey === 'passwords' ? ' is-copied' : ''}`}
+              onClick={() => void copyValue(result.credentials.map((item) => item.temporaryPassword).join('\n'), 'Las contraseñas temporales', 'passwords')}>
+              <CopyButtonContent copied={copiedKey === 'passwords'} label="Copiar contraseñas" />
+            </button>
           </div>
-          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Organización</th><th>Colaborador</th><th>Correo</th><th>Contraseña temporal</th><th>Acciones</th></tr></thead><tbody>
-            {result.credentials.map((credential) => <tr key={credential.email}><td>{credential.organization}<button type="button" className="link-button compact-copy" onClick={() => void copyText(credential.organizationCode || credential.organization)}>Copiar</button></td><td>{credential.collaborator}</td><td>{credential.email}<button type="button" className="link-button compact-copy" onClick={() => void copyText(credential.email)}>Copiar</button></td><td><code>{credential.temporaryPassword}</code><button type="button" className="link-button compact-copy" onClick={() => void copyText(credential.temporaryPassword)}>Copiar</button></td><td><button type="button" className="secondary-button compact-button" onClick={() => void copyText(credentialText(credential))}>Copiar credenciales</button></td></tr>)}
+          <div className="ns-data-table-wrap"><table className="ns-data-table ns-credential-table"><thead><tr><th>Organización</th><th>Colaborador</th><th>Correo</th><th>Contraseña temporal</th><th>Acciones</th></tr></thead><tbody>
+            {result.credentials.map((credential) => {
+              const organizationKey = `organization:${credential.email}`
+              const emailKey = `email:${credential.email}`
+              const passwordKey = `password:${credential.email}`
+              const credentialKey = `credential:${credential.email}`
+              return <tr key={credential.email}>
+                <td><div className="ns-credential-cell"><span>{credential.organization}</span><button type="button"
+                  className={`ns-copy-inline-button${copiedKey === organizationKey ? ' is-copied' : ''}`}
+                  onClick={() => void copyValue(credential.organizationCode || credential.organization, 'La organización', organizationKey)}
+                  aria-label={`Copiar organización de ${credential.collaborator}`}>
+                  <CopyButtonContent copied={copiedKey === organizationKey} label="Copiar" />
+                </button></div></td>
+                <td><span className="ns-credential-collaborator">{credential.collaborator}</span></td>
+                <td><div className="ns-credential-cell"><span>{credential.email}</span><button type="button"
+                  className={`ns-copy-inline-button${copiedKey === emailKey ? ' is-copied' : ''}`}
+                  onClick={() => void copyValue(credential.email, `El correo de ${credential.collaborator}`, emailKey)}>
+                  <CopyButtonContent copied={copiedKey === emailKey} label="Copiar" />
+                </button></div></td>
+                <td><div className="ns-credential-cell"><code>{credential.temporaryPassword}</code><button type="button"
+                  className={`ns-copy-inline-button${copiedKey === passwordKey ? ' is-copied' : ''}`}
+                  onClick={() => void copyValue(credential.temporaryPassword, `La contraseña de ${credential.collaborator}`, passwordKey)}>
+                  <CopyButtonContent copied={copiedKey === passwordKey} label="Copiar" />
+                </button></div></td>
+                <td><button type="button" className={`secondary-button ns-copy-credential-button${copiedKey === credentialKey ? ' is-copied' : ''}`}
+                  onClick={() => void copyValue(credentialText(credential), `Las credenciales de ${credential.collaborator}`, credentialKey)}>
+                  <CopyButtonContent copied={copiedKey === credentialKey} label="Copiar credenciales" />
+                </button></td>
+              </tr>
+            })}
           </tbody></table></div>
         </section>}
         <div className="form-actions"><button type="button" className="primary-button" onClick={closeResult}>Cerrar resultado</button></div>

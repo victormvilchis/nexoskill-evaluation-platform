@@ -83,4 +83,14 @@ class StudentImportServiceParsingTest {
         assertFalse(StudentImportService.requiresImportApplicationDate(
                 "TECHNOLOGICAL", true, null, "Pendiente"));
     }
+    @Test
+    void resolvesMissingAttemptsIdempotently() {
+        assertEquals(1, StudentImportService.resolveInferredAttempt(null, false));
+        assertEquals(1, StudentImportService.resolveInferredAttempt(0, false));
+        assertEquals(1, StudentImportService.resolveInferredAttempt(1, true));
+        assertEquals(2, StudentImportService.resolveInferredAttempt(1, false));
+        assertEquals(3, StudentImportService.resolveInferredAttempt(2, false));
+        assertEquals(2, StudentImportService.resolveInferredAttempt(2, true));
+    }
+
 }

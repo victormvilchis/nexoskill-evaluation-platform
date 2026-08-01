@@ -45,13 +45,16 @@ export function StudentExperienceFields({ value, onChange, readOnly, disabled }:
           </div>
         ) : (
           <div className="student-experience-row" key={`${key}-${index}`}>
-            <input aria-label={`${title} ${index + 1}`} value={item.name} disabled={disabled}
-              placeholder="Nombre" onChange={(event) => updateItem(key, index, 'name', event.target.value)} />
-            <select aria-label={`Nivel de ${item.name || title}`} value={item.level ?? ''} disabled={disabled}
+            <input className="student-experience-input" aria-label={`${title} ${index + 1}`}
+              value={item.name} disabled={disabled} placeholder="Nombre de tecnología, lenguaje o herramienta"
+              onChange={(event) => updateItem(key, index, 'name', event.target.value)} />
+            <select className="student-experience-select" aria-label={`Nivel de ${item.name || title}`}
+              value={item.level ?? ''} disabled={disabled}
               onChange={(event) => updateItem(key, index, 'level', event.target.value)}>
               {LEVELS.map((level) => <option key={level || 'NONE'} value={level}>{level || 'Sin nivel'}</option>)}
             </select>
-            <button type="button" className="danger-button compact-button" disabled={disabled}
+            <button type="button" className="danger-button compact-button student-experience-remove"
+              disabled={disabled}
               onClick={() => setList(key, items.filter((_, itemIndex) => itemIndex !== index))}>Quitar</button>
           </div>
         ))}

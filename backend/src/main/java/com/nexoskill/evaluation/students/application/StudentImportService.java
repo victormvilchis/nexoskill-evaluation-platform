@@ -143,6 +143,8 @@ public class StudentImportService {
         List<NewStudentPreview> newStudents = new ArrayList<>();
         List<ChangedStudentPreview> changedStudents = new ArrayList<>();
         Map<String, Match> matches = new HashMap<>();
+        Map<String, ImportedStudent> effectiveImportedByRow = new HashMap<>();
+        parsed.forEach(value -> effectiveImportedByRow.put(value.rowKey(), value));
 
         for (ImportedStudent imported : parsed) {
             List<ExistingStudent> candidates = imported.normalizedEmail() == null
@@ -162,9 +164,12 @@ public class StudentImportService {
                 continue;
             }
             if (candidates.isEmpty()) {
-                newStudents.add(new NewStudentPreview(imported.rowKey(), imported.rowNumber(), imported.fullName(),
-                        imported.profileName(), imported.primaryTechnology(), imported.email(), imported.warnings()));
-                matches.put(imported.rowKey(), new Match(imported, null));
+                ImportedStudent effectiveImported = reconcileInferredAttempts(imported, Map.of());
+                effectiveImportedByRow.put(effectiveImported.rowKey(), effectiveImported);
+                newStudents.add(new NewStudentPreview(effectiveImported.rowKey(), effectiveImported.rowNumber(),
+                        effectiveImported.fullName(), effectiveImported.profileName(),
+                        effectiveImported.primaryTechnology(), effectiveImported.email(), effectiveImported.warnings()));
+                matches.put(effectiveImported.rowKey(), new Match(effectiveImported, null));
                 continue;
             }
             ExistingStudent current = candidates.getFirst();
@@ -183,13 +188,16 @@ public class StudentImportService {
                                 + ". Revisa el cambio manualmente."));
                 continue;
             }
-            List<FieldChange> changes = compare(current, imported,
-                    existingCertifications.getOrDefault(current.id(), Map.of()),
+            Map<String, CertificationData> currentCertifications =
+                    existingCertifications.getOrDefault(current.id(), Map.of());
+            ImportedStudent effectiveImported = reconcileInferredAttempts(imported, currentCertifications);
+            effectiveImportedByRow.put(effectiveImported.rowKey(), effectiveImported);
+            List<FieldChange> changes = compare(current, effectiveImported, currentCertifications,
                     existingExperience.getOrDefault(current.id(), ExperienceSnapshot.empty()));
-            matches.put(imported.rowKey(), new Match(imported, current));
+            matches.put(effectiveImported.rowKey(), new Match(effectiveImported, current));
             if (!changes.isEmpty()) {
-                changedStudents.add(new ChangedStudentPreview(current.publicId(), imported.rowKey(),
-                        current.displayName(), changes, imported.warnings()));
+                changedStudents.add(new ChangedStudentPreview(current.publicId(), effectiveImported.rowKey(),
+                        current.displayName(), changes, effectiveImported.warnings()));
             }
         }
 
@@ -208,8 +216,11 @@ public class StudentImportService {
                                 .collect(java.util.stream.Collectors.toUnmodifiableSet())));
         Set<String> previewPossibleLows = possibleLows.stream().map(PossibleLowPreview::studentPublicId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        List<ImportedStudent> effectiveImported = parsed.stream()
+                .map(value -> effectiveImportedByRow.getOrDefault(value.rowKey(), value))
+                .toList();
         PendingImport state = new PendingImport(token, actor.internalId(), effectiveTenant.organizationId(), digest,
-                java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, parsed,
+                java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, effectiveImported,
                 Map.copyOf(matches), previewNewRows, previewChangeFields, previewPossibleLows,
                 List.copyOf(errors), List.copyOf(conflicts));
         pending.put(token, state);
@@ -658,7 +669,8 @@ public class StudentImportService {
                         ? imported.validityStatus() : current.validityStatus(),
                 selectedFields.contains(prefix + "status") || selectedFields.contains(prefix + "examStatus")
                         || selectedFields.contains(prefix + "lifecycle")
-                        ? imported.trackingStatus() : current.trackingStatus());
+                        ? imported.trackingStatus() : current.trackingStatus(),
+                selectedFields.contains(prefix + "attempt") && imported.inferredAttempt());
     }
 
     private CertificationData currentCertification(Long organizationId, Long studentId, String type) {
@@ -813,13 +825,11 @@ public class StudentImportService {
                     typeLabel(type) + ": " + requiredHeader
                             + " es obligatoria cuando el estado indica aprobación o vigencia."));
         }
+        boolean inferredAttempt = false;
         if (applies && (certificationStatus != null || examStatus != null || score != null)
-                && (attempt == null || attempt == 0) && !oneAgile(type)) {
-            if (attemptHeader != null) {
-                warnings.add(typeLabel(type)
-                        + ": existe resultado sin intento válido; se propone el intento 1 al aplicar.");
-            }
+                && (attempt == null || attempt == 0) && !oneAgile(type) && attemptHeader != null) {
             attempt = 1;
+            inferredAttempt = true;
         }
         if (attempt != null && attempt == 0) attempt = null;
         if (!applies && hasTrackingData) {
@@ -843,8 +853,46 @@ public class StudentImportService {
         String tracking = trackingStatus(applies, certificationStatus, examStatus, approved);
         String comparableStatus = certificationStatusLabel(applies, tracking, validity, approved);
         return new CertificationData(type, applies, comparableStatus, examStatus, internalExamStatus(examStatus),
-                application, score, attempt, deadline, expiration, approved, validity, tracking);
+                application, score, attempt, deadline, expiration, approved, validity, tracking, inferredAttempt);
     }
+    private ImportedStudent reconcileInferredAttempts(ImportedStudent imported,
+            Map<String, CertificationData> currentCertifications) {
+        Map<String, CertificationData> certifications = new LinkedHashMap<>(imported.certifications());
+        List<String> warnings = new ArrayList<>(imported.warnings());
+        for (Map.Entry<String, CertificationData> entry : certifications.entrySet()) {
+            CertificationData candidate = entry.getValue();
+            if (candidate == null || !candidate.inferredAttempt()) continue;
+            CertificationData current = currentCertifications.get(entry.getKey());
+            boolean sameResult = sameAttemptResult(current, candidate);
+            int resolvedAttempt = resolveInferredAttempt(current == null ? null : current.attempt(), sameResult);
+            boolean alreadyPersisted = current != null && current.attempt() != null
+                    && current.attempt() > 0 && sameResult;
+            certifications.put(entry.getKey(), candidate.withAttempt(resolvedAttempt, !alreadyPersisted));
+            if (!alreadyPersisted) {
+                warnings.add(typeLabel(candidate.type())
+                        + ": existe resultado sin intento válido; se propone el intento "
+                        + resolvedAttempt + " al aplicar.");
+            }
+        }
+        return imported.withCertificationsAndWarnings(Map.copyOf(certifications), List.copyOf(warnings));
+    }
+
+    static int resolveInferredAttempt(Integer currentAttempt, boolean sameResult) {
+        if (currentAttempt == null || currentAttempt < 1) return 1;
+        return sameResult ? currentAttempt : currentAttempt + 1;
+    }
+
+    private static boolean sameAttemptResult(CertificationData current, CertificationData imported) {
+        if (current == null || imported == null || current.attempt() == null || current.attempt() < 1) return false;
+        boolean sameScore = current.score10() == null
+                ? imported.score10() == null
+                : imported.score10() != null && current.score10().compareTo(imported.score10()) == 0;
+        return Objects.equals(current.applicationDate(), imported.applicationDate())
+                && Objects.equals(current.approved(), imported.approved())
+                && Objects.equals(current.internalExamStatus(), imported.internalExamStatus())
+                && sameScore;
+    }
+
     private List<FieldChange> compare(ExistingStudent current, ImportedStudent imported,
             Map<String, CertificationData> currentCerts, ExperienceSnapshot currentExperience) {
         List<FieldChange> changes = new ArrayList<>();
@@ -901,7 +949,7 @@ public class StudentImportService {
 
     private CertificationData emptyCertification(String type) {
         return new CertificationData(type, false, null, null, "NOT_SCHEDULED", null, null, null, null, null,
-                null, "NOT_OBTAINED", "PENDING");
+                null, "NOT_OBTAINED", "PENDING", false);
     }
 
     private List<ExistingStudent> existingStudents(Long organizationId) {
@@ -991,7 +1039,8 @@ public class StudentImportService {
                         examStatusLabel(exam), exam,
                         localDate(rs, "APPLICATION_DATE"), rs.getBigDecimal("SCORE"),
                         nullableInteger(rs, "ATTEMPT_NUMBER"), localDate(rs, "DEADLINE_DATE"),
-                        localDate(rs, "EXPIRATION_DATE"), approved, rs.getString("VALIDITY_STATUS"), tracking);
+                        localDate(rs, "EXPIRATION_DATE"), approved, rs.getString("VALIDITY_STATUS"), tracking,
+                        false);
                 result.computeIfAbsent(rs.getLong("STUDENT_ID"), ignored -> new HashMap<>())
                         .put(type, data);
             });
@@ -1801,11 +1850,25 @@ public class StudentImportService {
             List<StudentExperienceService.ImportedItem> knownTechnologies,
             List<String> warnings, boolean hasBlockingErrors) {
         boolean flag(String type) { CertificationData value = certifications.get(type); return value != null && value.applies(); }
+        ImportedStudent withCertificationsAndWarnings(Map<String, CertificationData> nextCertifications,
+                List<String> nextWarnings) {
+            return new ImportedStudent(rowKey, rowNumber, fullName, firstName, lastName, normalizedName,
+                    email, normalizedEmail, matchKey, profileName, profilePublicId, admissionDate,
+                    primaryTechnology, technologicalProfileName, technologicalProfilePublicId,
+                    certificationLevel, nextCertifications, currentTechnologies, languages,
+                    knownTechnologies, nextWarnings, hasBlockingErrors);
+        }
     }
     private record CertificationData(String type, boolean applies, String certificationStatus, String examStatus,
             String internalExamStatus, LocalDate applicationDate, BigDecimal score10, Integer attempt,
             LocalDate deadline, LocalDate expiration, Boolean approved, String validityStatus,
-            String trackingStatus) {}
+            String trackingStatus, boolean inferredAttempt) {
+        CertificationData withAttempt(Integer nextAttempt, boolean nextInferredAttempt) {
+            return new CertificationData(type, applies, certificationStatus, examStatus, internalExamStatus,
+                    applicationDate, score10, nextAttempt, deadline, expiration, approved, validityStatus,
+                    trackingStatus, nextInferredAttempt);
+        }
+    }
     private record Match(ImportedStudent imported, ExistingStudent existing) {}
     private record PendingImport(String token, Long actorId, Long organizationId, String digest,
             java.time.Instant expiresAt, Organization organization, List<ImportedStudent> imported,
