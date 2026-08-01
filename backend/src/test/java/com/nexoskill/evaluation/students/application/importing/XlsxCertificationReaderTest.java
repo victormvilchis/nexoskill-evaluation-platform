@@ -18,10 +18,9 @@ class XlsxCertificationReaderTest {
     private final XlsxCertificationReader reader = new XlsxCertificationReader();
 
     @Test
-    void readsCertificacionesSheetRegardlessOfOrderAndExtraColumns() throws Exception {
+    void readsFirstSheetRegardlessOfNameAndIgnoresLaterSheets() throws Exception {
         byte[] workbook = workbook(
-                validSheet("RESUMEN", "Persona ignorada"),
-                new SheetDefinition(" certificaciones ", Map.of(
+                new SheetDefinition("RESUMEN", Map.of(
                         0, "PERFIL TECNOLOGICO",
                         1, "COLUMNA ADICIONAL",
                         2, "NOMBRE EXTERNO",
@@ -33,24 +32,30 @@ class XlsxCertificationReaderTest {
                         2, "María López",
                         3, "APX",
                         4, "45800",
-                        5, "Analista Programador")));
+                        5, "Analista Programador")),
+                validSheet("CERTIFICACIONES", "Persona de la segunda hoja"));
+
         XlsxCertificationReader.SheetData result = reader.read(new ByteArrayInputStream(workbook));
 
-        assertEquals("certificaciones", result.sheetName());
+        assertEquals("RESUMEN", result.sheetName());
         assertEquals(1, result.rows().size());
         assertEquals("María López", result.rows().getFirst().value("NOMBRE EXTERNO"));
         assertEquals("APX", result.rows().getFirst().value("TECNOLOGÍA EN LA QUE SE CERTIFICA"));
         assertEquals("Ignorar", result.rows().getFirst().value("COLUMNA ADICIONAL"));
     }
+
     @Test
-    void reportsAllMissingRequiredHeadersFromCertificaciones() throws Exception {
-        byte[] workbook = workbook(new SheetDefinition("CERTIFICACIONES", Map.of(
-                0, "NOMBRE EXTERNO",
-                1, "PERFIL",
-                2, "FECHA DE ALTA"), Map.of(
-                0, "Víctor Vilchis",
-                1, "Analista",
-                2, "2026-07-01")));
+    void validatesRequiredHeadersOnlyOnTheFirstSheet() throws Exception {
+        byte[] workbook = workbook(
+                new SheetDefinition("DATOS", Map.of(
+                        0, "NOMBRE EXTERNO",
+                        1, "PERFIL",
+                        2, "FECHA DE ALTA"), Map.of(
+                        0, "Víctor Vilchis",
+                        1, "Analista",
+                        2, "2026-07-01")),
+                validSheet("CERTIFICACIONES", "Persona de la segunda hoja"));
+
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> reader.read(new ByteArrayInputStream(workbook)));
 
@@ -58,31 +63,25 @@ class XlsxCertificationReaderTest {
         assertTrue(exception.getMessage().contains("TECNOLOGÍA EN LA QUE SE CERTIFICA"));
         assertTrue(exception.getMessage().contains("PERFIL TECNOLOGICO"));
     }
+
     @Test
-    void ignoresInvalidSheetsBeforeCertificaciones() throws Exception {
-        byte[] workbook = workbook(
-                new SheetDefinition("RESUMEN", Map.of(
-                        0, "NOMBRE EXTERNO",
-                        1, "PERFIL"), Map.of(
-                        0, "Víctor Vilchis",
-                        1, "Analista")),
-                validSheet("CERTIFICACIONES", "Otra Persona"));
+    void readsASingleSheetWithoutDependingOnItsName() throws Exception {
+        byte[] workbook = workbook(validSheet("TABLERO", "Primera Persona"));
 
         XlsxCertificationReader.SheetData result = reader.read(new ByteArrayInputStream(workbook));
 
-        assertEquals("CERTIFICACIONES", result.sheetName());
-        assertEquals("Otra Persona", result.rows().getFirst().value("NOMBRE EXTERNO"));
+        assertEquals("TABLERO", result.sheetName());
+        assertEquals("Primera Persona", result.rows().getFirst().value("NOMBRE EXTERNO"));
     }
 
     @Test
-    void rejectsWorkbookWithoutCertificacionesSheet() throws Exception {
-        byte[] workbook = workbook(validSheet("TABLERO", "Primera Persona"));
+    void rejectsWorkbookWithoutSheets() throws Exception {
+        byte[] workbook = workbook();
 
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> reader.read(new ByteArrayInputStream(workbook)));
 
         assertEquals("STUDENT_IMPORT_SHEET_REQUIRED", exception.getCode());
-        assertTrue(exception.getMessage().contains("CERTIFICACIONES"));
     }
     private SheetDefinition validSheet(String name, String collaborator) {
         return new SheetDefinition(name, Map.of(

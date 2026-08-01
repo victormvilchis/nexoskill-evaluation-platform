@@ -267,7 +267,8 @@ public class StudentFoundationService {
                 .addValue("professionalProfileId", profileId)
                 .addValue("technologicalProfileId", technologicalProfileId)
                 .addValue("enabled", anyArea ? 1 : 0)
-                .addValue("admissionDate", enabled ? java.sql.Date.valueOf(admissionDate) : null)
+                .addValue("admissionDate", enabled ? java.sql.Date.valueOf(admissionDate) : null,
+                        java.sql.Types.DATE)
                 .addValue("appliesTechnological", enabled && appliesTechnological ? 1 : 0)
                 .addValue("appliesDevelopment", enabled && appliesDevelopment ? 1 : 0)
                 .addValue("appliesNormative", enabled && appliesNormative ? 1 : 0)
@@ -281,8 +282,7 @@ public class StudentFoundationService {
                    TECHNOLOGICAL_PROFILE_ID = :technologicalProfileId,
                    TECHNOLOGY_ID = NULL,
                    CERTIFICATIONS_ENABLED = :enabled,
-                   CERTIFICATION_ENROLLMENT_DATE = :admissionDate,
-                   ADMISSION_DATE = :admissionDate,
+ADMISSION_DATE = :admissionDate,
                    APPLIES_TECH_CERT = :appliesTechnological,
                    APPLIES_DEV_SECURITY = :appliesDevelopment,
                    APPLIES_NORMATIVE_TESTING = :appliesNormative,

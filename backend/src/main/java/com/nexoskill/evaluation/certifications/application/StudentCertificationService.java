@@ -554,7 +554,7 @@ public class StudentCertificationService {
 
     private MapSqlParameterSource cycleParams(Scope scope, String publicId, CycleCommand command, Long technologyId,
             CertificationProcessType process, Long previous, LocalDate deadline, Result result, Long actorId) {
-        return new MapSqlParameterSource()
+        MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("publicId", publicId).addValue("studentId", scope.student().getId())
                 .addValue("organizationId", scope.organizationId()).addValue("type", command.type().name())
                 .addValue("technologyId", technologyId)
@@ -562,17 +562,18 @@ public class StudentCertificationService {
                 .addValue("primary", command.type() == CertificationType.TECHNOLOGICAL && command.primary() ? 1 : 0)
                 .addValue("processType", process.name())
                 .addValue("trackingStatus", result.trackingStatus().name())
-                .addValue("deadlineDate", date(deadline)).addValue("scheduledDate", date(command.scheduledDate()))
-                .addValue("applicationDate", date(command.applicationDate()))
                 .addValue("approved", command.approved() == null ? null : command.approved() ? 1 : 0)
-                .addValue("expirationDate", date(result.expirationDate()))
                 .addValue("validityStatus", result.validityStatus().name()).addValue("previousId", previous)
                 .addValue("actionsToTake", clean(command.actionsToTake(), 1000))
                 .addValue("softtekManagement", clean(command.softtekManagement(), 1000))
                 .addValue("observations", clean(command.observations(), 1000))
                 .addValue("active", command.active() ? 1 : 0).addValue("actorId", actorId);
+        addDateParameter(params, "deadlineDate", deadline);
+        addDateParameter(params, "scheduledDate", command.scheduledDate());
+        addDateParameter(params, "applicationDate", command.applicationDate());
+        addDateParameter(params, "expirationDate", result.expirationDate());
+        return params;
     }
-
     private void validateCycle(Scope scope, CycleCommand command, CycleRow existing) {
         if (command == null || command.type() == null) {
             throw new BusinessException("CERTIFICATION_TYPE_REQUIRED", "Selecciona el tipo de certificación.");
@@ -699,15 +700,16 @@ public class StudentCertificationService {
     private MapSqlParameterSource attemptParams(Scope scope, CycleRow cycle, String publicId, int attemptNumber,
             AttemptCommand command, Long actorId) {
         CertificationExamStatus exam = command.examStatus() == null ? CertificationExamStatus.NOT_SCHEDULED : command.examStatus();
-        return new MapSqlParameterSource("publicId", publicId).addValue("cycleId", cycle.id())
+        MapSqlParameterSource params = new MapSqlParameterSource("publicId", publicId).addValue("cycleId", cycle.id())
                 .addValue("organizationId", scope.organizationId()).addValue("attemptNumber", attemptNumber)
-                .addValue("scheduledDate", date(command.scheduledDate())).addValue("applicationDate", date(command.applicationDate()))
                 .addValue("examStatus", exam.name()).addValue("score", command.score())
                 .addValue("approved", command.approved() == null ? null : command.approved() ? 1 : 0)
                 .addValue("result", clean(command.result(), 1000)).addValue("observations", clean(command.observations(), 1000))
                 .addValue("actorId", actorId);
+        addDateParameter(params, "scheduledDate", command.scheduledDate());
+        addDateParameter(params, "applicationDate", command.applicationDate());
+        return params;
     }
-
     private void applyAttemptResult(Scope scope, CycleRow cycle, AttemptCommand command, Long actorId) {
         if (command.applicationDate() == null && command.approved() == null) return;
         Result result = calculateResult(cycle.type(), command.applicationDate(), command.approved(),
@@ -728,15 +730,21 @@ public class StudentCertificationService {
                    SCHEDULED_DATE = COALESCE(:nextScheduled, SCHEDULED_DATE),
                    UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP, VERSION_NO = VERSION_NO + 1
              WHERE STUDENT_CERTIFICATION_CYCLE_ID = :cycleId
-            """, new MapSqlParameterSource("applicationDate", date(command.applicationDate()))
+            """, attemptResultParams(command, result, nextScheduled, actorId, cycle.id()));
+    }
+    private MapSqlParameterSource attemptResultParams(AttemptCommand command, Result result,
+            LocalDate nextScheduled, Long actorId, Long cycleId) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("approved", command.approved() == null ? null : command.approved() ? 1 : 0)
                 .addValue("trackingStatus", result.trackingStatus().name())
-                .addValue("expirationDate", date(result.expirationDate()))
                 .addValue("validityStatus", result.validityStatus().name())
-                .addValue("nextScheduled", date(nextScheduled)).addValue("actorId", actorId)
-                .addValue("cycleId", cycle.id()));
+                .addValue("actorId", actorId)
+                .addValue("cycleId", cycleId);
+        addDateParameter(params, "applicationDate", command.applicationDate());
+        addDateParameter(params, "expirationDate", result.expirationDate());
+        addDateParameter(params, "nextScheduled", nextScheduled);
+        return params;
     }
-
     private AttemptView queryAttempt(CycleRow cycle, String attemptPublicId) {
         List<AttemptView> rows = jdbc.query("""
             SELECT PUBLIC_ID, ATTEMPT_NUMBER, SCHEDULED_DATE, APPLICATION_DATE, EXAM_STATUS,
@@ -869,6 +877,9 @@ public class StudentCertificationService {
         audit.record(actorId, event, "STUDENT_CERTIFICATIONS", description, ipAddress, userAgent, data, clock.instant());
     }
 
+    static MapSqlParameterSource addDateParameter(MapSqlParameterSource parameters, String name, LocalDate value) {
+        return parameters.addValue(name, date(value), java.sql.Types.DATE);
+    }
     private static java.sql.Date date(LocalDate value) { return value == null ? null : java.sql.Date.valueOf(value); }
     private static int zero(Integer value) { return value == null ? 0 : value; }
     private static String clean(String value, int max) {

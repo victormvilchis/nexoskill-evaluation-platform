@@ -25,6 +25,34 @@ class StudentImportServiceParsingTest {
     }
 
     @Test
+    void treatsNoAplicaAsEmptyTrackingStatus() {
+        assertFalse(StudentImportService.hasMeaningfulImportStatus("No aplica"));
+        assertFalse(StudentImportService.hasMeaningfulImportStatus("N/A"));
+        assertFalse(StudentImportService.hasMeaningfulImportStatus(""));
+        assertTrue(StudentImportService.hasMeaningfulImportStatus("Vigente"));
+        assertTrue(StudentImportService.hasMeaningfulImportStatus("Aprobado"));
+    }
+    @Test
+    void ignoresEmptyTrackingWhenCertificationDoesNotApply() {
+        assertFalse(StudentImportService.hasImportTrackingData(
+                "No aplica", null, null, null, null));
+        assertFalse(StudentImportService.hasImportTrackingData(
+                "No aplica", "No aplica", null, null, 0));
+        assertTrue(StudentImportService.hasImportTrackingData(
+                null, "Aprobado", null, null, null));
+        assertTrue(StudentImportService.hasImportTrackingData(
+                null, null, LocalDate.of(2026, 7, 1), null, null));
+    }
+    @Test
+    void keepsTheExcelDeadlineWhenItDiffersFromTheCalculatedDate() {
+        LocalDate imported = LocalDate.of(2025, 12, 15);
+        LocalDate calculated = LocalDate.of(2008, 2, 18);
+
+        assertEquals(imported, StudentImportService.resolveImportDeadline(imported, calculated));
+        assertEquals(calculated, StudentImportService.resolveImportDeadline(null, calculated));
+    }
+
+    @Test
     void parsesTheExactExcelSerialDatesFromTheReportedWorkbook() {
         assertEquals(LocalDate.of(2007, 12, 18), StudentImportService.parseImportDateValue("39434"));
         assertEquals(LocalDate.of(2015, 10, 2), StudentImportService.parseImportDateValue("42279"));

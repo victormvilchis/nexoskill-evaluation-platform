@@ -1,6 +1,8 @@
 package com.nexoskill.evaluation.students.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -42,14 +44,17 @@ class StudentImportServicePersistenceContextTest {
         service.synchronizeStudentFoundationForCertification(
                 91L, 8L, "student-public-id", admissionDate);
 
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<SqlParameterSource> parameters = ArgumentCaptor.forClass(SqlParameterSource.class);
         InOrder order = inOrder(entityManager, jdbc);
         order.verify(entityManager).flush();
-        order.verify(jdbc).update(anyString(), parameters.capture());
+        order.verify(jdbc).update(sql.capture(), parameters.capture());
         order.verify(entityManager).clear();
         order.verify(entityManager).find(StudentJpaEntity.class, 91L);
         order.verify(entityManager).refresh(student);
 
+        assertTrue(sql.getValue().contains("ADMISSION_DATE = :admissionDate"));
+        assertFalse(sql.getValue().contains("CERTIFICATION_ENROLLMENT_DATE"));
         assertEquals(Date.valueOf(admissionDate), parameters.getValue().getValue("admissionDate"));
         assertEquals(91L, parameters.getValue().getValue("studentId"));
         assertEquals(8L, parameters.getValue().getValue("organizationId"));

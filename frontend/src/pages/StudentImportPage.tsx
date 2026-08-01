@@ -239,11 +239,11 @@ export function StudentImportPage() {
   return (
     <main className="content-page student-import-page">
       <BackButton fallback={studentsPath} />
-      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la hoja CERTIFICACIONES. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
+      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la primera hoja del libro, sin importar su nombre. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="editor-card ns-import-file-card">
         <div className="ns-import-step-heading">
-          <div><p className="eyebrow">Paso 1</p><h2>Selecciona el archivo de colaboradores</h2><p className="muted">Se leerá la hoja CERTIFICACIONES y podrás volver a cargar el mismo archivo las veces que sea necesario.</p></div>
+          <div><p className="eyebrow">Paso 1</p><h2>Selecciona el archivo de colaboradores</h2><p className="muted">Se leerá la primera hoja del libro y podrás volver a cargar el mismo archivo las veces que sea necesario.</p></div>
           <span className="ns-import-step-number" aria-hidden="true">01</span>
         </div>
         {administrator && <label className="field-group ns-import-organization-field"><span>Organización destino</span><select value={selectedOrganization} disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}><option value="">Selecciona una organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select><small>Los colaboradores y los catálogos que falten se crearán únicamente dentro de esta organización.</small></label>}
@@ -267,13 +267,13 @@ export function StudentImportPage() {
           <div className="ns-import-dropzone-copy">
             <strong>{file ? 'Archivo listo para analizar' : 'Arrastra tu archivo Excel aquí'}</strong>
             <span>{file ? 'Haz clic para reemplazarlo por otro archivo' : 'o haz clic para seleccionarlo desde tu equipo'}</span>
-            <small>Formato admitido: .xlsx · Hoja requerida: CERTIFICACIONES</small>
+            <small>Formato admitido: .xlsx · Se procesa la primera hoja</small>
           </div>
           <span className="ns-import-select-file">{file ? 'Cambiar archivo' : 'Seleccionar archivo'}</span>
         </div>
         {file && <div className="ns-selected-file">
           <span className="ns-selected-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3.5h9l5 5v12H5v-17Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M14 3.5v5h5M8.5 12l3 5m0-5-3 5M14.5 12v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span>
-          <div><strong>{file.name}</strong><span>{formatFileSize(file.size)} · Se procesará CERTIFICACIONES</span></div>
+          <div><strong>{file.name}</strong><span>{formatFileSize(file.size)} · Se procesará la primera hoja</span></div>
           <button type="button" className="ns-selected-file-remove" disabled={loading || applying} onClick={(event) => { event.stopPropagation(); void changeFile(undefined) }} aria-label="Quitar archivo">×</button>
         </div>}
         <div className="ns-import-analyze-actions">

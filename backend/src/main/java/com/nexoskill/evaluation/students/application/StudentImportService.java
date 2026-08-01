@@ -366,8 +366,7 @@ public class StudentImportService {
         entityManager.flush();
         int updated = jdbc.update("""
             UPDATE STUDENT
-               SET ADMISSION_DATE = :admissionDate,
-                   CERTIFICATION_ENROLLMENT_DATE = :admissionDate
+               SET ADMISSION_DATE = :admissionDate
              WHERE STUDENT_ID = :studentId
                AND ORGANIZATION_ID = :organizationId
                AND PUBLIC_ID = :studentPublicId
@@ -790,43 +789,58 @@ public class StudentImportService {
         String examStatus = examHeader == null ? null : normalizeStatus(value(row, examHeader));
         LocalDate application = applicationHeader == null ? null
                 : parseDate(value(row, applicationHeader), applicationHeader, rowNumber, errors, false);
-        BigDecimal score = scoreHeader == null ? null : parseScore(value(row, scoreHeader), scoreHeader, rowNumber, errors);
-        Integer attempt = attemptHeader == null ? null : parseAttempt(value(row, attemptHeader), attemptHeader, rowNumber, errors);
+        BigDecimal score = scoreHeader == null ? null
+                : parseScore(value(row, scoreHeader), scoreHeader, rowNumber, errors);
+        Integer attempt = attemptHeader == null ? null
+                : parseAttempt(value(row, attemptHeader), attemptHeader, rowNumber, errors);
         LocalDate calculated = calculatedDeadline(type, admission, policy);
-        LocalDate deadline = deadlineHeader == null ? calculated
+        LocalDate importedDeadline = deadlineHeader == null ? null
                 : parseDate(value(row, deadlineHeader), deadlineHeader, rowNumber, errors, false);
-        if (deadline == null) deadline = calculated;
-        if (deadlineHeader != null && deadline != null && calculated != null && !deadline.equals(calculated)) {
-            warnings.add(typeLabel(type) + ": la fecha límite del Excel (" + deadline
-                    + ") difiere de la calculada por Fecha de alta (" + calculated + ").");
-        }
+        LocalDate deadline = resolveImportDeadline(importedDeadline, calculated);
+
+        if (!hasMeaningfulImportStatus(certificationStatus)) certificationStatus = null;
+        if (!hasMeaningfulImportStatus(examStatus)) examStatus = null;
+
+        boolean hasTrackingData = hasImportTrackingData(
+                certificationStatus, examStatus, application, score, attempt);
         Boolean approved = approved(certificationStatus, examStatus);
-        if (!oneAgile(type) && (Boolean.TRUE.equals(approved)
+        if (applies && !oneAgile(type) && (Boolean.TRUE.equals(approved)
                 || statusContains(certificationStatus, "VIGENTE")) && application == null) {
-            warnings.add(typeLabel(type) + ": el estado indica aprobación o vigencia, pero no existe fecha de aplicación.");
+            warnings.add(typeLabel(type)
+                    + ": el estado indica aprobación o vigencia, pero no existe fecha de aplicación.");
         }
-        if ((certificationStatus != null || examStatus != null || score != null) && (attempt == null || attempt == 0)
-                && !oneAgile(type)) {
-            warnings.add(typeLabel(type) + ": existe resultado sin intento válido; se propone el intento 1 al aplicar.");
+        if (applies && (certificationStatus != null || examStatus != null || score != null)
+                && (attempt == null || attempt == 0) && !oneAgile(type)) {
+            if (attemptHeader != null) {
+                warnings.add(typeLabel(type)
+                        + ": existe resultado sin intento válido; se propone el intento 1 al aplicar.");
+            }
             attempt = 1;
         }
         if (attempt != null && attempt == 0) attempt = null;
-        if (!applies && (certificationStatus != null || examStatus != null || application != null
-                || score != null || attempt != null)) {
-            warnings.add(typeLabel(type) + ": está marcada como No aplica, pero contiene información de seguimiento.");
+        if (!applies && hasTrackingData) {
+            warnings.add(typeLabel(type)
+                    + ": está marcada como No aplica, pero contiene información de seguimiento.");
         }
+        if (!applies) {
+            certificationStatus = null;
+            examStatus = null;
+            application = null;
+            score = null;
+            attempt = null;
+            approved = null;
+        }
+
         LocalDate expiration = Boolean.TRUE.equals(approved) && application != null && !oneAgile(type)
                 ? CertificationLifecycleCalculator.expiration(application,
                         policy == null || policy.validityYears() == null ? 2 : policy.validityYears())
                 : null;
         String validity = validityStatus(expiration, approved);
-        String comparableStatus = certificationStatusLabel(applies,
-                trackingStatus(applies, certificationStatus, examStatus, approved), validity, approved);
+        String tracking = trackingStatus(applies, certificationStatus, examStatus, approved);
+        String comparableStatus = certificationStatusLabel(applies, tracking, validity, approved);
         return new CertificationData(type, applies, comparableStatus, examStatus, internalExamStatus(examStatus),
-                application, score, attempt, deadline, expiration, approved, validity,
-                trackingStatus(applies, certificationStatus, examStatus, approved));
+                application, score, attempt, deadline, expiration, approved, validity, tracking);
     }
-
     private List<FieldChange> compare(ExistingStudent current, ImportedStudent imported,
             Map<String, CertificationData> currentCerts, ExperienceSnapshot currentExperience) {
         List<FieldChange> changes = new ArrayList<>();
@@ -1595,6 +1609,20 @@ public class StudentImportService {
         };
     }
 
+    static boolean hasMeaningfulImportStatus(String value) {
+        if (value == null || value.isBlank()) return false;
+        String normalized = StudentExperienceService.normalizeKey(value);
+        return !Set.of("NO APLICA", "NA", "N A").contains(normalized);
+    }
+    static boolean hasImportTrackingData(String certificationStatus, String examStatus,
+            LocalDate application, BigDecimal score, Integer attempt) {
+        return hasMeaningfulImportStatus(certificationStatus)
+                || hasMeaningfulImportStatus(examStatus)
+                || application != null || score != null || (attempt != null && attempt > 0);
+    }
+    static LocalDate resolveImportDeadline(LocalDate importedDeadline, LocalDate calculatedDeadline) {
+        return importedDeadline == null ? calculatedDeadline : importedDeadline;
+    }
     private Boolean approved(String certificationStatus, String examStatus) {
         String combined = StudentExperienceService.normalizeKey((certificationStatus == null ? "" : certificationStatus)
                 + " " + (examStatus == null ? "" : examStatus));

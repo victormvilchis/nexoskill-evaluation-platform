@@ -12,11 +12,14 @@ import com.nexoskill.evaluation.organizations.infrastructure.persistence.Organiz
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepository;
 import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
+import java.sql.Types;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class StudentCertificationServiceAuthorizationTest {
@@ -47,5 +50,18 @@ class StudentCertificationServiceAuthorizationTest {
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.isNull(),
                 org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.anyMap(),
                 org.mockito.ArgumentMatchers.eq(NOW));
+    }
+
+    @Test
+    void bindsNullableCertificationDatesAsOracleDates() {
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+        StudentCertificationService.addDateParameter(parameters, "applicationDate", null);
+        assertThat(parameters.getValue("applicationDate")).isNull();
+        assertThat(parameters.getSqlType("applicationDate")).isEqualTo(Types.DATE);
+
+        LocalDate deadline = LocalDate.of(2025, 12, 15);
+        StudentCertificationService.addDateParameter(parameters, "deadlineDate", deadline);
+        assertThat(parameters.getValue("deadlineDate")).isEqualTo(java.sql.Date.valueOf(deadline));
+        assertThat(parameters.getSqlType("deadlineDate")).isEqualTo(Types.DATE);
     }
 }
