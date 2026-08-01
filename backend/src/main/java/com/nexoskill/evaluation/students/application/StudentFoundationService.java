@@ -280,7 +280,6 @@ public class StudentFoundationService {
             UPDATE STUDENT
                SET PROFESSIONAL_PROFILE_ID = :professionalProfileId,
                    TECHNOLOGICAL_PROFILE_ID = :technologicalProfileId,
-                   TECHNOLOGY_ID = NULL,
                    CERTIFICATIONS_ENABLED = :enabled,
 ADMISSION_DATE = :admissionDate,
                    APPLIES_TECH_CERT = :appliesTechnological,

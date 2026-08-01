@@ -179,15 +179,6 @@ public class StudentImportService {
                         "Más de una fila intenta actualizar al colaborador " + current.displayName() + "."));
                 continue;
             }
-            if (current.primaryTechnology() != null && imported.primaryTechnology() != null
-                    && !StudentExperienceService.normalizeKey(current.primaryTechnology())
-                            .equals(StudentExperienceService.normalizeKey(imported.primaryTechnology()))) {
-                conflicts.add(new Issue(imported.rowNumber(), "PRIMARY_TECHNOLOGY_CONFLICT",
-                        "La tecnología principal actual de " + current.displayName() + " es "
-                                + current.primaryTechnology() + " y el Excel propone " + imported.primaryTechnology()
-                                + ". Revisa el cambio manualmente."));
-                continue;
-            }
             Map<String, CertificationData> currentCertifications =
                     existingCertifications.getOrDefault(current.id(), Map.of());
             ImportedStudent effectiveImported = reconcileInferredAttempts(imported, currentCertifications);
@@ -346,6 +337,7 @@ public class StudentImportService {
             Long studentId = studentId(result.student().publicId(), tenant.organizationId());
             synchronizeStudentFoundationForCertification(studentId, tenant.organizationId(),
                     result.student().publicId(), resolved.admissionDate());
+            persistPrimaryTechnology(tenant.organizationId(), studentId, resolved.primaryTechnology(), actor.internalId());
             persistImportedDetails(tenant, result.student().publicId(), studentId, resolved, actor);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
                     resolved.fullName(), email, result.temporaryPassword()));
@@ -496,6 +488,14 @@ public class StudentImportService {
                     detail.version()), requestActor);
         }
         Long studentId = current.id();
+        boolean certificationChanges = selectedFields.stream().anyMatch(field -> field.startsWith("cert:"));
+        if (identity || certificationChanges) {
+            synchronizeStudentFoundationForCertification(studentId, current.organizationId(),
+                    current.publicId(), effectiveAdmissionDate);
+        }
+        if (selectedFields.contains("primaryTechnology")) {
+            persistPrimaryTechnology(current.organizationId(), studentId, imported.primaryTechnology(), actor.internalId());
+        }
         if (selectedFields.stream().anyMatch(field -> field.startsWith("experience:"))) {
             ExperienceSnapshot before = existingExperience(current.organizationId())
                     .getOrDefault(studentId, ExperienceSnapshot.empty());
@@ -505,11 +505,6 @@ public class StudentImportService {
                     selectedFields.contains("experience:known") ? imported.knownTechnologies() : before.known(),
                     actor.internalId());
         }
-        boolean certificationChanges = selectedFields.stream().anyMatch(field -> field.startsWith("cert:"));
-        if (identity || certificationChanges) {
-            synchronizeStudentFoundationForCertification(studentId, current.organizationId(),
-                    current.publicId(), effectiveAdmissionDate);
-        }
         for (String type : CERT_TYPES) {
             if (selectedFields.stream().anyMatch(field -> field.startsWith("cert:" + type))) {
                 CertificationData currentData = currentCertification(current.organizationId(), studentId, type);
@@ -518,6 +513,39 @@ public class StudentImportService {
                 upsertCertification(tenant, current.publicId(), selected, imported, actor);
             }
         }
+    }
+
+    private void persistPrimaryTechnology(Long organizationId, Long studentId, String technologyName, Long actorId) {
+        if (organizationId == null || studentId == null || actorId == null
+                || technologyName == null || technologyName.isBlank()) {
+            return;
+        }
+        CatalogRef technology = ensureQuestionTechnology(organizationId, technologyName, actorId);
+        int updated = jdbc.update("""
+            UPDATE STUDENT
+               SET TECHNOLOGY_ID = (
+                       SELECT t.TECHNOLOGY_ID
+                         FROM QUESTION_TECHNOLOGY t
+                        WHERE t.PUBLIC_ID = :technologyPublicId
+                          AND t.STATUS = 'ACTIVE'
+                          AND ((t.CONTENT_SCOPE = 'ORGANIZATION' AND t.OWNER_ORGANIZATION_ID = :organizationId)
+                               OR t.CONTENT_SCOPE = 'GLOBAL')
+                   ),
+                   UPDATED_BY = :actorId,
+                   UPDATED_AT = SYSTIMESTAMP,
+                   VERSION_NO = VERSION_NO + 1
+             WHERE STUDENT_ID = :studentId
+               AND ORGANIZATION_ID = :organizationId
+            """, new MapSqlParameterSource()
+                .addValue("technologyPublicId", technology.publicId())
+                .addValue("actorId", actorId)
+                .addValue("studentId", studentId)
+                .addValue("organizationId", organizationId));
+        if (updated != 1) {
+            throw new BusinessException("STUDENT_IMPORT_PRIMARY_TECHNOLOGY_UPDATE_FAILED",
+                    "No fue posible guardar la tecnología principal del colaborador.");
+        }
+        entityManager.clear();
     }
 
     private void persistImportedDetails(TenantContext tenant, String studentPublicId, Long studentId,
@@ -785,12 +813,18 @@ public class StudentImportService {
         String normalizedName = StudentExperienceService.normalizeKey(fullName);
         String normalizedEmail = email == null ? null : email.toLowerCase(Locale.ROOT);
         String matchKey = normalizedEmail != null ? "EMAIL:" + normalizedEmail : "NAME:" + normalizedName;
+        String errorSubject = fullName == null || fullName.isBlank()
+                ? "Fila " + row.rowNumber()
+                : "Colaborador " + fullName;
+        List<Issue> contextualErrors = errors.stream()
+                .map(issue -> new Issue(issue.row(), issue.code(), errorSubject + ": " + issue.message()))
+                .toList();
         ImportedStudent student = new ImportedStudent(rowKey, row.rowNumber(), fullName, names.firstName(),
                 names.lastName(), normalizedName, email, normalizedEmail, matchKey, profile,
                 profileRef == null ? null : profileRef.publicId(), admission, technology, technologicalProfile,
                 techProfileRef == null ? null : techProfileRef.publicId(), certificationLevel(profile),
-                Map.copyOf(certifications), current, languages, known, List.copyOf(warnings), !errors.isEmpty());
-        return new ParseResult(student, errors);
+                Map.copyOf(certifications), current, languages, known, List.copyOf(warnings), !contextualErrors.isEmpty());
+        return new ParseResult(student, contextualErrors);
     }
 
     private CertificationData certification(XlsxCertificationReader.RowData row, String type, String appliesHeader,
@@ -799,8 +833,9 @@ public class StudentImportService {
             int rowNumber, List<Issue> errors, List<String> warnings) {
         Boolean appliesValue = parseBoolean(value(row, appliesHeader), appliesHeader, rowNumber, errors);
         boolean applies = Boolean.TRUE.equals(appliesValue);
-        String certificationStatus = statusHeader == null ? null : normalizeStatus(value(row, statusHeader));
-        String examStatus = examHeader == null ? null : normalizeStatus(value(row, examHeader));
+        String certificationStatus = statusHeader == null ? null
+                : normalizeImportCertificationStatus(type, value(row, statusHeader));
+        String examStatus = examHeader == null ? null : normalizeImportExamStatus(value(row, examHeader));
         LocalDate application = applicationHeader == null ? null
                 : parseDate(value(row, applicationHeader), applicationHeader, rowNumber, errors, false);
         BigDecimal score = scoreHeader == null ? null
@@ -842,6 +877,7 @@ public class StudentImportService {
             application = null;
             score = null;
             attempt = null;
+            deadline = null;
             approved = null;
         }
 
@@ -925,21 +961,26 @@ public class StudentImportService {
             CertificationData imported) {
         CertificationData before = current == null ? emptyCertification(type) : current;
         CertificationData after = imported == null ? emptyCertification(type) : imported;
+        if (!after.applies()) {
+            return;
+        }
         String prefix = "cert:" + type + ":";
         String label = typeLabel(type);
         addChange(changes, prefix + "status", label + " — Estado de certificación",
                 text(before.certificationStatus()), text(after.certificationStatus()));
         if (!oneAgile(type)) {
-            addChange(changes, prefix + "examStatus", label + " — Estado del examen",
-                    text(before.examStatus()), text(after.examStatus()));
+            if (!Objects.equals(before.internalExamStatus(), after.internalExamStatus())) {
+                changes.add(new FieldChange(prefix + "examStatus", label + " — Estado del examen",
+                        text(before.examStatus()), text(after.examStatus()), true));
+            }
             addChange(changes, prefix + "applicationDate", label + " — Fecha de aplicación",
                     text(before.applicationDate()), text(after.applicationDate()));
             addDecimalChange(changes, prefix + "score", label + " — Promedio",
                     before.score10(), after.score10());
-            addChange(changes, prefix + "attempt", label + " — Intento",
-                    text(before.attempt()), text(after.attempt()));
-        }
-        if (!oneAgile(type)) {
+            if (importsAttempt(type)) {
+                addChange(changes, prefix + "attempt", label + " — Intento",
+                        text(before.attempt()), text(after.attempt()));
+            }
             addChange(changes, prefix + "deadline", label + " — Fecha límite",
                     text(before.deadline()), text(after.deadline()));
             addChange(changes, prefix + "lifecycle", label + " — Vigencia calculada",
@@ -957,19 +998,24 @@ public class StudentImportService {
             SELECT s.STUDENT_ID, s.PUBLIC_ID, s.STUDENT_CODE, s.EMAIL, s.NORMALIZED_EMAIL,
                    s.FIRST_NAME, s.LAST_NAME, s.DISPLAY_NAME, s.STATUS,
                    s.ACCESS_VALID_FROM, s.ACCESS_EXPIRES_ON, s.ADMISSION_DATE,
-                   (SELECT MAX(t.TECHNOLOGY_NAME) KEEP (DENSE_RANK FIRST ORDER BY c.IS_PRIMARY DESC,
-                                c.ACTIVE DESC, c.UPDATED_AT DESC, c.STUDENT_CERTIFICATION_CYCLE_ID DESC)
-                      FROM STUDENT_CERTIFICATION_CYCLE c
-                      JOIN QUESTION_TECHNOLOGY t ON t.TECHNOLOGY_ID = c.TECHNOLOGY_ID
-                     WHERE c.STUDENT_ID = s.STUDENT_ID
-                       AND c.ORGANIZATION_ID = s.ORGANIZATION_ID
-                       AND c.CERTIFICATION_TYPE = 'TECHNOLOGICAL') PRIMARY_CERT_TECH_NAME,
+                   COALESCE(
+                       student_technology.TECHNOLOGY_NAME,
+                       (SELECT MAX(t.TECHNOLOGY_NAME) KEEP (DENSE_RANK FIRST ORDER BY c.IS_PRIMARY DESC,
+                                    c.UPDATED_AT DESC, c.STUDENT_CERTIFICATION_CYCLE_ID DESC)
+                          FROM STUDENT_CERTIFICATION_CYCLE c
+                          JOIN QUESTION_TECHNOLOGY t ON t.TECHNOLOGY_ID = c.TECHNOLOGY_ID
+                         WHERE c.STUDENT_ID = s.STUDENT_ID
+                           AND c.ORGANIZATION_ID = s.ORGANIZATION_ID
+                           AND c.CERTIFICATION_TYPE = 'TECHNOLOGICAL'
+                           AND c.ACTIVE = 1)) PRIMARY_CERT_TECH_NAME,
                    s.PROFESSIONAL_PROFILE_ID, p.PUBLIC_ID PROFILE_PUBLIC_ID, p.PROFILE_NAME,
                    s.TECHNOLOGICAL_PROFILE_ID, tp.PUBLIC_ID TECH_PROFILE_PUBLIC_ID,
                    tp.PROFILE_NAME TECH_PROFILE_NAME,
                    s.APPLIES_TECH_CERT, s.APPLIES_DEV_SECURITY, s.APPLIES_NORMATIVE_TESTING,
                    s.APPLIES_ONE, s.APPLIES_AGILE, s.VERSION_NO, s.ORGANIZATION_ID
               FROM STUDENT s
+              LEFT JOIN QUESTION_TECHNOLOGY student_technology
+                ON student_technology.TECHNOLOGY_ID = s.TECHNOLOGY_ID
               LEFT JOIN CERTIFICATION_PROFILE_CATALOG p ON p.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
               LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tp ON tp.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
              WHERE s.ORGANIZATION_ID = :organizationId AND s.STATUS <> 'DELETED'
@@ -1645,21 +1691,56 @@ public class StudentImportService {
         }
     }
 
-    private String normalizeStatus(String value) {
+    static String normalizeImportCertificationStatus(String type, String value) {
         if (value == null || value.isBlank()) return null;
         String normalized = StudentExperienceService.normalizeKey(value);
-        return switch (normalized) {
-            case "NO APLICA" -> "No aplica";
-            case "SIN PRESENTAR PROXIMO A VENCER", "SIN PRESENTAR PROXIMA A VENCER" -> "Sin presentar — Próxima a vencer";
-            case "VIGENTE PROXIMO A VENCER", "VIGENTE PROXIMA A VENCER" -> "Vigente — Próxima a vencer";
-            case "VIGENTE REGULAR" -> "Vigente — Regular";
-            case "APROBADO", "APROBADA" -> "Aprobada";
-            case "NO APROBADO", "NO APROBADA" -> "No aprobada";
-            case "PENDIENTE" -> "Pendiente";
-            case "SIN PRESENTAR" -> "Sin presentar";
-            case "VENCIDO", "VENCIDA" -> "Vencida";
-            default -> value.trim().replaceAll("\\s+", " ");
-        };
+        if (Set.of("NO APLICA", "NA", "N A").contains(normalized)) return "No aplica";
+        if (("ONE".equals(type) || "AGILE".equals(type)) && "SI".equals(normalized)) return "Aprobada";
+        if (("ONE".equals(type) || "AGILE".equals(type)) && "EN TIEMPO".equals(normalized)) {
+            return "Sin presentar";
+        }
+        if (normalized.startsWith("SIN PRESENTAR") && normalized.contains("FUERA DE NORMA")) return "Vencida";
+        if (normalized.startsWith("SIN PRESENTAR")
+                && (normalized.contains("PROXIMO A VENCER") || normalized.contains("PROXIMA A VENCER"))) {
+            return "Sin presentar — Próxima a vencer";
+        }
+        if (normalized.startsWith("VIGENTE")
+                && (normalized.contains("PROXIMO A VENCER") || normalized.contains("PROXIMA A VENCER"))) {
+            return "Vigente — Próxima a vencer";
+        }
+        if (normalized.startsWith("VIGENTE")) return "Vigente — Regular";
+        if (normalized.startsWith("VENCID") || normalized.contains("FUERA DE NORMA")) return "Vencida";
+        if (normalized.startsWith("NO APROB") || normalized.startsWith("REPROB")) return "No aprobada";
+        if (normalized.startsWith("APROB")) return "Aprobada";
+        if (normalized.startsWith("SIN PRESENTAR") || normalized.equals("PENDIENTE")) return "Sin presentar";
+        if (normalized.startsWith("PROGRAM")) return "Programada";
+        if (normalized.startsWith("EN PROCESO")) return "En proceso";
+        if (normalized.startsWith("PRESENT")) return "Presentada";
+        if (normalized.startsWith("CANCEL")) return "Cancelada";
+        return value.trim().replaceAll("\\s+", " ");
+    }
+
+    static String normalizeImportExamStatus(String value) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = StudentExperienceService.normalizeKey(value);
+        if (Set.of("NO APLICA", "NA", "N A").contains(normalized)) return null;
+        if (normalized.startsWith("NO APROB") || normalized.startsWith("REPROB")
+                || normalized.contains("FAILED")) return "No aprobado";
+        if (normalized.startsWith("APROB") || normalized.contains("PASSED")) return "Aprobado";
+        if (normalized.equals("SIN EXAMEN") || normalized.startsWith("SIN PRESENTAR")
+                || normalized.equals("NO PROGRAMADO") || normalized.equals("NOT SCHEDULED")) {
+            return "Sin presentar";
+        }
+        if (normalized.startsWith("REPROGRAM")) return "Reprogramado";
+        if (normalized.startsWith("PROGRAM")) return "Programado";
+        if (normalized.startsWith("AUSENT")) return "Ausente";
+        if (normalized.startsWith("CANCEL")) return "Cancelado";
+        if (normalized.startsWith("PRESENT") || normalized.startsWith("COMPLET")) return "Presentado";
+        return value.trim().replaceAll("\\s+", " ");
+    }
+
+    static boolean importsAttempt(String type) {
+        return "TECHNOLOGICAL".equals(type) || "DEVELOPMENT_SECURITY".equals(type);
     }
 
     static boolean requiresImportApplicationDate(String type, boolean applies, Boolean approved,
@@ -1695,7 +1776,9 @@ public class StudentImportService {
         if (Boolean.FALSE.equals(approved)) return "NOT_APPROVED";
         String value = StudentExperienceService.normalizeKey((certificationStatus == null ? "" : certificationStatus)
                 + " " + (examStatus == null ? "" : examStatus));
-        if (value.contains("VENCID")) return "EXPIRED";
+        if (value.contains("VENCID") || value.contains("FUERA DE NORMA")) return "EXPIRED";
+        if (value.contains("SIN PRESENTAR") || value.contains("PENDIENTE")
+                || value.contains("EN TIEMPO")) return "PENDING";
         if (value.contains("PROGRAM") || value.contains("SCHEDULE")) return "SCHEDULED";
         if (value.contains("PRESENT") || value.contains("APLIC")) return "APPLIED";
         return "PENDING";

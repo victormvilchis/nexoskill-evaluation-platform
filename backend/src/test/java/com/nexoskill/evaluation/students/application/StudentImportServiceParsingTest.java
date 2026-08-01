@@ -93,4 +93,46 @@ class StudentImportServiceParsingTest {
         assertEquals(2, StudentImportService.resolveInferredAttempt(2, true));
     }
 
+    @Test
+    void normalizesCertificationStatusesUsedByTheLargeWorkbook() {
+        assertEquals("Vigente — Regular",
+                StudentImportService.normalizeImportCertificationStatus("DEVELOPMENT_SECURITY", "VIGENTE - REGULAR"));
+        assertEquals("Vigente — Próxima a vencer",
+                StudentImportService.normalizeImportCertificationStatus("TECHNOLOGICAL", "VIGENTE - PROXIMO A VENCER"));
+        assertEquals("Sin presentar — Próxima a vencer",
+                StudentImportService.normalizeImportCertificationStatus(
+                        "NORMATIVE_TESTING", "SIN PRESENTAR - PROXIMO A VENCER"));
+        assertEquals("Vencida",
+                StudentImportService.normalizeImportCertificationStatus(
+                        "DEVELOPMENT_SECURITY", "SIN PRESENTAR - FUERA DE NORMA"));
+        assertEquals("Vencida",
+                StudentImportService.normalizeImportCertificationStatus(
+                        "TECHNOLOGICAL", "VENCIDO - MENOR A DOS MESES"));
+        assertEquals("Aprobada",
+                StudentImportService.normalizeImportCertificationStatus("ONE", "Aprobado"));
+        assertEquals("Aprobada",
+                StudentImportService.normalizeImportCertificationStatus("AGILE", "SI"));
+        assertEquals("Sin presentar",
+                StudentImportService.normalizeImportCertificationStatus("AGILE", "EN TIEMPO"));
+        assertEquals("No aplica",
+                StudentImportService.normalizeImportCertificationStatus("TECHNOLOGICAL", "NO APLICA"));
+    }
+
+    @Test
+    void normalizesExamStatusesUsedByTheLargeWorkbook() {
+        assertEquals("Aprobado", StudentImportService.normalizeImportExamStatus("APROBADO"));
+        assertEquals("No aprobado", StudentImportService.normalizeImportExamStatus("REPROBADO"));
+        assertEquals("Sin presentar", StudentImportService.normalizeImportExamStatus("SIN EXAMEN"));
+        assertNull(StudentImportService.normalizeImportExamStatus("NO APLICA"));
+    }
+
+    @Test
+    void comparesAttemptsOnlyWhenTheSpreadsheetContainsAnAttemptColumn() {
+        assertTrue(StudentImportService.importsAttempt("TECHNOLOGICAL"));
+        assertTrue(StudentImportService.importsAttempt("DEVELOPMENT_SECURITY"));
+        assertFalse(StudentImportService.importsAttempt("NORMATIVE_TESTING"));
+        assertFalse(StudentImportService.importsAttempt("ONE"));
+        assertFalse(StudentImportService.importsAttempt("AGILE"));
+    }
+
 }
