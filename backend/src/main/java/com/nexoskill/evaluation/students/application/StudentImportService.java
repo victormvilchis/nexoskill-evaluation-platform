@@ -269,7 +269,9 @@ public class StudentImportService {
                 } catch (RuntimeException exception) {
                     LOGGER.error("Student import failed for row {} in organization {}",
                             imported.rowNumber(), effectiveTenant.organizationId(), exception);
-                    applyErrors.add(importFailure(imported.rowNumber(), null, exception));
+                    applyErrors.add(importFailure(imported.rowNumber(),
+                            "Colaborador " + imported.fullName() + " (fila " + imported.rowNumber() + ")",
+                            exception));
                 }
             }
             for (ExistingStudent current : lowCandidates) {
@@ -804,10 +806,12 @@ public class StudentImportService {
         boolean hasTrackingData = hasImportTrackingData(
                 certificationStatus, examStatus, application, score, attempt);
         Boolean approved = approved(certificationStatus, examStatus);
-        if (applies && !oneAgile(type) && (Boolean.TRUE.equals(approved)
-                || statusContains(certificationStatus, "VIGENTE")) && application == null) {
-            warnings.add(typeLabel(type)
-                    + ": el estado indica aprobación o vigencia, pero no existe fecha de aplicación.");
+        if (requiresImportApplicationDate(type, applies, approved, certificationStatus)
+                && application == null) {
+            String requiredHeader = applicationHeader == null ? "FECHA DE APLICACIÓN" : applicationHeader;
+            errors.add(new Issue(rowNumber, "STUDENT_IMPORT_CERTIFICATION_APPLICATION_DATE_REQUIRED",
+                    typeLabel(type) + ": " + requiredHeader
+                            + " es obligatoria cuando el estado indica aprobación o vigencia."));
         }
         if (applies && (certificationStatus != null || examStatus != null || score != null)
                 && (attempt == null || attempt == 0) && !oneAgile(type)) {
@@ -1609,6 +1613,11 @@ public class StudentImportService {
         };
     }
 
+    static boolean requiresImportApplicationDate(String type, boolean applies, Boolean approved,
+            String certificationStatus) {
+        return applies && !oneAgile(type)
+                && (Boolean.TRUE.equals(approved) || statusContains(certificationStatus, "VIGENTE"));
+    }
     static boolean hasMeaningfulImportStatus(String value) {
         if (value == null || value.isBlank()) return false;
         String normalized = StudentExperienceService.normalizeKey(value);

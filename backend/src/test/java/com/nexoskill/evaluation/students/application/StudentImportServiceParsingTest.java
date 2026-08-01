@@ -66,4 +66,21 @@ class StudentImportServiceParsingTest {
         assertEquals(LocalDate.of(2004, 12, 20), StudentImportService.parseImportDateValue("2004-12-20"));
         assertNull(StudentImportService.parseImportDateValue("fecha pendiente"));
     }
+    @Test
+    void validatesApplicationDatesBeforeApplyingTheImport() {
+        assertFalse(StudentImportService.requiresImportApplicationDate(
+                "ONE", true, true, "Aprobada"));
+        assertFalse(StudentImportService.requiresImportApplicationDate(
+                "AGILE", true, true, "Aprobada"));
+        assertTrue(StudentImportService.requiresImportApplicationDate(
+                "DEVELOPMENT_SECURITY", true, true, "Vigente — Regular"));
+        assertTrue(StudentImportService.requiresImportApplicationDate(
+                "TECHNOLOGICAL", true, true, "Aprobada"));
+        assertTrue(StudentImportService.requiresImportApplicationDate(
+                "NORMATIVE_TESTING", true, null, "Vigente — Regular"));
+        assertFalse(StudentImportService.requiresImportApplicationDate(
+                "NORMATIVE_TESTING", false, true, "Aprobada"));
+        assertFalse(StudentImportService.requiresImportApplicationDate(
+                "TECHNOLOGICAL", true, null, "Pendiente"));
+    }
 }

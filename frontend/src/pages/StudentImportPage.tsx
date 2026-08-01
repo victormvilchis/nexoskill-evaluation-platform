@@ -189,7 +189,11 @@ export function StudentImportPage() {
       })
       setResult(response)
       setConfirmOpen(false)
-      toast.success('Importación aplicada', `Se crearon ${response.created} y se actualizaron ${response.updated} colaboradores.`)
+      if (response.errors.length === 0) {
+        toast.success('Importación aplicada', `Se crearon ${response.created} y se actualizaron ${response.updated} colaboradores.`)
+      } else {
+        toast.warning('Importación finalizada con errores', `Se crearon ${response.created}, se actualizaron ${response.updated} y se detectaron ${response.errors.length} errores.`)
+      }
     } catch (requestError) {
       setConfirmOpen(false)
       setError(requestError instanceof ApiRequestError
@@ -217,7 +221,11 @@ export function StudentImportPage() {
           <article><strong>{result.errors.length}</strong><span>Errores</span></article>
         </section>
         {result.errors.length > 0 && <section className="editor-card"><h2>Errores al aplicar</h2>
-          <ul className="ns-import-issues">{result.errors.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>
+          <ul className="ns-import-issues">{result.errors.map((issue, index) => (
+            <li key={`${issue.code}-${index}`}>
+              <strong>{issue.row > 0 ? `Fila ${issue.row}: ` : ''}</strong>{issue.message}
+            </li>
+          ))}</ul>
         </section>}
         {result.credentials.length > 0 && <section className="editor-card ns-credential-once">
           <div className="section-heading"><div><p className="eyebrow">Accesos generados</p><h2>Credenciales temporales</h2></div></div>

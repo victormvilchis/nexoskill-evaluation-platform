@@ -602,12 +602,17 @@ public class StudentCertificationService {
             throw new BusinessException("CERTIFICATION_TECHNOLOGY_FIELDS_INVALID",
                     "Tecnología, nivel y principal solo aplican a certificaciones tecnológicas.");
         }
-        if (Boolean.TRUE.equals(command.approved()) && command.applicationDate() == null) {
+        if (requiresApplicationDate(command.type(), command.approved()) && command.applicationDate() == null) {
             throw new BusinessException("CERTIFICATION_APPLICATION_DATE_REQUIRED",
                     "La fecha de aplicación es obligatoria para aprobar una certificación.");
         }
     }
 
+    static boolean requiresApplicationDate(CertificationType type, Boolean approved) {
+        return Boolean.TRUE.equals(approved)
+                && type != CertificationType.ONE
+                && type != CertificationType.AGILE;
+    }
     private CertificationProcessType processType(Scope scope, CycleCommand command) {
         if (command.type() == CertificationType.ONE || command.type() == CertificationType.AGILE) {
             return CertificationProcessType.CERTIFICATION;

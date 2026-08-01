@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
+import com.nexoskill.evaluation.certifications.domain.CertificationType;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
@@ -63,5 +64,22 @@ class StudentCertificationServiceAuthorizationTest {
         StudentCertificationService.addDateParameter(parameters, "deadlineDate", deadline);
         assertThat(parameters.getValue("deadlineDate")).isEqualTo(java.sql.Date.valueOf(deadline));
         assertThat(parameters.getSqlType("deadlineDate")).isEqualTo(Types.DATE);
+    }
+    @Test
+    void requiresApplicationDateOnlyForExamManagedCertifications() {
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.TECHNOLOGICAL, true)).isTrue();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.DEVELOPMENT_SECURITY, true)).isTrue();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.NORMATIVE_TESTING, true)).isTrue();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.ONE, true)).isFalse();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.AGILE, true)).isFalse();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.TECHNOLOGICAL, false)).isFalse();
+        assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.TECHNOLOGICAL, null)).isFalse();
     }
 }
