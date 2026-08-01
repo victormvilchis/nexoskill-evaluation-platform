@@ -22,6 +22,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -179,6 +181,24 @@ public class GlobalExceptionHandler {
 				"No fue posible guardar porque los datos entran en conflicto con información existente.",
 				request.getRequestURI(), null);
 	}
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception,
+            HttpServletRequest request) {
+        LOGGER.warn("Upload too large on {}", request.getRequestURI());
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, "STUDENT_IMPORT_FILE_TOO_LARGE",
+                "El archivo supera el límite de 50 MB permitido para la importación.",
+                request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiErrorResponse> handleMultipart(MultipartException exception,
+            HttpServletRequest request) {
+        LOGGER.warn("Invalid multipart request on {}: {}", request.getRequestURI(), exception.getMessage());
+        return response(HttpStatus.BAD_REQUEST, "STUDENT_IMPORT_FILE_INVALID",
+                "No fue posible leer el archivo enviado. Verifica que sea un .xlsx válido e inténtalo nuevamente.",
+                request.getRequestURI(), null);
+    }
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception exception, HttpServletRequest request) {

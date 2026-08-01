@@ -32,8 +32,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: ${APP_STUDENT_IMPORT_MAX_FILE_SIZE:50MB}
+      max-request-size: ${APP_STUDENT_IMPORT_MAX_REQUEST_SIZE:52MB}
 
   jackson:
     default-property-inclusion: non_null

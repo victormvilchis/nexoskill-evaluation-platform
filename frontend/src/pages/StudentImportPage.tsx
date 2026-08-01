@@ -76,10 +76,6 @@ export function StudentImportPage() {
     ? `/admin/students?organization=${encodeURIComponent(selectedOrganization)}`
     : '/admin/students'
 
-  useEffect(() => () => {
-    if (preview?.token && !result) void discardStudentImport(preview.token).catch(() => undefined)
-  }, [preview?.token, result])
-
   const selectedNew = useMemo(() => newRows.filter((row) => row.selected), [newRows])
   const selectedChanges = useMemo(
     () => changedRows.filter((row) => row.selectedFields.size > 0),
@@ -101,7 +97,7 @@ export function StudentImportPage() {
   }, [selectedNew])
 
   async function analyze() {
-    if (!file || loading) return
+    if (!file || loading || applying) return
     setLoading(true)
     setError(undefined)
     setResult(undefined)
@@ -110,8 +106,12 @@ export function StudentImportPage() {
         setError('Selecciona la organización que recibirá la carga antes de analizar el archivo.')
         return
       }
+      const previousToken = preview?.token
       const response = await previewStudentImport(file, administrator ? selectedOrganization : undefined)
       setPreview(response)
+      if (previousToken && previousToken !== response.token) {
+        void discardStudentImport(previousToken).catch(() => undefined)
+      }
       setNewRows(response.newStudents.map((row) => ({
         ...row,
         selected: true,
@@ -123,7 +123,6 @@ export function StudentImportPage() {
       })))
       setLowActions(Object.fromEntries(response.possibleLows.map((row) => [row.studentPublicId, 'KEEP'])))
     } catch (requestError) {
-      setPreview(undefined)
       setError(requestError instanceof ApiRequestError
         ? requestError.message
         : 'No fue posible analizar el archivo.')
@@ -144,6 +143,11 @@ export function StudentImportPage() {
   }
 
   async function changeFile(next?: File) {
+    if (loading || applying) return
+    if (next && !next.name.toLowerCase().endsWith('.xlsx')) {
+      setError('Selecciona un archivo con formato .xlsx.')
+      return
+    }
     if (preview?.token && !result) await discardStudentImport(preview.token).catch(() => undefined)
     setFile(next)
     setPreview(undefined)
@@ -157,6 +161,7 @@ export function StudentImportPage() {
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
     setDragging(false)
+    if (loading || applying) return
     const next = event.dataTransfer.files?.[0]
     if (next) void changeFile(next)
   }
@@ -234,11 +239,11 @@ export function StudentImportPage() {
   return (
     <main className="content-page student-import-page">
       <BackButton fallback={studentsPath} />
-      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la primera hoja del archivo. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
+      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>Cargar Excel</h1><p className="muted">Se procesará exclusivamente la hoja CERTIFICACIONES. El Excel no se guarda y ningún cambio se aplica sin confirmación.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="editor-card ns-import-file-card">
         <div className="ns-import-step-heading">
-          <div><p className="eyebrow">Paso 1</p><h2>Selecciona el archivo de colaboradores</h2><p className="muted">Se leerá la primera hoja del libro y podrás volver a cargar el mismo archivo las veces que sea necesario.</p></div>
+          <div><p className="eyebrow">Paso 1</p><h2>Selecciona el archivo de colaboradores</h2><p className="muted">Se leerá la hoja CERTIFICACIONES y podrás volver a cargar el mismo archivo las veces que sea necesario.</p></div>
           <span className="ns-import-step-number" aria-hidden="true">01</span>
         </div>
         {administrator && <label className="field-group ns-import-organization-field"><span>Organización destino</span><select value={selectedOrganization} disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}><option value="">Selecciona una organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select><small>Los colaboradores y los catálogos que falten se crearán únicamente dentro de esta organización.</small></label>}
@@ -262,18 +267,18 @@ export function StudentImportPage() {
           <div className="ns-import-dropzone-copy">
             <strong>{file ? 'Archivo listo para analizar' : 'Arrastra tu archivo Excel aquí'}</strong>
             <span>{file ? 'Haz clic para reemplazarlo por otro archivo' : 'o haz clic para seleccionarlo desde tu equipo'}</span>
-            <small>Formato admitido: .xlsx · Primera hoja del libro</small>
+            <small>Formato admitido: .xlsx · Hoja requerida: CERTIFICACIONES</small>
           </div>
           <span className="ns-import-select-file">{file ? 'Cambiar archivo' : 'Seleccionar archivo'}</span>
         </div>
         {file && <div className="ns-selected-file">
           <span className="ns-selected-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3.5h9l5 5v12H5v-17Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M14 3.5v5h5M8.5 12l3 5m0-5-3 5M14.5 12v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span>
-          <div><strong>{file.name}</strong><span>{formatFileSize(file.size)} · Se procesará la primera hoja</span></div>
+          <div><strong>{file.name}</strong><span>{formatFileSize(file.size)} · Se procesará CERTIFICACIONES</span></div>
           <button type="button" className="ns-selected-file-remove" disabled={loading || applying} onClick={(event) => { event.stopPropagation(); void changeFile(undefined) }} aria-label="Quitar archivo">×</button>
         </div>}
         <div className="ns-import-analyze-actions">
           <p><strong>Vista previa obligatoria.</strong> No se guardará información hasta que confirmes los cambios.</p>
-          <button type="button" className="primary-button ns-import-analyze-button" disabled={!file || loading || (administrator && !selectedOrganization)} onClick={() => void analyze()}>{loading ? 'Analizando archivo…' : 'Validar y comparar'}</button>
+          <button type="button" className="primary-button ns-import-analyze-button" disabled={!file || loading || applying || (administrator && !selectedOrganization)} onClick={() => void analyze()}>{loading ? 'Analizando archivo…' : 'Validar y comparar'}</button>
         </div>
       </section>
 

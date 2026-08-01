@@ -24,14 +24,15 @@ import org.springframework.stereotype.Component;
 
 /**
  * Lector XLSX acotado al flujo de importación de colaboradores. No ejecuta fórmulas,
- * no procesa macros y utiliza exclusivamente la primera hoja del libro.
+ * no procesa macros y utiliza exclusivamente la hoja CERTIFICACIONES del libro.
  */
 @Component
 public class XlsxCertificationReader {
-    static final long MAX_UNCOMPRESSED_BYTES = 30L * 1024L * 1024L;
-    static final int MAX_ROWS = 10_000;
+    static final long MAX_UNCOMPRESSED_BYTES = 100L * 1024L * 1024L;
+    static final int MAX_ROWS = 50_000;
     static final int MAX_COLUMNS = 256;
-    static final int MAX_SHARED_STRINGS = 200_000;
+    static final int MAX_SHARED_STRINGS = 500_000;
+    private static final String CERTIFICATION_SHEET = normalizeHeader("CERTIFICACIONES");
     private static final Set<String> REQUIRED_HEADERS = Set.of(
             normalizeHeader("NOMBRE EXTERNO"),
             normalizeHeader("PERFIL"),
@@ -48,12 +49,12 @@ public class XlsxCertificationReader {
             byte[] workbook = requiredEntry(entries, "xl/workbook.xml");
             byte[] relationships = requiredEntry(entries, "xl/_rels/workbook.xml.rels");
             Map<String, String> relationshipTargets = parseRelationships(relationships);
-            SheetRef sheet = findFirstSheet(workbook, relationshipTargets);
+            SheetRef sheet = findCertificationSheet(workbook, relationshipTargets);
             List<String> sharedStrings = parseSharedStrings(entries.get("xl/sharedStrings.xml"));
             byte[] sheetBytes = entries.get(sheet.path());
             if (sheetBytes == null) {
                 throw new BusinessException("STUDENT_IMPORT_SHEET_INVALID",
-                        "La primera hoja del archivo no pudo leerse.");
+                        "La hoja CERTIFICACIONES no pudo leerse.");
             }
             return parseSheet(sheet.name(), sheetBytes, sharedStrings);
         } catch (BusinessException exception) {
@@ -138,27 +139,29 @@ public class XlsxCertificationReader {
         return targets;
     }
 
-    private SheetRef findFirstSheet(byte[] xml, Map<String, String> relationships)
+    private SheetRef findCertificationSheet(byte[] xml, Map<String, String> relationships)
             throws XMLStreamException {
         XMLStreamReader reader = xmlReader(xml);
         try {
             while (reader.hasNext()) {
-                if (reader.next() == XMLStreamConstants.START_ELEMENT && "sheet".equals(reader.getLocalName())) {
-                    String name = attribute(reader, "name");
-                    String relationId = attributeByLocalName(reader, "id");
-                    String path = relationships.get(relationId);
-                    if (name == null || name.isBlank() || path == null || path.isBlank()) {
-                        throw new BusinessException("STUDENT_IMPORT_SHEET_INVALID",
-                                "La primera hoja del archivo no tiene una referencia válida.");
-                    }
-                    return new SheetRef(name.trim(), path);
+                if (reader.next() != XMLStreamConstants.START_ELEMENT || !"sheet".equals(reader.getLocalName())) {
+                    continue;
                 }
+                String name = attribute(reader, "name");
+                if (!CERTIFICATION_SHEET.equals(normalizeHeader(name))) continue;
+                String relationId = attributeByLocalName(reader, "id");
+                String path = relationships.get(relationId);
+                if (path == null || path.isBlank()) {
+                    throw new BusinessException("STUDENT_IMPORT_SHEET_INVALID",
+                            "La hoja CERTIFICACIONES no tiene una referencia válida.");
+                }
+                return new SheetRef(name.trim(), path);
             }
         } finally {
             reader.close();
         }
         throw new BusinessException("STUDENT_IMPORT_SHEET_REQUIRED",
-                "El archivo debe contener al menos una hoja.");
+                "El archivo debe contener una hoja llamada CERTIFICACIONES.");
     }
 
     private List<String> parseSharedStrings(byte[] xml) throws XMLStreamException {
@@ -226,7 +229,7 @@ public class XlsxCertificationReader {
             reader.close();
         }
         if (rows.isEmpty()) {
-            throw new BusinessException("STUDENT_IMPORT_EMPTY", "La primera hoja del archivo no contiene datos.");
+            throw new BusinessException("STUDENT_IMPORT_EMPTY", "La hoja CERTIFICACIONES no contiene datos.");
         }
         int headerPosition = findHeaderPosition(rows);
         RawRow header = rows.get(headerPosition);
@@ -245,7 +248,7 @@ public class XlsxCertificationReader {
         if (!missing.isEmpty()) {
             throw new BusinessException("STUDENT_IMPORT_HEADERS_MISSING",
                     "No se encontraron las columnas obligatorias: " + String.join(", ", missing) + ".",
-                    Map.of("file", "Faltan columnas obligatorias en la primera hoja del archivo."));
+                    Map.of("file", "Faltan columnas obligatorias en la hoja CERTIFICACIONES."));
         }
         List<RowData> data = new ArrayList<>();
         for (int index = headerPosition + 1; index < rows.size(); index++) {
@@ -262,7 +265,7 @@ public class XlsxCertificationReader {
         }
         if (data.isEmpty()) {
             throw new BusinessException("STUDENT_IMPORT_EMPTY",
-                    "La primera hoja del archivo no contiene colaboradores debajo de los encabezados.");
+                    "La hoja CERTIFICACIONES no contiene colaboradores debajo de los encabezados.");
         }
         Map<String, String> originalHeaders = new LinkedHashMap<>();
         headers.forEach((normalized, ref) -> originalHeaders.put(normalized, ref.original()));
@@ -286,7 +289,7 @@ public class XlsxCertificationReader {
         }
         if (bestIndex >= 0 && bestMatches >= 3) return bestIndex;
         throw new BusinessException("STUDENT_IMPORT_HEADERS_NOT_FOUND",
-                "No fue posible localizar la fila de encabezados en la primera hoja del archivo.");
+                "No fue posible localizar la fila de encabezados en la hoja CERTIFICACIONES.");
     }
 
     private String readCell(XMLStreamReader reader, String type, List<String> sharedStrings)

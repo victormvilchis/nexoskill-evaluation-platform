@@ -42,6 +42,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -53,8 +55,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class StudentImportService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(StudentImportService.class);
     private static final Pattern EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
-    private static final int MAX_FILE_BYTES = 15 * 1024 * 1024;
+    private static final int MAX_FILE_BYTES = 50 * 1024 * 1024;
     private static final int TOKEN_MINUTES = 30;
     private static final Set<String> ORGANIZATION_OPERATOR_ROLES = Set.of("MANAGER", "SUPERVISOR");
     private static final String GLOBAL_ADMINISTRATOR_ROLE = "ADMINISTRATOR";
@@ -71,6 +74,7 @@ public class StudentImportService {
     private final EntityManager entityManager;
     private final TransactionTemplate rowTransaction;
     private final Map<String, PendingImport> pending = new ConcurrentHashMap<>();
+    private final Set<String> applying = ConcurrentHashMap.newKeySet();
 
     public StudentImportService(XlsxCertificationReader reader, StudentFoundationService foundation,
             StudentService studentService, StudentExperienceService experienceService,
@@ -98,7 +102,7 @@ public class StudentImportService {
         }
         if (content.length > MAX_FILE_BYTES) {
             throw new BusinessException("STUDENT_IMPORT_FILE_TOO_LARGE",
-                    "El archivo supera el límite de 15 MB permitido para la importación.");
+                    "El archivo supera el límite de 50 MB permitido para la importación.");
         }
         if (fileName == null || !fileName.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
             throw new BusinessException("STUDENT_IMPORT_FILE_TYPE",
@@ -221,68 +225,91 @@ public class StudentImportService {
         }
         String normalizedToken = command.token().trim();
         PendingImport state = pending.get(normalizedToken);
-        if (state == null || state.expiresAt().isBefore(java.time.Instant.now(clock))) {
-            pending.remove(normalizedToken);
+        if (state == null) {
+            throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
+                    "La vista previa ya no está disponible. Puede haber sido aplicada, descartada o invalidada por un reinicio del backend. Vuelve a validar el archivo.");
+        }
+        if (state.expiresAt().isBefore(java.time.Instant.now(clock))) {
+            pending.remove(normalizedToken, state);
             throw new BusinessException("STUDENT_IMPORT_TOKEN_EXPIRED",
-                    "La vista previa caducó o ya fue aplicada. Vuelve a seleccionar el archivo.");
+                    "La vista previa caducó después de " + TOKEN_MINUTES + " minutos. Vuelve a validar el archivo.");
         }
         TenantContext effectiveTenant = effectiveTenantForState(tenant, actor, state);
 
         Map<String, NewSelection> newSelections = indexNew(command.newStudents());
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
-        validateSelectedEmails(effectiveTenant.organizationId(), state, newSelections);
-        validateSelections(state, newSelections, changeSelections, lowSelections);
-        if (!pending.remove(normalizedToken, state)) {
-            throw new BusinessException("STUDENT_IMPORT_TOKEN_EXPIRED",
-                    "La vista previa ya fue utilizada o descartada. Vuelve a seleccionar el archivo.");
+        if (!applying.add(normalizedToken)) {
+            throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
+                    "La importación ya se está aplicando. Espera a que termine antes de volver a confirmar.");
         }
-        List<Credential> credentials = new ArrayList<>();
-        List<Issue> applyErrors = new ArrayList<>();
-        int created = 0;
-        int updated = 0;
-        int deactivated = 0;
-
-        for (ImportedStudent imported : state.imported()) {
-            Match match = state.matches().get(imported.rowKey());
-            if (match == null || imported.hasBlockingErrors()) continue;
-            try {
-                RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, imported, match,
-                        newSelections, changeSelections, requestActor, actor));
-                if (outcome == null) continue;
-                if (outcome.credential() != null) credentials.add(outcome.credential());
-                created += outcome.created();
-                updated += outcome.updated();
-            } catch (BusinessException exception) {
-                applyErrors.add(new Issue(imported.rowNumber(), exception.getCode(), exception.getMessage()));
-            } catch (DataIntegrityViolationException exception) {
-                applyErrors.add(new Issue(imported.rowNumber(), "STUDENT_IMPORT_CONFLICT",
-                        "No fue posible aplicar la fila por un conflicto de datos existente."));
+        try {
+            validateSelectedEmails(effectiveTenant.organizationId(), state, newSelections);
+            validateSelections(state, newSelections, changeSelections, lowSelections);
+            if (pending.get(normalizedToken) != state) {
+                throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
+                        "La vista previa fue descartada antes de iniciar la importación. Vuelve a validar el archivo.");
             }
-        }
-
-        for (ExistingStudent current : existingStudents(effectiveTenant.organizationId())) {
-            LowSelection selection = lowSelections.get(current.publicId());
-            if (selection == null || !"DEACTIVATE".equals(selection.action())) continue;
-            try {
-                rowTransaction.executeWithoutResult(status -> studentService.deactivate(effectiveTenant, current.publicId(), requestActor));
-                deactivated++;
-            } catch (BusinessException exception) {
-                applyErrors.add(new Issue(0, exception.getCode(),
-                        "No fue posible desactivar a " + current.displayName() + ": " + exception.getMessage()));
+            List<ExistingStudent> lowCandidates = existingStudents(effectiveTenant.organizationId());
+            List<Credential> credentials = new ArrayList<>();
+            List<Issue> applyErrors = new ArrayList<>();
+            int created = 0;
+            int updated = 0;
+            int deactivated = 0;
+            for (ImportedStudent imported : state.imported()) {
+                Match match = state.matches().get(imported.rowKey());
+                if (match == null || imported.hasBlockingErrors()) continue;
+                try {
+                    RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, imported, match,
+                            newSelections, changeSelections, requestActor, actor));
+                    if (outcome == null) continue;
+                    if (outcome.credential() != null) credentials.add(outcome.credential());
+                    created += outcome.created();
+                    updated += outcome.updated();
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Student import failed for row {} in organization {}",
+                            imported.rowNumber(), effectiveTenant.organizationId(), exception);
+                    applyErrors.add(importFailure(imported.rowNumber(), null, exception));
+                }
             }
+            for (ExistingStudent current : lowCandidates) {
+                LowSelection selection = lowSelections.get(current.publicId());
+                if (selection == null || !"DEACTIVATE".equals(selection.action())) continue;
+                try {
+                    rowTransaction.executeWithoutResult(status -> studentService.deactivate(
+                            effectiveTenant, current.publicId(), requestActor));
+                    deactivated++;
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Student import deactivation failed for student {} in organization {}",
+                            current.publicId(), effectiveTenant.organizationId(), exception);
+                    applyErrors.add(importFailure(0,
+                            "No fue posible desactivar a " + current.displayName(), exception));
+                }
+            }
+            ApplyResult result = new ApplyResult(created, updated, deactivated, applyErrors, credentials,
+                    credentials.isEmpty() ? null
+                            : "Las contraseñas temporales se muestran una sola vez. Cópialas antes de cerrar esta vista.");
+            pending.remove(normalizedToken, state);
+            return result;
+        } finally {
+            applying.remove(normalizedToken);
         }
-
-        return new ApplyResult(created, updated, deactivated, applyErrors, credentials,
-                credentials.isEmpty() ? null
-                        : "Las contraseñas temporales se muestran una sola vez. Cópialas antes de cerrar esta vista.");
     }
-
     public void discard(TenantContext tenant, AuthenticatedUser actor, String token) {
-        PendingImport state = pending.get(token);
+        if (token == null || token.isBlank()) return;
+        String normalizedToken = token.trim();
+        PendingImport state = pending.get(normalizedToken);
         if (state == null) return;
-        effectiveTenantForState(tenant, actor, state);
-        pending.remove(token, state);
+        if (!applying.add(normalizedToken)) {
+            throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
+                    "La importación ya se está aplicando y no puede descartarse en este momento.");
+        }
+        try {
+            effectiveTenantForState(tenant, actor, state);
+            pending.remove(normalizedToken, state);
+        } finally {
+            applying.remove(normalizedToken);
+        }
     }
 
     private RowOutcome applyRow(TenantContext tenant, PendingImport state, ImportedStudent imported, Match match,
@@ -386,16 +413,49 @@ public class StudentImportService {
             }
         }
         if (normalized.isEmpty()) return;
-        List<String> existing = jdbc.query("""
-            SELECT LOWER(EMAIL) FROM STUDENT
-             WHERE ORGANIZATION_ID = :organizationId AND STATUS <> 'DELETED'
-               AND LOWER(EMAIL) IN (:emails)
-            """, new MapSqlParameterSource("organizationId", organizationId).addValue("emails", normalized),
-                (rs, rowNum) -> rs.getString(1));
+        List<String> emailList = List.copyOf(normalized);
+        List<String> existing = new ArrayList<>();
+        for (int start = 0; start < emailList.size() && existing.isEmpty(); start += 900) {
+            List<String> batch = emailList.subList(start, Math.min(start + 900, emailList.size()));
+            existing.addAll(jdbc.query("""
+                SELECT LOWER(EMAIL) FROM STUDENT
+                 WHERE ORGANIZATION_ID = :organizationId AND STATUS <> 'DELETED'
+                   AND LOWER(EMAIL) IN (:emails)
+                """, new MapSqlParameterSource("organizationId", organizationId).addValue("emails", batch),
+                    (rs, rowNum) -> rs.getString(1)));
+        }
         if (!existing.isEmpty()) {
             throw new BusinessException("STUDENT_IMPORT_EMAIL_IN_USE",
                     "El correo " + existing.getFirst() + " ya está utilizado por otro colaborador de la organización.");
         }
+    }
+    private Issue importFailure(int row, String action, RuntimeException exception) {
+        Throwable current = exception;
+        Throwable root = exception;
+        BusinessException business = null;
+        boolean dataConflict = false;
+        int depth = 0;
+        while (current != null && depth++ < 20) {
+            root = current;
+            if (business == null && current instanceof BusinessException found) business = found;
+            if (current instanceof DataIntegrityViolationException) dataConflict = true;
+            if (current.getCause() == current) break;
+            current = current.getCause();
+        }
+        String prefix = action == null || action.isBlank() ? "" : action + ": ";
+        if (business != null) {
+            return new Issue(row, business.getCode(), prefix + business.getMessage());
+        }
+        if (dataConflict) {
+            return new Issue(row, "STUDENT_IMPORT_CONFLICT",
+                    prefix + "los datos entran en conflicto con información existente.");
+        }
+        String detail = root.getMessage();
+        if (detail == null || detail.isBlank()) detail = root.getClass().getSimpleName();
+        detail = detail.replaceAll("\\s+", " ").trim();
+        if (detail.length() > 500) detail = detail.substring(0, 500) + "…";
+        return new Issue(row, "STUDENT_IMPORT_ROW_FAILED",
+                prefix + "no fue posible completar la operación. Detalle técnico: " + detail);
     }
 
     private void updateExisting(TenantContext tenant, ExistingStudent current, ImportedStudent imported,
@@ -1116,7 +1176,8 @@ public class StudentImportService {
 
     private void cleanupExpired() {
         java.time.Instant now = java.time.Instant.now(clock);
-        pending.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+        pending.entrySet().removeIf(entry -> !applying.contains(entry.getKey())
+                && entry.getValue().expiresAt().isBefore(now));
     }
 
     private Map<String, List<ExistingStudent>> groupExisting(List<ExistingStudent> existing, boolean email) {
