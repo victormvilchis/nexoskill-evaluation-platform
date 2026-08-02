@@ -29,7 +29,7 @@ const navigationConfig: NavSection[] = [
     items: [
       { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
       { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-      { id: 'students', label: 'Colaboradores', to: '/admin/students', icon: 'profile', permission: 'STUDENT_VIEW' }
+      { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' }
     ]
   },
   {

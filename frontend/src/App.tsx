@@ -40,7 +40,7 @@ function resolveDocumentSection(pathname: string) {
   if (pathname.startsWith('/student/change-password')) return 'Cambiar contraseña'
   if (pathname.startsWith('/student')) return 'Portal de colaboradores'
   if (pathname.startsWith('/admin/organizations')) return 'Organizaciones'
-  if (pathname.startsWith('/admin/students')) return 'Colaboradores'
+  if (pathname.startsWith('/admin/collaborators')) return 'Colaboradores'
   if (pathname.startsWith('/admin/users')) return 'Usuarios'
   if (pathname.startsWith('/admin/questions')) return 'Preguntas'
   if (pathname.startsWith('/admin/forms')) return 'Formularios'
@@ -102,25 +102,25 @@ export default function App() {
             <Route path="/admin/users/:publicId/manage" element={<AdminUserManagementPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
-            <Route path="/admin/students" element={<AdminStudentsPage />} />
-            <Route path="/admin/students/:publicId" element={<StudentEditorPage mode="view" />} />
+            <Route path="/admin/collaborators" element={<AdminStudentsPage />} />
+            <Route path="/admin/collaborators/:publicId" element={<StudentEditorPage mode="view" />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CREATE" />}>
-            <Route path="/admin/students/new" element={<StudentEditorPage mode="create" />} />
+            <Route path="/admin/collaborators/new" element={<StudentEditorPage mode="create" />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
-            <Route path="/admin/students/:publicId/edit" element={<StudentEditorPage mode="edit" />} />
+            <Route path="/admin/collaborators/:publicId/edit" element={<StudentEditorPage mode="edit" />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CREATE" roles={['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR']} />}>
             <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
-              <Route path="/admin/students/import" element={<StudentImportPage />} />
+              <Route path="/admin/collaborators/import" element={<StudentImportPage />} />
             </Route>
           </Route>
           <Route element={<PermissionRoute anyOf={['STUDENT_STATUS_CHANGE', 'STUDENT_SESSION_MANAGE', 'STUDENT_DELETE']} />}>
-            <Route path="/admin/students/:publicId/manage" element={<StudentManagementPage />} />
+            <Route path="/admin/collaborators/:publicId/manage" element={<StudentManagementPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CERTIFICATION_MANAGE" roles={['ADMINISTRATOR', 'MANAGER', 'SUPERVISOR']} />}>
-            <Route path="/admin/students/:publicId/certifications" element={<StudentCertificationsPage />} />
+            <Route path="/admin/collaborators/:publicId/certifications" element={<StudentCertificationsPage />} />
           </Route>
           <Route element={<PermissionRoute permission="USER_CREATE" />}>
             <Route path="/admin/users/new" element={<CreateUserPage />} />

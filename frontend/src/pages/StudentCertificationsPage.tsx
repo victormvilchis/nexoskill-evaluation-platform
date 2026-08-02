@@ -612,7 +612,7 @@ export function StudentCertificationsPage() {
 
   if (loading) return <LoadingScreen />
   if (!detail || !catalogs) {
-    return <main className="content-page"><BackButton fallback="/admin/students" />
+    return <main className="content-page"><BackButton fallback="/admin/collaborators" />
       <div className="error-message" role="alert">{error || 'No fue posible consultar las certificaciones.'}</div></main>
   }
 
@@ -621,7 +621,7 @@ export function StudentCertificationsPage() {
 
   return (
     <main className="content-page certification-page certification-workspace">
-      <BackButton fallback="/admin/students" />
+      <BackButton fallback="/admin/collaborators" />
       <header className="ns-page-header">
         <div>
           <p className="eyebrow">Colaboradores · Certificaciones</p>
@@ -790,7 +790,7 @@ export function StudentCertificationsPage() {
         </fieldset>
 
         <footer className="certification-actions">
-          <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/students')}>Cancelar</button>
+          <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/collaborators')}>Cancelar</button>
           {!inactiveStudent && <button className="primary-button" type="submit" disabled={saving || !dirty}>
             {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>}

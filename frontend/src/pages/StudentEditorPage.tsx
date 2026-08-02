@@ -84,7 +84,7 @@ export function StudentEditorPage({ mode }: Props) {
   const toast = useToast()
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const readOnly = mode === 'view'
-  const completeSave = useSaveNavigation('/admin/students')
+  const completeSave = useSaveNavigation('/admin/collaborators')
   const organizationRequest = useRef(0)
   const [student, setStudent] = useState<StudentDetail | null>(null)
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
@@ -338,10 +338,10 @@ export function StudentEditorPage({ mode }: Props) {
   }
 
   if (loading) return <LoadingScreen />
-  if (error && mode !== 'create' && !student) return <main className="content-page"><BackButton fallback="/admin/students" /><div className="error-message" role="alert">{error}</div></main>
+  if (error && mode !== 'create' && !student) return <main className="content-page"><BackButton fallback="/admin/collaborators" /><div className="error-message" role="alert">{error}</div></main>
   return (
     <main className="content-page editor-page student-editor-foundation">
-      <BackButton fallback="/admin/students" />
+      <BackButton fallback="/admin/collaborators" />
       <header className="page-heading compact ns-redundant-editor-heading"><div><p className="eyebrow">Colaboradores</p><h1>{mode === 'create' ? 'Nuevo colaborador' : mode === 'edit' ? 'Editar colaborador' : 'Ver colaborador'}</h1><p className="muted">La Fecha de alta determina si el colaborador está activo y puede gestionar certificaciones.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <form className="student-foundation-form" onSubmit={handleSubmit} noValidate>
@@ -380,7 +380,7 @@ export function StudentEditorPage({ mode }: Props) {
               className="secondary-button"
               type="button"
               disabled={saving}
-              onClick={() => navigate('/admin/students')}
+              onClick={() => navigate('/admin/collaborators')}
             >
               Cancelar
             </button>
@@ -394,7 +394,7 @@ export function StudentEditorPage({ mode }: Props) {
           </FormActions>
         )}
       </form>
-      {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate('/admin/students', { replace: true }) }} />}
+      {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate('/admin/collaborators', { replace: true }) }} />}
       <ConfirmDialog
         open={confirmingDeactivation}
         title="Confirmar baja del colaborador"

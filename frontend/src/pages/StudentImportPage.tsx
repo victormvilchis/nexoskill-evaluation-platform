@@ -110,8 +110,8 @@ export function StudentImportPage() {
   }, [administrator])
 
   const studentsPath = administrator && selectedOrganization
-    ? `/admin/students?organization=${encodeURIComponent(selectedOrganization)}`
-    : '/admin/students'
+    ? `/admin/collaborators?organization=${encodeURIComponent(selectedOrganization)}`
+    : '/admin/collaborators'
 
   const selectedNew = useMemo(() => newRows.filter((row) => row.selected), [newRows])
   const selectedChanges = useMemo(() => changedRows.filter((row) => row.selectedFields.size > 0), [changedRows])

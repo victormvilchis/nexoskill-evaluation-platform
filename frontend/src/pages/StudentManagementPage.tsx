@@ -183,7 +183,7 @@ export function StudentManagementPage() {
       await deleteStudent(publicId)
       toast.success('Colaborador eliminado',
         'La cuenta quedó eliminada lógicamente; sus históricos, resultados y certificaciones se conservaron.')
-      navigate('/admin/students', { replace: true })
+      navigate('/admin/collaborators', { replace: true })
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
@@ -195,7 +195,7 @@ export function StudentManagementPage() {
 
   if (loading) return <LoadingScreen />
   if (!administration) {
-    return <main className="content-page"><BackButton fallback="/admin/students" />
+    return <main className="content-page"><BackButton fallback="/admin/collaborators" />
       <div className="error-message" role="alert">{error ?? 'El colaborador no existe.'}</div></main>
   }
 
@@ -206,7 +206,7 @@ export function StudentManagementPage() {
 
   return (
     <main className="content-page resource-page student-management-page">
-      <BackButton fallback="/admin/students" />
+      <BackButton fallback="/admin/collaborators" />
       <header className="ns-page-header">
         <div>
           <p className="eyebrow">Administración · Colaborador</p>

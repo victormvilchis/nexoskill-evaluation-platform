@@ -132,11 +132,11 @@ export function AdminStudentsPage() {
   const columnCount = showCertificationColumns ? 8 : 6
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
-    ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
-    : '/admin/students/import'
+    ? `/admin/collaborators/import?organization=${encodeURIComponent(organization)}`
+    : '/admin/collaborators/import'
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions ns-student-header-actions">{canImport && <Link className="button-link ns-excel-import-button" to={importTarget} aria-label="Cargar Excel de colaboradores"><span className="ns-excel-import-icon-wrap" aria-hidden="true"><svg className="ns-excel-import-icon" focusable="false" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.5h9l4 4v13h-13v-17Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14.5 3.5v4h4M8.25 11l3 5m0-5-3 5M14 11v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span><span>Cargar Excel</span></Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</div></header>
+      <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions ns-student-header-actions">{canImport && <Link className="button-link ns-excel-import-button" to={importTarget} aria-label="Cargar Excel de colaboradores"><span className="ns-excel-import-icon-wrap" aria-hidden="true"><svg className="ns-excel-import-icon" focusable="false" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.5h9l4 4v13h-13v-17Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14.5 3.5v4h4M8.25 11l3 5m0-5-3 5M14 11v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span><span>Cargar Excel</span></Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/collaborators/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</div></header>
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo, código o usuario corporativo" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
@@ -202,10 +202,10 @@ export function AdminStudentsPage() {
             {showCertificationColumns && <td>{formatDate(student.expiresAt)}</td>}
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
             <td className="ns-actions-column"><TableActions>
-              <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />
-              {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />}
-              {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Administrar" to={`/admin/students/${student.publicId}/manage`} tone="primary" />}
-              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
+              <TableActionLink icon="eye" label="Ver" to={`/admin/collaborators/${student.publicId}`} />
+              {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/collaborators/${student.publicId}/edit`} />}
+              {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Administrar" to={`/admin/collaborators/${student.publicId}/manage`} tone="primary" />}
+              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
             </TableActions></td>
           </tr>)}
             </tbody>
