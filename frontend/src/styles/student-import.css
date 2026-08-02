@@ -817,6 +817,20 @@
   line-height: 1.55;
 }
 
+.ns-import-reused-decision {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #bfe1cc;
+  border-radius: 10px;
+  background: #f0faf4;
+  color: #23623f;
+}
+
+.ns-import-reused-decision span {
+  color: #365e49;
+}
+
 .ns-import-change-card.is-muted,
 .ns-data-table tr.is-muted {
   opacity: .58;

@@ -32,8 +32,9 @@ public class XlsxCertificationReader {
     static final int MAX_ROWS = 50_000;
     static final int MAX_COLUMNS = 256;
     static final int MAX_SHARED_STRINGS = 500_000;
-private static final Set<String> REQUIRED_HEADERS = Set.of(
-            normalizeHeader("NOMBRE EXTERNO"),
+    private static final String COLLABORATOR_NAME_HEADER = normalizeHeader("NOMBRE EXTERNO");
+    private static final Set<String> REQUIRED_HEADERS = Set.of(
+            COLLABORATOR_NAME_HEADER,
             normalizeHeader("PERFIL"),
             normalizeHeader("FECHA DE ALTA"),
             normalizeHeader("TECNOLOGÍA EN LA QUE SE CERTIFICA"),
@@ -254,7 +255,8 @@ private static final Set<String> REQUIRED_HEADERS = Set.of(
             Map<String, String> values = new LinkedHashMap<>();
             headers.forEach((normalized, ref) -> values.put(normalized,
                     row.cells().getOrDefault(ref.column(), "").trim()));
-            if (values.values().stream().allMatch(String::isBlank)) continue;
+            String collaboratorName = values.getOrDefault(COLLABORATOR_NAME_HEADER, "").trim();
+            if (collaboratorName.isBlank()) continue;
             data.add(new RowData(row.number(), Collections.unmodifiableMap(values)));
             if (data.size() > MAX_ROWS) {
                 throw new BusinessException("STUDENT_IMPORT_TOO_MANY_ROWS",

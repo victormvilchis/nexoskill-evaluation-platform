@@ -18,7 +18,7 @@ import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
 
 type LowAction = 'KEEP' | 'DEACTIVATE' | 'IGNORE'
-type NewState = NewStudentPreview & { selected: boolean; fullName: string; email: string }
+type NewState = NewStudentPreview & { selected: boolean; email: string }
 type ChangeState = ChangedStudentPreview & { selectedFields: Set<string> }
 
 type ConflictDecisions = Record<string, StudentImportConflictActionValue | ''>
@@ -125,10 +125,8 @@ export function StudentImportPage() {
     const normalizedEmails = new Map<string, number>()
     for (const row of selectedNew) {
       if (omittedRows.has(row.rowKey)) continue
-      if (!row.fullName.trim()) return `Captura el nombre completo de la fila ${row.row}.`
-      if (row.fullName.trim().length > 250) return `El nombre de la fila ${row.row} excede 250 caracteres.`
       const email = row.email.trim().toLowerCase()
-      if (!validEmail(email)) return `Captura un correo válido para ${row.fullName.trim() || `la fila ${row.row}`}.`
+      if (!validEmail(email)) return `Captura un correo válido para ${row.collaborator || `la fila ${row.row}`}.`
       normalizedEmails.set(email, (normalizedEmails.get(email) ?? 0) + 1)
     }
     const duplicate = [...normalizedEmails.entries()].find(([, count]) => count > 1)
@@ -136,13 +134,8 @@ export function StudentImportPage() {
   }, [selectedNew, omittedRows])
 
   const visibleErrors = useMemo(() => {
-    if (!preview) return []
-    return preview.errors.filter((issue) => {
-      if (issue.code !== 'STUDENT_IMPORT_NAME_REQUIRED') return true
-      const row = newRows.find((item) => item.row === issue.row)
-      return Boolean(row?.selected && !omittedRows.has(row.rowKey) && !row.fullName.trim())
-    })
-  }, [preview, newRows, omittedRows])
+    return preview?.errors ?? []
+  }, [preview])
 
   const blockingMessage = newRowError
     ?? (unresolvedConflicts > 0 ? `Resuelve los ${unresolvedConflicts} conflictos pendientes antes de confirmar.` : undefined)
@@ -176,7 +169,6 @@ export function StudentImportPage() {
       setNewRows(response.newStudents.map((row) => ({
         ...row,
         selected: true,
-        fullName: row.collaborator ?? '',
         email: row.suggestedEmail ?? ''
       })))
       setChangedRows(response.changedStudents.map((row) => ({
@@ -184,7 +176,10 @@ export function StudentImportPage() {
         selectedFields: new Set(row.changes.filter((change) => change.selected).map((change) => change.key))
       })))
       setLowActions(Object.fromEntries(response.possibleLows.map((row) => [row.studentPublicId, 'KEEP'])))
-      setConflictDecisions(Object.fromEntries(response.conflicts.map((conflict) => [conflict.id, ''])))
+      setConflictDecisions(Object.fromEntries(response.conflicts.map((conflict) => [
+        conflict.id,
+        conflict.resolvedAction ?? ''
+      ])))
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
@@ -232,6 +227,7 @@ export function StudentImportPage() {
       const next = { ...current }
       preview.conflicts
         .filter((conflict) => conflict.groupKey === source.groupKey
+          && !conflict.reusedDecision
           && conflict.actions.some((option) => option.value === action))
         .forEach((conflict) => { next[conflict.id] = action })
       return next
@@ -261,7 +257,6 @@ export function StudentImportPage() {
         token: preview.token,
         newStudents: newRows.map((row) => ({
           rowKey: row.rowKey,
-          fullName: row.fullName.trim(),
           email: row.email.trim(),
           selected: row.selected
         })),
@@ -408,14 +403,11 @@ export function StudentImportPage() {
         </section>
 
         {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div></div>
-          <p className="muted">El nombre puede corregirse aquí. El correo se captura manualmente y el código se generará al confirmar.</p>
+          <p className="muted">El correo se captura manualmente y el código se generará al confirmar.</p>
           <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Correo</th><th>Código</th></tr></thead><tbody>
             {newRows.map((row, index) => <tr key={row.rowKey} className={omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
               <td><input type="checkbox" checked={row.selected} disabled={omittedRows.has(row.rowKey)} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td>
-              <td><label className="ns-import-email-field"><span className="sr-only">Nombre de la fila {row.row}</span><input
-                className={`ns-import-email-input${row.selected && !omittedRows.has(row.rowKey) && !row.fullName.trim() ? ' is-invalid' : ''}`}
-                value={row.fullName} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="Nombre completo"
-                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, fullName: event.target.value } : item))} /></label>
+              <td><strong>{row.collaborator}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
               <td>{row.profile || '—'}</td><td>{row.primaryTechnology || '—'}</td>
               <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
@@ -433,27 +425,30 @@ export function StudentImportPage() {
           </tbody></table></div></article>)}
         </section>}
 
-        {preview.conflicts.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Decisiones requeridas</p><h2>Conflictos</h2></div><span className="muted">{unresolvedConflicts} pendientes</span></div>
+        {preview.conflicts.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Validación</p><h2>Conflictos</h2></div><span className="muted">{unresolvedConflicts} pendientes</span></div>
           <div className="ns-import-conflict-list">{preview.conflicts.map((conflict) => {
             const decision = conflictDecisions[conflict.id] ?? ''
+            const selectedAction = conflict.actions.find((action) => action.value === decision)
             return <article className="ns-import-conflict-card" key={conflict.id}>
-              <div className="ns-import-conflict-heading"><div><span>Fila {conflict.row}</span><h3>{conflict.title}</h3><p>{conflict.collaborator}</p></div><span className={`status-badge ${decision ? 'active' : 'warning'}`}>{decision ? 'Resuelto' : 'Pendiente'}</span></div>
+              <div className="ns-import-conflict-heading"><div><span>Fila {conflict.row}</span><h3>{conflict.title}</h3><p>{conflict.collaborator}</p></div><span className={`status-badge ${decision ? 'active' : 'warning'}`}>{conflict.reusedDecision ? 'Resuelto previamente' : decision ? 'Resuelto' : 'Pendiente'}</span></div>
               <div className="ns-import-conflict-values"><div><strong>Excel</strong><span>{conflict.excelValue}</span></div><div><strong>Plataforma actual</strong><span>{conflict.currentValue}</span></div><div><strong>Cálculo de la plataforma</strong><span>{conflict.calculatedValue}</span></div></div>
               <p className="ns-import-conflict-reason">{conflict.reason}</p>
-              <label className="field"><span>Selecciona cómo proceder</span><select value={decision}
-                onChange={(event) => setConflictDecisions((current) => ({ ...current, [conflict.id]: event.target.value as StudentImportConflictActionValue }))}>
-                <option value="">Selecciona una decisión</option>
-                {conflict.actions.map((action) => <option key={action.value} value={action.value}>{action.label}</option>)}
-              </select></label>
-              {decision && <p className="muted">{conflict.actions.find((action) => action.value === decision)?.description}</p>}
-              {decision && preview.conflicts.filter((item) => item.groupKey === conflict.groupKey).length > 1 && <button type="button" className="secondary-button compact-button" onClick={() => applyEquivalentDecision(conflict.id)}>Aplicar esta decisión a casos equivalentes</button>}
+              {conflict.reusedDecision
+                ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label}</span></div>
+                : <label className="field"><span>Selecciona cómo proceder</span><select value={decision}
+                  onChange={(event) => setConflictDecisions((current) => ({ ...current, [conflict.id]: event.target.value as StudentImportConflictActionValue }))}>
+                  <option value="">Selecciona una decisión</option>
+                  {conflict.actions.map((action) => <option key={action.value} value={action.value}>{action.label}</option>)}
+                </select></label>}
+              {decision && <p className="muted">{selectedAction?.description}</p>}
+              {!conflict.reusedDecision && decision && preview.conflicts.filter((item) => item.groupKey === conflict.groupKey && !item.reusedDecision).length > 1 && <button type="button" className="secondary-button compact-button" onClick={() => applyEquivalentDecision(conflict.id)}>Aplicar esta decisión a casos equivalentes</button>}
             </article>
           })}</div>
         </section>}
 
         {preview.warnings.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Información</p><h2>Advertencias</h2></div></div><p className="muted">Estas situaciones no impiden continuar.</p><ul className="ns-import-issues warning-list">{preview.warnings.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>{issue.row > 0 ? `Fila ${issue.row}: ` : ''}</strong>{issue.message}</li>)}</ul></section>}
 
-        {visibleErrors.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Corrección requerida</p><h2>Filas con error</h2></div></div><p className="muted">El error afecta únicamente a la fila indicada. Captura el nombre u omite ese registro.</p><ul className="ns-import-issues">{visibleErrors.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>Fila {issue.row}: </strong>{issue.message}</li>)}</ul></section>}
+        {visibleErrors.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Corrección requerida</p><h2>Filas con error</h2></div></div><p className="muted">El error afecta únicamente al colaborador indicado y no detiene los demás registros válidos.</p><ul className="ns-import-issues">{visibleErrors.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>Fila {issue.row}: </strong>{issue.message}</li>)}</ul></section>}
 
         {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{row.collaborator}</td><td>{row.email}</td><td><select value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(event) => setLowActions((current) => ({ ...current, [row.studentPublicId]: event.target.value as LowAction }))}><option value="KEEP">Mantener activo</option><option value="IGNORE">Ignorar</option><option value="DEACTIVATE">Desactivar</option></select></td></tr>)}</tbody></table></div></section>}
 

@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.students.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -109,6 +110,52 @@ class StudentImportServiceParsingTest {
         assertEquals("VALID", StudentImportService.excelValidityStatus("VIGENTE - REGULAR"));
         assertEquals(LocalDate.of(2026, 7, 11), StudentImportService.expirationForImport(
                 "DEVELOPMENT_SECURITY", applicationDate));
+    }
+
+    @Test
+    void reusesOnlyAnExactlyEquivalentConflictDecision() {
+        String original = StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "Vigente — Regular",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2026, 7, 11), "Vencida");
+
+        assertEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "VIGENTE - REGULAR",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2026, 7, 11), "VENCIDA"));
+        assertNotEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "Vigente — Regular",
+                LocalDate.of(2025, 7, 12), LocalDate.of(2026, 7, 12), "Vencida"));
+        assertNotEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "Vigente — Próxima a vencer",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2026, 7, 11), "Vencida"));
+        assertNotEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "Vigente — Regular",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2026, 7, 11), "Vigente — Regular"));
+        assertNotEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "TECHNOLOGICAL", "Vigente — Regular",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2027, 7, 11), "Vencida"));
+        assertNotEquals(original, StudentImportService.conflictDecisionFingerprint(
+                "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                "DEVELOPMENT_SECURITY", "Vigente — Regular",
+                LocalDate.of(2025, 7, 11), LocalDate.of(2027, 7, 11), "Vencida"));
+    }
+
+
+    @Test
+    void recoversAPreviouslyAppliedConflictChoiceFromTheLastImportFingerprint() {
+        assertEquals("USE_PLATFORM", StudentImportService.inferConflictActionFromImportFingerprint(
+                "platform-fingerprint", "platform-fingerprint", "excel-fingerprint"));
+        assertEquals("USE_EXCEL", StudentImportService.inferConflictActionFromImportFingerprint(
+                "excel-fingerprint", "platform-fingerprint", "excel-fingerprint"));
+        assertNull(StudentImportService.inferConflictActionFromImportFingerprint(
+                "different-fingerprint", "platform-fingerprint", "excel-fingerprint"));
+        assertNull(StudentImportService.inferConflictActionFromImportFingerprint(
+                null, "platform-fingerprint", "excel-fingerprint"));
     }
 
     @Test

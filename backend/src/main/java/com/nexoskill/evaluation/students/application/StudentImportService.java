@@ -61,6 +61,8 @@ public class StudentImportService {
     private static final int TOKEN_MINUTES = 30;
     private static final Set<String> ORGANIZATION_OPERATOR_ROLES = Set.of("MANAGER", "SUPERVISOR");
     private static final String GLOBAL_ADMINISTRATOR_ROLE = "ADMINISTRATOR";
+    private static final String REUSABLE_CERTIFICATION_CONFLICT =
+            "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT";
     private static final List<String> CERT_TYPES = List.of(
             "TECHNOLOGICAL", "DEVELOPMENT_SECURITY", "NORMATIVE_TESTING", "ONE", "AGILE", "JIRA");
 
@@ -116,6 +118,10 @@ public class StudentImportService {
         List<ExistingStudent> existing = existingStudents(effectiveTenant.organizationId());
         Map<Long, Map<String, CertificationData>> existingCertifications = existingCertifications(effectiveTenant.organizationId());
         Map<Long, ExperienceSnapshot> existingExperience = existingExperience(effectiveTenant.organizationId());
+        Map<ConflictDecisionKey, String> storedConflictDecisions =
+                existingConflictDecisions(effectiveTenant.organizationId());
+        Map<Long, Map<String, String>> existingImportFingerprints =
+                existingImportFingerprints(effectiveTenant.organizationId());
 
         List<ImportedStudent> parsed = new ArrayList<>();
         List<Issue> errors = new ArrayList<>();
@@ -135,6 +141,8 @@ public class StudentImportService {
         }
         Set<String> duplicateRowKeys = new HashSet<>();
         List<ConflictPreview> conflicts = new ArrayList<>();
+        Map<String, String> conflictFingerprints = new HashMap<>();
+        Map<String, String> automaticConflictResolutions = new HashMap<>();
         fileKeys.values().stream().filter(values -> values.size() > 1).forEach(values -> values.forEach(value -> {
             duplicateRowKeys.add(value.rowKey());
             conflicts.add(omissionConflict(value, "DUPLICATE_FILE_IDENTITY", "Identidad repetida en el archivo",
@@ -172,7 +180,30 @@ public class StudentImportService {
             Reconciliation reconciliation = reconcileCertificationLifecycle(identified, currentCertifications);
             ImportedStudent effectiveImported = reconciliation.student();
             effectiveImportedByRow.put(effectiveImported.rowKey(), effectiveImported);
-            conflicts.addAll(reconciliation.conflicts());
+            for (ConflictPreview conflict : reconciliation.conflicts()) {
+                String fingerprint = conflictFingerprint(effectiveImported, conflict);
+                ConflictPreview effectiveConflict = conflict;
+                if (fingerprint != null) {
+                    conflictFingerprints.put(conflict.id(), fingerprint);
+                    String previousAction = current == null ? null : storedConflictDecisions.get(
+                            new ConflictDecisionKey(current.id(), conflict.certificationType(),
+                                    conflict.code(), fingerprint));
+                    if (previousAction == null && current != null) {
+                        String previousImportFingerprint = existingImportFingerprints
+                                .getOrDefault(current.id(), Map.of())
+                                .get(conflict.certificationType());
+                        previousAction = inferPreviousConflictAction(effectiveImported, conflict,
+                                previousImportFingerprint, effectiveTenant.organizationId());
+                    }
+                    String reusableAction = previousAction;
+                    if (reusableAction != null && conflict.actions().stream()
+                            .anyMatch(option -> option.value().equals(reusableAction))) {
+                        automaticConflictResolutions.put(conflict.id(), reusableAction);
+                        effectiveConflict = conflict.withResolution(reusableAction, true);
+                    }
+                }
+                conflicts.add(effectiveConflict);
+            }
             warnings.addAll(reconciliation.warnings());
 
             if (duplicateRowKeys.contains(effectiveImported.rowKey())) {
@@ -180,15 +211,9 @@ public class StudentImportService {
                 continue;
             }
             if (current == null) {
-                boolean nameRequired = blank(effectiveImported.fullName());
-                if (nameRequired) {
-                    errors.add(new Issue(effectiveImported.rowNumber(), "STUDENT_IMPORT_NAME_REQUIRED",
-                            "El nombre completo es necesario para generar el alta. Captúralo en la vista previa u omite únicamente esta fila."));
-                }
                 newStudents.add(new NewStudentPreview(effectiveImported.rowKey(), effectiveImported.rowNumber(),
                         effectiveImported.fullName(), effectiveImported.profileName(),
-                        effectiveImported.primaryTechnology(), effectiveImported.email(), nameRequired,
-                        effectiveImported.warnings()));
+                        effectiveImported.primaryTechnology(), effectiveImported.email(), effectiveImported.warnings()));
                 matches.put(effectiveImported.rowKey(), new Match(effectiveImported, null));
                 continue;
             }
@@ -234,7 +259,8 @@ public class StudentImportService {
         PendingImport state = new PendingImport(token, actor.internalId(), effectiveTenant.organizationId(), digest,
                 java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, effectiveImported,
                 Map.copyOf(matches), previewNewRows, previewChangeFields, previewPossibleLows,
-                List.copyOf(errors), List.copyOf(warnings), conflictMap);
+                List.copyOf(errors), List.copyOf(warnings), conflictMap,
+                Map.copyOf(conflictFingerprints), Map.copyOf(automaticConflictResolutions));
         pending.put(token, state);
         return new Preview(token, fileName, sheet.sheetName(), organization.name(), organization.code(),
                 sheet.rows().size(), newStudents, changedStudents, possibleLows, uniqueConflicts, warnings, errors,
@@ -262,7 +288,9 @@ public class StudentImportService {
         Map<String, NewSelection> newSelections = indexNew(command.newStudents());
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
-        Map<String, String> conflictResolutions = indexConflictResolutions(command.conflicts());
+        Map<String, String> submittedConflictResolutions = indexConflictResolutions(command.conflicts());
+        Map<String, String> conflictResolutions = effectiveConflictResolutions(
+                state, submittedConflictResolutions);
         if (!applying.add(normalizedToken)) {
             throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
                     "La importación ya se está aplicando. Espera a que termine antes de volver a confirmar.");
@@ -286,10 +314,24 @@ public class StudentImportService {
                 Match match = state.matches().get(imported.rowKey());
                 if (match == null) continue;
                 ImportedStudent resolvedImported = resolveConflictDecisions(imported, state, conflictResolutions);
-                if (resolvedImported == null) continue;
+                if (resolvedImported == null) {
+                    if (match.existing() != null) {
+                        try {
+                            rowTransaction.executeWithoutResult(status -> persistConflictDecisions(
+                                    state, imported.rowKey(), match.existing().id(),
+                                    conflictResolutions));
+                        } catch (RuntimeException exception) {
+                            LOGGER.error("Student import conflict decision persistence failed for row {} in organization {}",
+                                    imported.rowNumber(), effectiveTenant.organizationId(), exception);
+                            applyErrors.add(importFailure(imported.rowNumber(),
+                                    "No fue posible conservar la decisión de " + imported.fullName(), exception));
+                        }
+                    }
+                    continue;
+                }
                 try {
                     RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, resolvedImported, match,
-                            newSelections, effectiveChangeSelections, requestActor, actor));
+                            newSelections, effectiveChangeSelections, conflictResolutions, requestActor, actor));
                     if (outcome == null) continue;
                     if (outcome.credential() != null) credentials.add(outcome.credential());
                     created += outcome.created();
@@ -344,11 +386,11 @@ public class StudentImportService {
 
     private RowOutcome applyRow(TenantContext tenant, PendingImport state, ImportedStudent imported, Match match,
             Map<String, NewSelection> newSelections, Map<String, ChangeSelection> changeSelections,
-            StudentService.Actor requestActor, AuthenticatedUser actor) {
+            Map<String, String> conflictResolutions, StudentService.Actor requestActor, AuthenticatedUser actor) {
         if (match.existing() == null) {
             NewSelection selection = newSelections.get(imported.rowKey());
             if (selection == null || !selection.selected()) return RowOutcome.none();
-            ImportedStudent identified = imported.withName(requireFullName(selection.fullName(), imported.rowNumber()));
+            ImportedStudent identified = imported.withName(requireFullName(imported.fullName(), imported.rowNumber()));
             ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), identified, actor.internalId(), null);
             String email = requireEmail(selection.email(), resolved.rowNumber());
             String ownerPublicId = tenant.globalAdministrator() ? state.organization().publicId() : null;
@@ -365,6 +407,8 @@ public class StudentImportService {
                     result.student().publicId(), resolved.admissionDate());
             persistPrimaryTechnology(tenant.organizationId(), studentId, resolved.primaryTechnology(), actor.internalId());
             persistImportedDetails(tenant, result.student().publicId(), studentId, resolved, actor);
+            persistConflictDecisions(state, imported.rowKey(), studentId,
+                    conflictResolutions);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
                     resolved.fullName(), email, result.student().studentCode(), result.temporaryPassword()));
         }
@@ -373,6 +417,8 @@ public class StudentImportService {
         ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(),
                 selection.fields());
         updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
+        persistConflictDecisions(state, imported.rowKey(), match.existing().id(),
+                conflictResolutions);
         return new RowOutcome(0, 1, null);
     }
 
@@ -431,7 +477,7 @@ public class StudentImportService {
             if (selection == null || !selection.selected()) continue;
             ImportedStudent imported = importedByKey.get(selection.rowKey());
             int row = imported == null ? 0 : imported.rowNumber();
-            requireFullName(selection.fullName(), row);
+            requireFullName(imported == null ? null : imported.fullName(), row);
             String email = requireEmail(selection.email(), row);
             String key = email.toLowerCase(Locale.ROOT);
             if (!normalized.add(key)) {
@@ -604,6 +650,48 @@ public class StudentImportService {
                         parseExamStatus(data.internalExamStatus()),
                         data.score10(), data.attempt(), data.certificationStatus(), fingerprint),
                 certificationImportActor(actor, tenant));
+    }
+
+    private void persistConflictDecisions(PendingImport state, String rowKey, Long studentId,
+            Map<String, String> resolutions) {
+        if (studentId == null) return;
+        for (ConflictPreview conflict : state.conflicts().values()) {
+            if (!conflict.rowKey().equals(rowKey) || conflict.certificationType() == null) continue;
+            String fingerprint = state.conflictFingerprints().get(conflict.id());
+            String action = resolutions.get(conflict.id());
+            if (fingerprint == null || action == null || action.isBlank()) continue;
+            MapSqlParameterSource params = new MapSqlParameterSource()
+                    .addValue("publicId", UUID.randomUUID().toString())
+                    .addValue("organizationId", state.organizationId())
+                    .addValue("studentId", studentId)
+                    .addValue("certificationType", conflict.certificationType())
+                    .addValue("conflictCode", conflict.code())
+                    .addValue("fingerprint", fingerprint)
+                    .addValue("action", action);
+            jdbc.update("""
+                MERGE INTO STUDENT_IMPORT_CONFLICT_DECISION target
+                USING (
+                    SELECT :organizationId ORGANIZATION_ID, :studentId STUDENT_ID,
+                           :certificationType CERTIFICATION_TYPE, :conflictCode CONFLICT_CODE,
+                           :fingerprint CONFLICT_FINGERPRINT
+                      FROM DUAL
+                ) source
+                   ON (target.ORGANIZATION_ID = source.ORGANIZATION_ID
+                       AND target.STUDENT_ID = source.STUDENT_ID
+                       AND target.CERTIFICATION_TYPE = source.CERTIFICATION_TYPE
+                       AND target.CONFLICT_CODE = source.CONFLICT_CODE
+                       AND target.CONFLICT_FINGERPRINT = source.CONFLICT_FINGERPRINT)
+                 WHEN MATCHED THEN UPDATE SET
+                      target.ACTION_CODE = :action
+                 WHEN NOT MATCHED THEN INSERT (
+                      PUBLIC_ID, ORGANIZATION_ID, STUDENT_ID, CERTIFICATION_TYPE,
+                      CONFLICT_CODE, CONFLICT_FINGERPRINT, ACTION_CODE
+                 ) VALUES (
+                      :publicId, :organizationId, :studentId, :certificationType,
+                      :conflictCode, :fingerprint, :action
+                 )
+                """, params);
+        }
     }
 
     private String certificationFingerprint(CertificationData data, String technologyPublicId, CertificationLevel level) {
@@ -995,7 +1083,8 @@ public class StudentImportService {
                                 new ConflictAction("USE_EXCEL", "Conservar estatus del Excel",
                                         "Conserva la fecha de aplicación y aplica el estatus informado en el archivo."),
                                 new ConflictAction("OMIT_ROW", "Omitir este colaborador",
-                                        "No aplica cambios de esta fila y continúa con los demás colaboradores."))));
+                                        "No aplica cambios de esta fila y continúa con los demás colaboradores.")),
+                        null, false));
             }
         }
         ImportedStudent result = imported.withCertificationsAndWarnings(
@@ -1010,6 +1099,34 @@ public class StudentImportService {
         if (normalized.contains("PROXIMA A VENCER")) return "EXPIRING_SOON";
         if (normalized.startsWith("VIGENTE")) return "VALID";
         return null;
+    }
+
+    private String conflictFingerprint(ImportedStudent imported, ConflictPreview conflict) {
+        if (!REUSABLE_CERTIFICATION_CONFLICT.equals(conflict.code())
+                || conflict.certificationType() == null) {
+            return null;
+        }
+        CertificationData certification = imported.certifications().get(conflict.certificationType());
+        return conflictDecisionFingerprint(conflict.code(), conflict.certificationType(),
+                conflict.excelValue(), certification == null ? null : certification.applicationDate(),
+                certification == null ? null : certification.expiration(), conflict.calculatedValue());
+    }
+
+    static String conflictDecisionFingerprint(String conflictCode, String certificationType,
+            String excelValue, LocalDate applicationDate, LocalDate expirationDate,
+            String calculatedValue) {
+        String canonical = String.join("|",
+                text(conflictCode),
+                text(certificationType),
+                canonicalConflictValue(excelValue),
+                text(applicationDate),
+                text(expirationDate),
+                canonicalConflictValue(calculatedValue));
+        return sha256(canonical.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String canonicalConflictValue(String value) {
+        return value == null ? "" : StudentExperienceService.normalizeKey(value);
     }
 
     private static String conflictId(String rowKey, String code, String type) {
@@ -1029,7 +1146,8 @@ public class StudentImportService {
                 imported.rowNumber(), collaboratorName(imported), code, code, title, "Identificación",
                 null, null, text(imported.fullName()), "Sin coincidencia única", "Omitir la fila",
                 reason, List.of(new ConflictAction("OMIT_ROW", "Omitir este colaborador",
-                        "No aplica cambios de esta fila y continúa con los demás colaboradores.")));
+                        "No aplica cambios de esta fila y continúa con los demás colaboradores.")),
+                null, false);
     }
 
     private ImportedStudent resolveConflictDecisions(ImportedStudent imported, PendingImport state,
@@ -1180,6 +1298,85 @@ public class StudentImportService {
                 rs.getBoolean("APPLIES_TECH_CERT"), rs.getBoolean("APPLIES_DEV_SECURITY"),
                 rs.getBoolean("APPLIES_NORMATIVE_TESTING"), rs.getBoolean("APPLIES_ONE"),
                 rs.getBoolean("APPLIES_AGILE"), rs.getBoolean("APPLIES_JIRA"), rs.getLong("VERSION_NO"));
+    }
+
+    private Map<ConflictDecisionKey, String> existingConflictDecisions(Long organizationId) {
+        Map<ConflictDecisionKey, String> result = new HashMap<>();
+        jdbc.query("""
+            SELECT STUDENT_ID, CERTIFICATION_TYPE, CONFLICT_CODE,
+                   CONFLICT_FINGERPRINT, ACTION_CODE
+              FROM STUDENT_IMPORT_CONFLICT_DECISION
+             WHERE ORGANIZATION_ID = :organizationId
+               AND CONFLICT_CODE = :conflictCode
+            """, new MapSqlParameterSource("organizationId", organizationId)
+                .addValue("conflictCode", REUSABLE_CERTIFICATION_CONFLICT), rs -> {
+                    ConflictDecisionKey key = new ConflictDecisionKey(
+                            rs.getLong("STUDENT_ID"), rs.getString("CERTIFICATION_TYPE"),
+                            rs.getString("CONFLICT_CODE"), rs.getString("CONFLICT_FINGERPRINT"));
+                    result.put(key, rs.getString("ACTION_CODE"));
+                });
+        return Map.copyOf(result);
+    }
+
+    private Map<Long, Map<String, String>> existingImportFingerprints(Long organizationId) {
+        Map<Long, Map<String, String>> result = new HashMap<>();
+        jdbc.query("""
+            WITH ranked_cycles AS (
+                SELECT c.STUDENT_ID, c.CERTIFICATION_TYPE, c.LAST_IMPORT_FINGERPRINT,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY c.STUDENT_ID, c.CERTIFICATION_TYPE
+                           ORDER BY c.ACTIVE DESC, c.IS_PRIMARY DESC, c.UPDATED_AT DESC,
+                                    c.STUDENT_CERTIFICATION_CYCLE_ID DESC) RN
+                  FROM STUDENT_CERTIFICATION_CYCLE c
+                 WHERE c.ORGANIZATION_ID = :organizationId
+            )
+            SELECT STUDENT_ID, CERTIFICATION_TYPE, LAST_IMPORT_FINGERPRINT
+              FROM ranked_cycles
+             WHERE RN = 1
+               AND LAST_IMPORT_FINGERPRINT IS NOT NULL
+            """, Map.of("organizationId", organizationId), rs -> {
+                result.computeIfAbsent(rs.getLong("STUDENT_ID"), ignored -> new HashMap<>())
+                        .put(rs.getString("CERTIFICATION_TYPE"), rs.getString("LAST_IMPORT_FINGERPRINT"));
+            });
+        result.replaceAll((key, value) -> Map.copyOf(value));
+        return Map.copyOf(result);
+    }
+
+    private String inferPreviousConflictAction(ImportedStudent imported, ConflictPreview conflict,
+            String previousImportFingerprint, Long organizationId) {
+        if (previousImportFingerprint == null || previousImportFingerprint.isBlank()
+                || !REUSABLE_CERTIFICATION_CONFLICT.equals(conflict.code())
+                || conflict.certificationType() == null) {
+            return null;
+        }
+        CertificationData platformChoice = imported.certifications().get(conflict.certificationType());
+        if (platformChoice == null) return null;
+
+        String technologyPublicId = null;
+        CertificationLevel level = null;
+        if (CertificationType.TECHNOLOGICAL.name().equals(conflict.certificationType())) {
+            technologyPublicId = resolveQuestionTechnologyPublicId(organizationId, imported.primaryTechnology());
+            if (technologyPublicId == null || imported.certificationLevel() == null) return null;
+            try {
+                level = CertificationLevel.valueOf(imported.certificationLevel());
+            } catch (IllegalArgumentException exception) {
+                return null;
+            }
+        }
+
+        String platformFingerprint = certificationFingerprint(platformChoice, technologyPublicId, level);
+        CertificationData excelChoice = applyExcelLifecycleChoice(platformChoice);
+        String excelFingerprint = certificationFingerprint(excelChoice, technologyPublicId, level);
+        return inferConflictActionFromImportFingerprint(
+                previousImportFingerprint, platformFingerprint, excelFingerprint);
+    }
+
+    static String inferConflictActionFromImportFingerprint(String previousImportFingerprint,
+            String platformFingerprint, String excelFingerprint) {
+        if (previousImportFingerprint == null || previousImportFingerprint.isBlank()) return null;
+        if (previousImportFingerprint.equals(platformFingerprint)) return "USE_PLATFORM";
+        if (previousImportFingerprint.equals(excelFingerprint)) return "USE_EXCEL";
+        return null;
     }
 
     private Map<Long, Map<String, CertificationData>> existingCertifications(Long organizationId) {
@@ -1492,6 +1689,13 @@ public class StudentImportService {
             }
         });
         return result;
+    }
+
+    private Map<String, String> effectiveConflictResolutions(PendingImport state,
+            Map<String, String> submitted) {
+        Map<String, String> result = new HashMap<>(submitted);
+        state.automaticConflictResolutions().forEach(result::put);
+        return Map.copyOf(result);
     }
 
     private Map<String, ChangeSelection> includeConflictFields(PendingImport state,
@@ -2208,11 +2412,15 @@ public class StudentImportService {
             LocalDate deadline, boolean explicitDeadline, LocalDate expiration, Boolean approved, String validityStatus,
             String trackingStatus, String processType, LocalDate referenceDate, String resultSource) {}
     private record Match(ImportedStudent imported, ExistingStudent existing) {}
+    private record ConflictDecisionKey(Long studentId, String certificationType,
+            String conflictCode, String fingerprint) {}
     private record PendingImport(String token, Long actorId, Long organizationId, String digest,
             java.time.Instant expiresAt, Organization organization, List<ImportedStudent> imported,
             Map<String, Match> matches, Set<String> newRowKeys,
             Map<String, Set<String>> allowedChangeFields, Set<String> possibleLowPublicIds,
-            List<Issue> errors, List<Issue> warnings, Map<String, ConflictPreview> conflicts) {}
+            List<Issue> errors, List<Issue> warnings, Map<String, ConflictPreview> conflicts,
+            Map<String, String> conflictFingerprints,
+            Map<String, String> automaticConflictResolutions) {}
     private record ExperienceSnapshot(List<StudentExperienceService.ImportedItem> current,
             List<StudentExperienceService.ImportedItem> languages,
             List<StudentExperienceService.ImportedItem> known) {
@@ -2238,7 +2446,7 @@ public class StudentImportService {
     public record Issue(int row, String code, String message) {}
     public record FieldChange(String key, String field, String currentValue, String excelValue, boolean selected) {}
     public record NewStudentPreview(String rowKey, int row, String collaborator, String profile,
-            String primaryTechnology, String suggestedEmail, boolean nameRequired, List<String> warnings) {}
+            String primaryTechnology, String suggestedEmail, List<String> warnings) {}
     public record ChangedStudentPreview(String studentPublicId, String rowKey, String collaborator,
             List<FieldChange> changes, List<String> warnings) {}
     public record PossibleLowPreview(String studentPublicId, String collaborator, String email, String action) {}
@@ -2246,12 +2454,18 @@ public class StudentImportService {
     public record ConflictPreview(String id, String rowKey, int row, String collaborator, String code,
             String groupKey, String title, String field, String certificationType, String certification,
             String excelValue, String currentValue, String calculatedValue, String reason,
-            List<ConflictAction> actions) {}
+            List<ConflictAction> actions, String resolvedAction, boolean reusedDecision) {
+        ConflictPreview withResolution(String action, boolean reused) {
+            return new ConflictPreview(id, rowKey, row, collaborator, code, groupKey, title, field,
+                    certificationType, certification, excelValue, currentValue, calculatedValue,
+                    reason, actions, action, reused);
+        }
+    }
     public record Preview(String token, String fileName, String sheetName, String organizationName,
             String organizationCode, int totalRows, List<NewStudentPreview> newStudents,
             List<ChangedStudentPreview> changedStudents, List<PossibleLowPreview> possibleLows,
             List<ConflictPreview> conflicts, List<Issue> warnings, List<Issue> errors, String notice) {}
-    public record NewSelection(String rowKey, String fullName, String email, boolean selected) {}
+    public record NewSelection(String rowKey, String email, boolean selected) {}
     public record ChangeSelection(String studentPublicId, Set<String> fields) {
         public ChangeSelection { fields = fields == null ? Set.of() : Set.copyOf(fields); }
     }

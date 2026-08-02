@@ -19,7 +19,6 @@ export interface NewStudentPreview {
   profile: string | null
   primaryTechnology: string | null
   suggestedEmail: string | null
-  nameRequired: boolean
   warnings: string[]
 }
 
@@ -62,6 +61,8 @@ export interface StudentImportConflict {
   calculatedValue: string
   reason: string
   actions: StudentImportConflictAction[]
+  resolvedAction: StudentImportConflictActionValue | null
+  reusedDecision: boolean
 }
 
 export interface StudentImportPreview {
@@ -82,7 +83,7 @@ export interface StudentImportPreview {
 
 export interface StudentImportApplyCommand {
   token: string
-  newStudents: Array<{ rowKey: string; fullName: string; email: string; selected: boolean }>
+  newStudents: Array<{ rowKey: string; email: string; selected: boolean }>
   changedStudents: Array<{ studentPublicId: string; fields: string[] }>
   possibleLows: Array<{ studentPublicId: string; action: 'KEEP' | 'DEACTIVATE' | 'IGNORE' }>
   conflicts: Array<{ conflictId: string; action: StudentImportConflictActionValue }>

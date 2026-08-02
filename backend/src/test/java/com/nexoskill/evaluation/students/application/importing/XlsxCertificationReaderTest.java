@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -83,6 +84,30 @@ class XlsxCertificationReaderTest {
 
         assertEquals("STUDENT_IMPORT_SHEET_REQUIRED", exception.getCode());
     }
+
+    @Test
+    void ignoresRowsWithoutExternalNameEvenWhenOtherCellsContainResidualValues() throws Exception {
+        Map<Integer, String> headers = Map.of(
+                0, "NOMBRE EXTERNO",
+                1, "PERFIL",
+                2, "FECHA DE ALTA",
+                3, "TECNOLOGÍA EN LA QUE SE CERTIFICA",
+                4, "PERFIL TECNOLOGICO");
+        byte[] workbook = workbookWithRows("CONTROL", headers, List.of(
+                Map.of(0, "Primera Persona", 1, "Analista", 3, "Java"),
+                Map.of(1, "Formato residual", 3, "Valor aislado"),
+                Map.of(0, "   ", 1, "Celda utilizada anteriormente"),
+                Map.of(0, "Segunda Persona", 1, "Desarrollador", 3, "APX")));
+
+        XlsxCertificationReader.SheetData result = reader.read(new ByteArrayInputStream(workbook));
+
+        assertEquals(2, result.rows().size());
+        assertEquals("Primera Persona", result.rows().get(0).value("NOMBRE EXTERNO"));
+        assertEquals("Segunda Persona", result.rows().get(1).value("NOMBRE EXTERNO"));
+        assertEquals(2, result.rows().get(0).rowNumber());
+        assertEquals(5, result.rows().get(1).rowNumber());
+    }
+
     private SheetDefinition validSheet(String name, String collaborator) {
         return new SheetDefinition(name, Map.of(
                 0, "NOMBRE EXTERNO",
@@ -130,10 +155,41 @@ class XlsxCertificationReaderTest {
         return bytes.toByteArray();
     }
 
+    private byte[] workbookWithRows(String name, Map<Integer, String> headers,
+            List<Map<Integer, String>> rows) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            put(zip, "xl/workbook.xml", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                      <sheets><sheet name="%s" sheetId="1" r:id="rId1"/></sheets>
+                    </workbook>
+                    """.formatted(escape(name)));
+            put(zip, "xl/_rels/workbook.xml.rels", """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                      <Relationship Id="rId1" Target="worksheets/sheet1.xml"
+                                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"/>
+                    </Relationships>
+                    """);
+            put(zip, "xl/worksheets/sheet1.xml", sheet(headers, rows));
+        }
+        return bytes.toByteArray();
+    }
+
     private String sheet(Map<Integer, String> headers, Map<Integer, String> values) {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                + "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"
-                + row(1, headers) + row(2, values) + "</sheetData></worksheet>";
+        return sheet(headers, List.of(values));
+    }
+
+    private String sheet(Map<Integer, String> headers, List<Map<Integer, String>> values) {
+        StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+                .append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>")
+                .append(row(1, headers));
+        for (int index = 0; index < values.size(); index++) {
+            xml.append(row(index + 2, values.get(index)));
+        }
+        return xml.append("</sheetData></worksheet>").toString();
     }
 
     private String row(int number, Map<Integer, String> values) {
