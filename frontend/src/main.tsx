@@ -24,6 +24,7 @@ import './styles/student-import.css'
 import './styles/valtieris-brand-r1.css'
 import './styles/frontend-visual-checkpoint-r1.css'
 import './styles/frontend-visual-corrections-r2.css'
+import './styles/administrative-homologation-r1.css'
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

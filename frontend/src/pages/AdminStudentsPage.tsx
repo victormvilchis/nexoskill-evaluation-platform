@@ -35,6 +35,17 @@ function formatDate(value: string | null) {
 function formatRole(profile?: string | null, technologicalProfile?: string | null) {
   return [profile, technologicalProfile].filter((value): value is string => Boolean(value?.trim())).join(' - ') || 'N/A'
 }
+
+function formatTechnology(technology?: string | null, expertise?: string | null) {
+  const normalizedTechnology = technology?.trim()
+  if (!normalizedTechnology) return 'N/A'
+
+  const normalizedExpertise = expertise?.trim()
+  const hasExpertise = Boolean(normalizedExpertise)
+    && normalizedExpertise?.toLocaleLowerCase('es-MX') !== 'sin nivel'
+
+  return hasExpertise ? `${normalizedTechnology} - ${normalizedExpertise}` : normalizedTechnology
+}
 export function AdminStudentsPage() {
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
@@ -114,7 +125,11 @@ export function AdminStudentsPage() {
   }
   const activeSort = searchParams.get('sort')
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
-  const columnCount = 10
+  const selectedOrganization = organizations.find((item) => item.publicId === organization)
+  const showCertificationColumns = administrator && organization
+    ? Boolean(selectedOrganization?.appliesCertifications)
+    : (data?.content.some((student) => student.certificationsEnabled) ?? true)
+  const columnCount = showCertificationColumns ? 8 : 6
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
     ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
@@ -143,10 +158,8 @@ export function AdminStudentsPage() {
                     <SortIndicator active={activeSort === 'displayName'} direction={direction} />
                   </button>
                 </th>
-                <th>Rol</th>
+                {showCertificationColumns && <th>Rol</th>}
                 <th>Tecnología actual</th>
-                <th>Expertise</th>
-                <th>Código organización</th>
                 <th>Usuario corporativo</th>
                 <th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
                   <button
@@ -158,16 +171,18 @@ export function AdminStudentsPage() {
                     <SortIndicator active={activeSort === 'admissionDate'} direction={direction} />
                   </button>
                 </th>
-                <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
-                  <button
-                    className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
-                    type="button"
-                    onClick={() => toggleSort('expiresAt')}
-                  >
-                    Vencimiento
-                    <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
-                  </button>
-                </th>
+                {showCertificationColumns && (
+                  <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                    <button
+                      className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
+                      type="button"
+                      onClick={() => toggleSort('expiresAt')}
+                    >
+                      Vencimiento
+                      <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
+                    </button>
+                  </th>
+                )}
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
@@ -176,14 +191,15 @@ export function AdminStudentsPage() {
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
-            <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>
-            <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>
-            <td>{student.currentTechnology || 'N/A'}</td>
-            <td>{student.expertise || 'N/A'}</td>
-            <td>{student.studentCode || 'N/A'}</td>
+            <td className="ns-primary-cell ns-collaborator-cell">
+              <strong>{student.displayName}</strong>
+              <small>{student.email?.trim() || 'N/A'}</small>
+            </td>
+            {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}
+            <td>{formatTechnology(student.currentTechnology, student.expertise)}</td>
             <td>{student.corporateUser || 'N/A'}</td>
             <td>{formatDate(student.admissionDate)}</td>
-            <td>{formatDate(student.expiresAt)}</td>
+            {showCertificationColumns && <td>{formatDate(student.expiresAt)}</td>}
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />

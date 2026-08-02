@@ -1,0 +1,382 @@
+/* Homologación administrativa: tablas, filtros, formularios y controles. */
+
+:root {
+  --ns-control-height: 42px;
+  --ns-control-radius: 10px;
+  --ns-control-border: #cbd6e5;
+  --ns-control-focus: #2f67d8;
+}
+
+/* Selects homogéneos en toda la plataforma. */
+select {
+  width: 100%;
+  min-height: var(--ns-control-height);
+  border: 1px solid var(--ns-control-border);
+  border-radius: var(--ns-control-radius);
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23516580' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .8rem center;
+  background-size: 16px;
+  color: var(--text, #17233a);
+  font: inherit;
+  line-height: 1.2;
+  padding: .55rem 2.45rem .55rem .75rem;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+
+select:hover:not(:disabled) {
+  border-color: #9eb1cc;
+}
+
+select:focus,
+select:focus-visible {
+  border-color: var(--ns-control-focus);
+  box-shadow: 0 0 0 3px rgba(47, 103, 216, .13);
+  outline: none;
+}
+
+select[aria-invalid='true'] {
+  border-color: #c53a32;
+  box-shadow: 0 0 0 3px rgba(197, 58, 50, .1);
+}
+
+select:disabled {
+  background-color: #f2f5f9;
+  color: #7b8798;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.ns-resource-select-control > svg {
+  display: none;
+}
+
+.ns-resource-select-control,
+.ns-resource-select-control select,
+.ns-filter-field select,
+.compact-filter select,
+.lc-select-field select,
+.filter-panel select,
+.question-filter-panel select,
+.ns-table-pagination__size select {
+  min-height: var(--ns-control-height);
+}
+
+/* Buscador como un único control, sin borde doble. */
+.ns-resource-search,
+.resource-search,
+.ns-search-field {
+  min-height: var(--ns-control-height);
+  border: 1px solid var(--ns-control-border) !important;
+  border-radius: var(--ns-control-radius) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.ns-resource-search:focus-within,
+.resource-search:focus-within,
+.ns-search-field:focus-within {
+  border-color: var(--ns-control-focus) !important;
+  box-shadow: 0 0 0 3px rgba(47, 103, 216, .13) !important;
+}
+
+.ns-resource-search input,
+.resource-search input,
+.ns-search-field input {
+  min-height: calc(var(--ns-control-height) - 2px);
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  padding-block: .45rem !important;
+}
+
+.ns-resource-search button,
+.resource-search button,
+.ns-search-field button {
+  flex: 0 0 auto;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Encabezados y filtros compactos para priorizar los listados. */
+.ns-list-page .ns-page-header {
+  align-items: center;
+  margin-bottom: .65rem;
+  min-height: 0;
+}
+
+.ns-list-page .ns-page-header .eyebrow,
+.ns-list-page .ns-page-header .muted {
+  display: none;
+}
+
+.ns-list-page .ns-page-header h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2.1vw, 2rem);
+  letter-spacing: -.025em;
+  line-height: 1.1;
+}
+
+.ns-page-header-actions,
+.ns-student-header-actions {
+  gap: .5rem;
+}
+
+.ns-filter-toolbar {
+  align-items: end;
+  gap: .65rem;
+  margin-bottom: .65rem;
+  padding: .55rem .65rem;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.ns-filter-fields {
+  align-items: end;
+  gap: .55rem;
+}
+
+.ns-resource-search {
+  min-width: min(330px, 100%);
+}
+
+.ns-resource-select {
+  gap: .2rem;
+}
+
+.ns-resource-select > span,
+.ns-filter-field > span {
+  font-size: .7rem;
+  line-height: 1.1;
+}
+
+.ns-filter-meta {
+  min-height: var(--ns-control-height);
+  align-items: center;
+}
+
+/* Encabezados de tabla más finos y filas comparables. */
+.ns-data-panel {
+  border-radius: 12px;
+}
+
+.ns-data-table th {
+  padding: .62rem .7rem;
+  font-size: .7rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: .045em;
+  white-space: normal;
+}
+
+.ns-data-table td {
+  padding: .72rem .7rem;
+  line-height: 1.32;
+  vertical-align: middle;
+}
+
+.ns-sortable-column-button {
+  min-height: 24px;
+  gap: .35rem;
+  line-height: 1.2;
+}
+
+.ns-collaborator-cell {
+  min-width: 230px;
+  max-width: 320px;
+}
+
+.ns-collaborator-cell strong,
+.ns-collaborator-cell small {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ns-collaborator-cell strong {
+  color: var(--text, #17233a);
+  font-size: .88rem;
+  font-weight: 800;
+  line-height: 1.28;
+}
+
+.ns-collaborator-cell small {
+  margin-top: .2rem;
+  color: #6c7a90;
+  font-size: .74rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.ns-number-column {
+  width: 88px;
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.org-data-table .ns-number-column {
+  font-weight: 750;
+}
+
+/* El breadcrumb ya comunica la acción de estas vistas. */
+.student-editor-foundation > .ns-redundant-editor-heading,
+.editor-page > .page-heading.compact,
+.create-user-page > .ns-page-header,
+.internal-user-editor-page > .ns-page-header,
+.ns-form-builder > .ns-page-header,
+.lc-editor-page > .lc-page-header-compact {
+  display: none;
+}
+
+.org-editor-page > .org-editor-header {
+  min-height: 0;
+  margin: 0 0 .45rem;
+  padding: 0;
+  justify-content: flex-end;
+}
+
+.org-editor-page > .org-editor-header > div {
+  display: none;
+}
+
+/* Cuadrícula flexible del formulario de colaboradores. */
+.student-foundation-form .foundation-form-grid,
+.student-foundation-form .foundation-form-grid--three {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+}
+
+.student-foundation-form .form-field {
+  grid-column: span 6;
+  min-width: 0;
+}
+
+.student-foundation-form .ns-field-span-3 { grid-column: span 3; }
+.student-foundation-form .ns-field-span-4 { grid-column: span 4; }
+.student-foundation-form .ns-field-span-6 { grid-column: span 6; }
+.student-foundation-form .ns-field-span-12 { grid-column: 1 / -1; }
+
+.student-foundation-form .form-field > span:first-child,
+.entity-form .form-field > span:first-child,
+.org-editor-form .ns-field > span:first-child {
+  min-height: 1.2rem;
+  line-height: 1.2;
+}
+
+.student-foundation-form .form-field > small,
+.student-foundation-form .form-field > .field-error {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Organizaciones: anchos de acuerdo con el dato capturado. */
+.org-editor-form .org-form-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+}
+
+.org-editor-form .org-form-grid > .ns-field {
+  grid-column: span 3;
+}
+
+.org-editor-form .org-form-grid > .org-field-wide-tablet,
+.org-editor-form .org-form-grid > .ns-field:has(select) {
+  grid-column: span 6;
+}
+
+.org-editor-form .org-form-grid > .org-certification-toggle {
+  grid-column: span 6;
+}
+
+.org-editor-form .org-license-grid > .ns-field {
+  grid-column: span 3;
+}
+
+/* Formularios internos: correo y nombres aprovechan media fila. */
+.entity-form .form-grid-three {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
+}
+
+.entity-form .form-grid-three > .form-field {
+  grid-column: span 4;
+}
+
+.entity-form .form-grid-three > .form-field:has(input[type='email']),
+.entity-form .form-grid-three > .form-field:has(textarea) {
+  grid-column: span 6;
+}
+
+@media (max-width: 1050px) {
+  .student-foundation-form .ns-field-span-3,
+  .student-foundation-form .ns-field-span-4,
+  .student-foundation-form .ns-field-span-6,
+  .org-editor-form .org-form-grid > .ns-field,
+  .org-editor-form .org-form-grid > .org-field-wide-tablet,
+  .org-editor-form .org-form-grid > .ns-field:has(select),
+  .org-editor-form .org-form-grid > .org-certification-toggle,
+  .org-editor-form .org-license-grid > .ns-field,
+  .entity-form .form-grid-three > .form-field,
+  .entity-form .form-grid-three > .form-field:has(input[type='email']),
+  .entity-form .form-grid-three > .form-field:has(textarea) {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 720px) {
+  .ns-list-page .ns-page-header {
+    align-items: stretch;
+  }
+
+  .ns-page-header-actions,
+  .ns-student-header-actions {
+    width: 100%;
+  }
+
+  .ns-page-header-actions > *,
+  .ns-student-header-actions > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .ns-filter-toolbar,
+  .ns-filter-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .ns-resource-search,
+  .ns-resource-select,
+  .ns-filter-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .student-foundation-form .ns-field-span-3,
+  .student-foundation-form .ns-field-span-4,
+  .student-foundation-form .ns-field-span-6,
+  .student-foundation-form .form-field,
+  .org-editor-form .org-form-grid > .ns-field,
+  .org-editor-form .org-form-grid > .org-field-wide-tablet,
+  .org-editor-form .org-form-grid > .ns-field:has(select),
+  .org-editor-form .org-form-grid > .org-certification-toggle,
+  .org-editor-form .org-license-grid > .ns-field,
+  .entity-form .form-grid-three > .form-field,
+  .entity-form .form-grid-three > .form-field:has(input[type='email']),
+  .entity-form .form-grid-three > .form-field:has(textarea) {
+    grid-column: 1 / -1;
+  }
+
+  .ns-collaborator-cell {
+    min-width: 210px;
+  }
+}
