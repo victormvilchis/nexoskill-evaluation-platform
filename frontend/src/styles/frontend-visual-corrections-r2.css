@@ -1,0 +1,555 @@
+/* Valtieris Talent Platform — visual corrections R2.
+   Final presentation layer for compact headers, stable fields, unified controls,
+   accessible calendars and collaborator table consistency. */
+
+:root {
+  --vt-control-height: 44px;
+  --vt-field-label-height: 20px;
+  --vt-field-message-height: 18px;
+  --vt-control-border: #c8d5e5;
+  --vt-control-border-hover: #8fa9c8;
+  --vt-control-focus: #2458e8;
+}
+
+/* Compact, business-oriented page headers. */
+.ns-page-header,
+.page-heading,
+.resource-heading,
+.lc-page-header {
+  min-height: 0 !important;
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.ns-page-header > div:first-child > .eyebrow,
+.page-heading > div:first-child > .eyebrow,
+.resource-heading > div:first-child > .eyebrow,
+.lc-page-header > div:first-child > .eyebrow,
+.ns-page-header > div:first-child > h1 + p,
+.page-heading > div:first-child > h1 + p,
+.resource-heading > div:first-child > h1 + p,
+.lc-page-header > div:first-child > h1 + p {
+  display: none !important;
+}
+
+.ns-page-header h1,
+.page-heading h1,
+.resource-heading h1,
+.lc-page-header h1 {
+  margin: 0 !important;
+  font-size: clamp(1.55rem, 2vw, 2rem) !important;
+  font-weight: 720 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.content-page,
+.dashboard-page,
+.lc-page,
+.resource-page,
+.editor-page,
+.ns-form-builder {
+  padding-top: clamp(14px, 1.5vw, 22px) !important;
+}
+
+/* Stable field structure. Labels and messages never move the control. */
+.form-field,
+.ns-field,
+.ns-dialog-field,
+.field {
+  display: grid !important;
+  grid-template-rows: minmax(var(--vt-field-label-height), auto) minmax(var(--vt-control-height), auto) minmax(var(--vt-field-message-height), auto);
+  align-content: start !important;
+  align-items: start !important;
+  gap: 6px !important;
+  min-width: 0;
+}
+
+.form-field > span:first-child,
+.ns-field > span:first-child,
+.ns-dialog-field > span:first-child,
+.field > span:first-child {
+  display: flex;
+  min-height: var(--vt-field-label-height);
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.form-field > span:first-child small,
+.ns-field > span:first-child small {
+  display: inline;
+  min-height: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.form-field > small,
+.ns-field > small,
+.ns-dialog-field > small,
+.form-field > .field-error,
+.ns-field > .field-error,
+.form-field > .field-help,
+.ns-field > .field-help {
+  min-height: var(--vt-field-message-height);
+  align-self: start;
+  margin: 0 !important;
+}
+
+.foundation-form-grid,
+.org-form-grid,
+.ns-form-grid,
+.form-grid-three,
+.entity-form,
+.catalog-form-grid,
+.certification-grid {
+  align-items: start !important;
+}
+
+/* Unified inputs and selects. */
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+select,
+textarea,
+.vt-date-trigger {
+  border: 1px solid var(--vt-control-border) !important;
+  border-radius: 10px !important;
+  background-color: #fff !important;
+  color: #17253a !important;
+  box-shadow: 0 1px 2px rgba(17, 42, 78, 0.025);
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+select,
+.vt-date-trigger {
+  min-height: var(--vt-control-height) !important;
+}
+
+select {
+  appearance: none !important;
+  padding: 0 42px 0 13px !important;
+  background-image: linear-gradient(45deg, transparent 50%, #52657d 50%), linear-gradient(135deg, #52657d 50%, transparent 50%) !important;
+  background-position: calc(100% - 18px) 19px, calc(100% - 13px) 19px !important;
+  background-repeat: no-repeat !important;
+  background-size: 5px 5px, 5px 5px !important;
+  cursor: pointer;
+}
+
+.ns-resource-select-control select {
+  background-image: none !important;
+}
+
+select option {
+  background: #fff;
+  color: #17253a;
+}
+
+input:hover:not(:disabled):not([readonly]),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled):not([readonly]),
+.vt-date-trigger:hover:not(:disabled) {
+  border-color: var(--vt-control-border-hover) !important;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.vt-date-trigger:focus-visible {
+  border-color: var(--vt-control-focus) !important;
+  outline: 0 !important;
+  box-shadow: 0 0 0 3px rgba(36, 88, 232, 0.13) !important;
+}
+
+select:disabled,
+.vt-date-trigger:disabled {
+  cursor: not-allowed;
+  background-color: #f1f4f8 !important;
+  color: #68778b !important;
+  opacity: 1;
+}
+
+/* Custom checkboxes/radios avoid the native vertical rectangle artifact. */
+input[type='checkbox'],
+input[type='radio'] {
+  appearance: none !important;
+  display: inline-grid !important;
+  width: 19px !important;
+  min-width: 19px !important;
+  height: 19px !important;
+  min-height: 19px !important;
+  flex: 0 0 19px !important;
+  place-content: center;
+  margin: 0 !important;
+  border: 1.5px solid #9cafc7 !important;
+  background: #fff !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  vertical-align: middle;
+}
+
+input[type='checkbox'] {
+  border-radius: 5px !important;
+}
+
+input[type='radio'] {
+  border-radius: 50% !important;
+}
+
+input[type='checkbox']::before,
+input[type='radio']::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  transform: scale(0);
+  transition: transform 0.12s ease-in-out;
+  background: #fff;
+}
+
+input[type='checkbox']::before {
+  clip-path: polygon(14% 44%, 0 59%, 41% 100%, 100% 20%, 84% 6%, 40% 69%);
+}
+
+input[type='radio']::before {
+  border-radius: 50%;
+}
+
+input[type='checkbox']:checked,
+input[type='radio']:checked {
+  border-color: var(--primary) !important;
+  background: var(--primary) !important;
+}
+
+input[type='checkbox']:checked::before,
+input[type='radio']:checked::before {
+  transform: scale(1);
+}
+
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible {
+  outline: 0 !important;
+  box-shadow: 0 0 0 3px rgba(36, 88, 232, 0.15) !important;
+}
+
+input[type='checkbox']:disabled,
+input[type='radio']:disabled {
+  cursor: not-allowed;
+  border-color: #cbd5e1 !important;
+  background-color: #e9eef5 !important;
+  opacity: 0.72;
+}
+
+.ns-toggle-row input[type='checkbox'] {
+  position: absolute !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Custom, localized calendar. */
+.vt-date-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.vt-date-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vt-date-trigger[aria-invalid='true'] {
+  border-color: #d94b45 !important;
+  box-shadow: 0 0 0 2px rgba(217, 75, 69, 0.08) !important;
+}
+
+.vt-date-placeholder {
+  color: #8795a8;
+  font-weight: 500;
+}
+
+.vt-calendar-popover {
+  position: fixed;
+  z-index: 5000;
+  max-width: calc(100vw - 24px);
+  border: 1px solid #d1dce9;
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 24px 70px rgba(9, 27, 54, 0.24);
+}
+
+.vt-calendar-header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.vt-calendar-header strong {
+  text-align: center;
+  text-transform: capitalize;
+  font-size: 0.96rem;
+}
+
+.vt-calendar-nav {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #d8e1ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #3c526e;
+}
+
+.vt-calendar-nav:hover {
+  border-color: #9eb4cf;
+  background: #f5f8fc;
+  color: var(--primary);
+}
+
+.vt-calendar-weekdays,
+.vt-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.vt-calendar-weekdays {
+  margin-bottom: 4px;
+  color: #6b7b90;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.vt-calendar-weekdays span {
+  padding: 5px 0;
+}
+
+.vt-calendar-day {
+  display: inline-grid;
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #263850;
+  font-weight: 650;
+}
+
+.vt-calendar-day:hover:not(:disabled) {
+  border-color: #bfd0e4;
+  background: #f1f6fd;
+}
+
+.vt-calendar-day.outside-month {
+  color: #a1adbd;
+}
+
+.vt-calendar-day.today {
+  border-color: #91acd0;
+}
+
+.vt-calendar-day.selected {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(36, 88, 232, 0.22);
+}
+
+.vt-calendar-day:disabled {
+  cursor: not-allowed;
+  color: #c7d0dc;
+  opacity: 0.7;
+}
+
+.vt-calendar-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid #e7ecf2;
+  padding-top: 12px;
+}
+
+.vt-datetime-field {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(120px, 0.8fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.vt-time-control {
+  display: flex;
+  min-height: var(--vt-control-height);
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--vt-control-border);
+  border-radius: 10px;
+  background: #fff;
+  padding-left: 10px;
+}
+
+.vt-time-control:focus-within {
+  border-color: var(--vt-control-focus);
+  box-shadow: 0 0 0 3px rgba(36, 88, 232, 0.13);
+}
+
+.vt-time-control input[type='time'] {
+  min-width: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-inline: 2px 8px !important;
+}
+
+/* Temporary credentials dialog. */
+.student-credentials-dialog {
+  width: min(760px, calc(100vw - 28px)) !important;
+  max-width: 760px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.student-credentials-dialog .dialog-header {
+  padding: 20px 22px !important;
+}
+
+.student-credentials-dialog .temporary-credentials {
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  gap: 10px !important;
+  overflow-x: hidden;
+  background: #f6f8fb;
+  border: 0;
+  border-radius: 0;
+  padding: 18px 22px !important;
+}
+
+.temporary-credential-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-width: 0;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.temporary-credential-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.temporary-credential-copy span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.temporary-credential-copy code {
+  display: block;
+  min-width: 0;
+  color: #16253a;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  user-select: all;
+}
+
+.temporary-credential-copy-button {
+  display: inline-flex;
+  min-width: 94px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.student-credentials-dialog > .dialog-actions {
+  padding: 14px 22px !important;
+}
+
+/* Collaborator table: fixed information order for every internal role. */
+.student-global-page .ns-data-table {
+  min-width: 1480px;
+}
+
+.student-global-page .ns-data-table th,
+.student-global-page .ns-data-table td {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.student-global-page .ns-data-table th:nth-child(1) { min-width: 250px; }
+.student-global-page .ns-data-table th:nth-child(2) { min-width: 300px; }
+.student-global-page .ns-data-table th:nth-child(3) { min-width: 180px; }
+.student-global-page .ns-data-table th:nth-child(4) { min-width: 120px; }
+.student-global-page .ns-data-table th:nth-child(5) { min-width: 155px; }
+.student-global-page .ns-data-table th:nth-child(6) { min-width: 160px; }
+.student-global-page .ns-data-table th:nth-child(7) { min-width: 135px; }
+.student-global-page .ns-data-table th:nth-child(8) { min-width: 135px; }
+.student-global-page .ns-data-table th:nth-child(9) { min-width: 105px; }
+
+.ns-data-table th,
+.responsive-table th {
+  padding-block: 10px !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.035em !important;
+}
+
+.ns-data-table td,
+.responsive-table td {
+  padding-block: 11px !important;
+}
+
+@media (max-width: 760px) {
+  .ns-page-header,
+  .page-heading,
+  .resource-heading,
+  .lc-page-header {
+    align-items: flex-start !important;
+  }
+
+  .vt-datetime-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .temporary-credential-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .temporary-credential-copy-button {
+    width: 100%;
+  }
+
+  .student-credentials-dialog > .dialog-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-credentials-dialog > .dialog-actions button {
+    width: 100%;
+  }
+}

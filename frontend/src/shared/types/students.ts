@@ -35,6 +35,8 @@ export interface StudentSummary {
   organization?: StudentOrganizationRef
   professionalProfile?: StudentCatalogRef | null
   technologicalProfile?: StudentCatalogRef | null
+  currentTechnology?: string | null
+  expertise?: string | null
   certificationsEnabled: boolean
   appliesTechnologicalCertification: boolean
   appliesDevelopmentSecurity: boolean

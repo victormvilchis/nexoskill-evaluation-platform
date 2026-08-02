@@ -385,9 +385,9 @@ export function AdminQuestionsPage() {
                 {globalAdministrator && <th>Organización</th>}
                 <th>Categoría</th>
                 <th>Dificultad</th>
-                <th>Estado</th>
                 <th>Creación</th>
                 <th>Actualización</th>
+                <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
@@ -418,9 +418,9 @@ export function AdminQuestionsPage() {
                   )}
                   <td>{question.categories.length ? question.categories.map((category) => category.name).join(', ') : 'Sin categoría'}</td>
                   <td>{question.difficultyName ?? 'Sin dificultad'}</td>
-                  <td><span className={`status-badge status-${question.status.toLowerCase()}`}>{statusLabel[question.status]}</span></td>
                   <td>{formatDate(question.createdAt)}</td>
                   <td>{formatDate(question.updatedAt ?? question.createdAt)}</td>
+                  <td><span className={`status-badge status-${question.status.toLowerCase()}`}>{statusLabel[question.status]}</span></td>
                   <td>
                     <TableActions>
                       <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />

@@ -13,6 +13,7 @@ import type {
 } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { DateField } from '../shared/components/DateField'
 import { Icon } from '../shared/components/Icon'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 
@@ -279,7 +280,7 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                 {editing && (
                   <label className="ns-field">
                     <span>Vigencia desde</span>
-                    <input disabled type="date" value={validFrom ?? ''} />
+                    <DateField value={validFrom ?? ''} onChange={() => undefined} disabled ariaLabel="Vigencia desde" />
                   </label>
                 )}
                 {!global && (
@@ -317,9 +318,9 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                 {!global && (
                   <label className="ns-field">
                     <span>Fecha de vencimiento</span>
-                    <input aria-invalid={Boolean(fieldErrors.expiresOn)} min={validFrom ?? localDateValue(new Date())}
-                      type="date" value={model.expiresOn ?? ''}
-                      onChange={(event) => set('expiresOn', event.target.value || undefined)} />
+                    <DateField value={model.expiresOn ?? ''} min={validFrom ?? localDateValue(new Date())}
+                      onChange={(value) => set('expiresOn', value || undefined)}
+                      ariaInvalid={Boolean(fieldErrors.expiresOn)} ariaLabel="Seleccionar fecha de vencimiento" />
                     <small className="org-field-help">Déjalo vacío para vigencia indefinida.</small>
                     <FieldError message={fieldErrors.expiresOn} />
                   </label>
@@ -339,8 +340,8 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                   <label className="ns-field"><span>Sustituciones adicionales <b>*</b></span><input min="0" step="1" type="number" value={model.additionalReplacements ?? 0} onChange={(event) => set('additionalReplacements', Number(event.target.value))} /><FieldError message={fieldErrors.additionalReplacements} /></label>
                   <label className="ns-field"><span>Liberación estándar (horas) <b>*</b></span><input min="1" step="1" type="number" value={model.standardReleaseHours ?? 24} onChange={(event) => set('standardReleaseHours', Number(event.target.value))} /><FieldError message={fieldErrors.standardReleaseHours} /></label>
                   <label className="ns-field"><span>Bloqueo antifraude (días) <b>*</b></span><input min="0" step="1" type="number" value={model.exhaustedReleaseDays ?? 7} onChange={(event) => set('exhaustedReleaseDays', Number(event.target.value))} /><FieldError message={fieldErrors.exhaustedReleaseDays} /></label>
-                  <label className="ns-field"><span>Inicio de ciclo <b>*</b></span><input type="date" value={model.cycleStartsOn ?? ''} onChange={(event) => set('cycleStartsOn', event.target.value)} /><FieldError message={fieldErrors.cycleStartsOn} /></label>
-                  <label className="ns-field"><span>Fin de ciclo <b>*</b></span><input min={model.cycleStartsOn} type="date" value={model.cycleEndsOn ?? ''} onChange={(event) => set('cycleEndsOn', event.target.value)} /><FieldError message={fieldErrors.cycleEndsOn} /></label>
+                  <label className="ns-field"><span>Inicio de ciclo <b>*</b></span><DateField value={model.cycleStartsOn ?? ''} onChange={(value) => set('cycleStartsOn', value)} required ariaInvalid={Boolean(fieldErrors.cycleStartsOn)} ariaLabel="Seleccionar inicio de ciclo" /><FieldError message={fieldErrors.cycleStartsOn} /></label>
+                  <label className="ns-field"><span>Fin de ciclo <b>*</b></span><DateField min={model.cycleStartsOn} value={model.cycleEndsOn ?? ''} onChange={(value) => set('cycleEndsOn', value)} required ariaInvalid={Boolean(fieldErrors.cycleEndsOn)} ariaLabel="Seleccionar fin de ciclo" /><FieldError message={fieldErrors.cycleEndsOn} /></label>
                 </div>
               </section>
             )}

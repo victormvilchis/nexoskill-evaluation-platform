@@ -10,6 +10,7 @@ import type { StudentExperiencePayload } from '../features/students/types/studen
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { DateField } from '../shared/components/DateField'
 import { FormActions } from '../shared/components/FormActions'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useToast } from '../shared/components/ToastProvider'
@@ -102,7 +103,6 @@ export function StudentEditorPage({ mode }: Props) {
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [displayName, setDisplayName] = useState('')
   const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
   const [validFrom, setValidFrom] = useState(todayInput())
   const [expiresAt, setExpiresAt] = useState('')
@@ -152,7 +152,6 @@ export function StudentEditorPage({ mode }: Props) {
         setEmail(detail.email)
         setFirstName(detail.firstName)
         setLastName(detail.lastName)
-        setDisplayName(detail.displayName)
         setValidFrom(detail.validFrom ?? '')
         setExpiresAt(detail.expiresAt ?? '')
         setAdmissionDate(detail.admissionDate ?? '')
@@ -261,11 +260,8 @@ export function StudentEditorPage({ mode }: Props) {
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
     if (manualStudentCode && !studentCode.trim()) errors.studentCode = 'El Código a nivel organización es obligatorio.'
     if (corporateUser.trim() && !admissionDate && corporateUser.trim() !== (student?.corporateUser ?? '').trim()) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
-    if (mode === 'create') {
-      if (!displayName.trim()) errors.displayName = 'El nombre completo es obligatorio.'
-    } else if (!displayName.trim() && !firstName.trim() && !lastName.trim()) {
-      errors.displayName = 'El nombre completo es obligatorio.'
-    }
+    if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
+    if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
     if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
     if (!expiresAt) errors.expiresAt = 'La fecha de vencimiento es obligatoria.'
     if (validFrom && expiresAt && expiresAt < validFrom) errors.expiresAt = 'La fecha de vencimiento no puede ser anterior al inicio de vigencia.'
@@ -294,7 +290,8 @@ export function StudentEditorPage({ mode }: Props) {
       if (mode === 'create') {
         const response = await createStudent({
           ...(administrator ? { organizationPublicId } : {}), email: email.trim(),
-          firstName: '', lastName: '', displayName: displayName.trim(),
+          firstName: firstName.trim(), lastName: lastName.trim(),
+          displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
           status: admissionDate ? 'ACTIVE' : 'INACTIVE', validFrom, expiresAt,
           admissionDate: admissionDate || undefined,
           studentCode: manualStudentCode ? studentCode.trim() : undefined,
@@ -313,7 +310,7 @@ export function StudentEditorPage({ mode }: Props) {
         const admissionChanged = (student.admissionDate ?? '') !== admissionDate
         await updateStudent(publicId, {
           email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
-          displayName: displayName.trim() || undefined, validFrom, expiresAt,
+          displayName: `${firstName.trim()} ${lastName.trim()}`.trim(), validFrom, expiresAt,
           admissionDate: admissionDate || undefined,
           studentCode: manualStudentCode ? studentCode.trim() : undefined,
           corporateUser: admissionDate ? (corporateUser.trim() || undefined) : undefined,
@@ -361,14 +358,11 @@ export function StudentEditorPage({ mode }: Props) {
               : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate}
                   onChange={(event) => setCorporateUser(event.target.value)} aria-invalid={Boolean(fieldErrors.corporateUser)} />}{field('corporateUser')}{!readOnly && !admissionDate && <small>Captura una Fecha de alta para habilitar el campo Usuario corporativo.</small>}</label>
             <label className="form-field"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
-            {mode === 'create' ? <label className="form-field"><span>Nombre completo</span><input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required aria-invalid={Boolean(fieldErrors.displayName)} />{field('displayName')}</label> : <>
-              <label className="form-field"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
-              <label className="form-field"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
-              <label className="form-field"><span>Nombre completo</span>{readOnly ? <strong className="readonly-value">{displayName}</strong> : <input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} aria-invalid={Boolean(fieldErrors.displayName)} />}{field('displayName')}</label>
-            </>}
-            <label className="form-field"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <input name="validFrom" type="date" value={validFrom} onChange={(event) => setValidFrom(event.target.value)} required aria-invalid={Boolean(fieldErrors.validFrom)} />}{field('validFrom')}</label>
-            <label className="form-field"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <input name="expiresAt" type="date" value={expiresAt} min={validFrom || undefined} onChange={(event) => setExpiresAt(event.target.value)} required aria-invalid={Boolean(fieldErrors.expiresAt)} />}{field('expiresAt')}</label>
-            <label className="form-field"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <input name="admissionDate" type="date" value={admissionDate} onChange={(event) => setAdmissionDate(event.target.value)} aria-invalid={Boolean(fieldErrors.admissionDate)} />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.</small>}</label>
+            <label className="form-field"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
+            <label className="form-field"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
+            <label className="form-field"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <DateField name="validFrom" value={validFrom} onChange={setValidFrom} required ariaInvalid={Boolean(fieldErrors.validFrom)} ariaLabel="Seleccionar inicio de vigencia" />}{field('validFrom')}</label>
+            <label className="form-field"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <DateField name="expiresAt" value={expiresAt} min={validFrom || undefined} onChange={setExpiresAt} required ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />}{field('expiresAt')}</label>
+            <label className="form-field"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <DateField name="admissionDate" value={admissionDate} onChange={setAdmissionDate} ariaInvalid={Boolean(fieldErrors.admissionDate)} ariaLabel="Seleccionar Fecha de alta" />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.</small>}</label>
             {readOnly && student?.organization && <label className="form-field"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
             {readOnly && student && <label className="form-field"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Desactivado' : 'Vencido'}</strong></label>}
           </div></section>

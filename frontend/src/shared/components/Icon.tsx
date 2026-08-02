@@ -37,6 +37,8 @@ export type IconName =
   | 'eye'
   | 'trash'
   | 'restore'
+  | 'calendar'
+  | 'clock'
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName
@@ -79,7 +81,9 @@ const paths: Record<IconName, ReactNode> = {
   code: <><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></>,
   eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></>,
   trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></>,
-  restore: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></>
+  restore: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>,
+  clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>
 }
 
 export function Icon({ name, size = 18, ...props }: IconProps) {

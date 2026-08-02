@@ -95,21 +95,27 @@ export function StudentTemporaryCredentialsDialog({ title, credentials, onClose 
         </header>
 
         <div className="dialog-content temporary-credentials">
-          {credentials.studentCode && <div><span>Código</span><code>{credentials.studentCode}</code>
-            <button className="secondary-button" type="button"
-              onClick={() => void copy(credentials.studentCode!, 'Código copiado.')}>Copiar código</button>
-          </div>}
-          <div><span>Organización</span><code>{credentials.organizationLogin}</code>
-            <button className="secondary-button" type="button"
-              onClick={() => void copy(credentials.organizationLogin, 'Organización copiada.')}>Copiar organización</button>
+          {credentials.studentCode && (
+            <div className="temporary-credential-row">
+              <div className="temporary-credential-copy"><span>Código a nivel organización</span><code>{credentials.studentCode}</code></div>
+              <button className="secondary-button temporary-credential-copy-button" type="button"
+                onClick={() => void copy(credentials.studentCode!, 'Código copiado.')}><Icon name="copy" size={16} /> Copiar</button>
+            </div>
+          )}
+          <div className="temporary-credential-row">
+            <div className="temporary-credential-copy"><span>Organización</span><code>{credentials.organizationLogin}</code></div>
+            <button className="secondary-button temporary-credential-copy-button" type="button"
+              onClick={() => void copy(credentials.organizationLogin, 'Organización copiada.')}><Icon name="copy" size={16} /> Copiar</button>
           </div>
-          <div><span>Correo</span><code>{credentials.email}</code>
-            <button className="secondary-button" type="button"
-              onClick={() => void copy(credentials.email, 'Correo copiado.')}>Copiar correo</button>
+          <div className="temporary-credential-row">
+            <div className="temporary-credential-copy"><span>Correo</span><code>{credentials.email}</code></div>
+            <button className="secondary-button temporary-credential-copy-button" type="button"
+              onClick={() => void copy(credentials.email, 'Correo copiado.')}><Icon name="copy" size={16} /> Copiar</button>
           </div>
-          <div><span>Contraseña temporal</span><code>{credentials.temporaryPassword}</code>
-            <button className="secondary-button" type="button"
-              onClick={() => void copy(credentials.temporaryPassword, 'Contraseña copiada.')}>Copiar contraseña</button>
+          <div className="temporary-credential-row">
+            <div className="temporary-credential-copy"><span>Contraseña temporal</span><code>{credentials.temporaryPassword}</code></div>
+            <button className="secondary-button temporary-credential-copy-button" type="button"
+              onClick={() => void copy(credentials.temporaryPassword, 'Contraseña copiada.')}><Icon name="copy" size={16} /> Copiar</button>
           </div>
         </div>
 

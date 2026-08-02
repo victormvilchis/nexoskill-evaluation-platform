@@ -173,7 +173,7 @@ export function AdminOrganizationsPage() {
         <div>
           <p className="eyebrow">Administración</p>
           <h1>Organizaciones</h1>
-          <p className="muted">Administra tenants, vigencia, contenido y capacidad comercial sin eliminar su historial.</p>
+          <p className="muted">Administra organizaciones, vigencia, contenido y capacidad comercial sin eliminar su historial.</p>
         </div>
         {permissions.has('ORGANIZATION_CREATE') && (
           <Link className="primary-button button-link" to="/admin/organizations/new">
@@ -207,9 +207,9 @@ export function AdminOrganizationsPage() {
               <tr>
                 <th>Organización</th>
                 <th>Modalidad</th>
-                <th>Estado</th>
                 <th>Colaboradores</th>
                 <th>Vigencia</th>
+                <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
@@ -228,13 +228,13 @@ export function AdminOrganizationsPage() {
                     <small><code className="ns-code-label">{item.code}</code> · {item.organizationType === 'GLOBAL' ? 'Sistema global' : 'Comercial'}</small>
                   </td>
                   <td><span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>{CONTENT_MODE_LABELS[item.contentMode]}</span></td>
-                  <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
                   <td><div className="org-student-counts" aria-label={`Activos: ${item.activeStudentCount ?? 0}. Inactivos: ${item.inactiveStudentCount ?? 0}. Vencidos: ${item.expiredStudentCount ?? 0}.`}>
                     <span><small>Activos</small><strong>{item.activeStudentCount ?? 0}</strong></span>
                     <span><small>Inactivos</small><strong>{item.inactiveStudentCount ?? 0}</strong></span>
                     <span><small>Vencidos</small><strong>{item.expiredStudentCount ?? 0}</strong></span>
                   </div></td>
                   <td>{formatDate(item.expiresOn)}</td>
+                  <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
                   <td>
                     <TableActions>
                       <TableActionLink to={`/admin/organizations/${item.publicId}`} label="Ver" icon="eye" />

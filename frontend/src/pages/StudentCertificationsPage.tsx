@@ -9,6 +9,7 @@ import {
 } from '../features/certifications/api/certificationApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { DateField } from '../shared/components/DateField'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
@@ -721,15 +722,15 @@ function CertificationSection({
                 </label>
                 {hasExpiration(type) && (
                   <>
-                    <label className="ns-field"><span>{cycle.processType === 'RECERTIFICATION' ? 'Fecha límite inicial (histórica)' : 'Fecha límite inicial'}</span><input disabled type="date" value={cycle.deadlineDate ?? ''} /></label>
-                    <label className="ns-field"><span>Fecha programada</span><input type="date" value={cycle.scheduledDate ?? ''} onChange={(event) => onUpdate(cycle.key, { scheduledDate: event.target.value || null })} /></label>
-                    <label className="ns-field"><span>Última fecha de presentación</span><input type="date" value={cycle.applicationDate ?? ''}
-                      onChange={(event) => onUpdate(cycle.key, { applicationDate: event.target.value || null })}
-                      aria-invalid={Boolean(fieldErrors[`${cycle.key}.applicationDate`])} />
+                    <label className="ns-field"><span>{cycle.processType === 'RECERTIFICATION' ? 'Fecha límite inicial (histórica)' : 'Fecha límite inicial'}</span><DateField value={cycle.deadlineDate ?? ''} onChange={() => undefined} disabled ariaLabel="Fecha límite inicial" /></label>
+                    <label className="ns-field"><span>Fecha programada</span><DateField value={cycle.scheduledDate ?? ''} onChange={(value) => onUpdate(cycle.key, { scheduledDate: value || null })} ariaLabel="Seleccionar fecha programada" /></label>
+                    <label className="ns-field"><span>Última fecha de presentación</span><DateField value={cycle.applicationDate ?? ''}
+                      onChange={(value) => onUpdate(cycle.key, { applicationDate: value || null })}
+                      ariaInvalid={Boolean(fieldErrors[`${cycle.key}.applicationDate`])} ariaLabel="Seleccionar última fecha de presentación" />
                       {fieldErrors[`${cycle.key}.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.applicationDate`]}</small>}
                     </label>
                     <label className="ns-field"><span>Última aplicación aprobada</span>
-                      <input disabled type="date" value={cycle.lastApprovedApplicationDate ?? ''} />
+                      <DateField value={cycle.lastApprovedApplicationDate ?? ''} onChange={() => undefined} disabled ariaLabel="Última aplicación aprobada" />
                     </label>
                   </>
                 )}
@@ -743,7 +744,7 @@ function CertificationSection({
                 )}
                 {hasExpiration(type) && (
                   <>
-                    <label className="ns-field"><span>Fecha de vencimiento</span><input disabled type="date" value={cycle.expirationDate ?? ''} /></label>
+                    <label className="ns-field"><span>Fecha de vencimiento</span><DateField value={cycle.expirationDate ?? ''} onChange={() => undefined} disabled ariaLabel="Fecha de vencimiento" /></label>
                     <label className="ns-field"><span>Estado de vigencia</span><input disabled value={cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'} /></label>
                     <label className="ns-field"><span>Último resultado de examen</span>
                       <input disabled value={cycle.latestExamStatus ? EXAM_LABELS[cycle.latestExamStatus] : 'Sin información'} />
@@ -776,10 +777,10 @@ function CertificationSection({
                   </label>
                   {attempt && (
                     <div className="certification-grid">
-                      <label className="ns-field"><span>Fecha programada</span><input type="date" value={attempt.scheduledDate ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { scheduledDate: event.target.value || null })} /></label>
-                      <label className="ns-field"><span>Fecha de aplicación</span><input type="date" value={attempt.applicationDate ?? ''}
-                        onChange={(event) => onUpdateAttempt(cycle.key, { applicationDate: event.target.value || null })}
-                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.attempt.applicationDate`])} />
+                      <label className="ns-field"><span>Fecha programada</span><DateField value={attempt.scheduledDate ?? ''} onChange={(value) => onUpdateAttempt(cycle.key, { scheduledDate: value || null })} ariaLabel="Seleccionar fecha programada del intento" /></label>
+                      <label className="ns-field"><span>Fecha de aplicación</span><DateField value={attempt.applicationDate ?? ''}
+                        onChange={(value) => onUpdateAttempt(cycle.key, { applicationDate: value || null })}
+                        ariaInvalid={Boolean(fieldErrors[`${cycle.key}.attempt.applicationDate`])} ariaLabel="Seleccionar fecha de aplicación del intento" />
                         {fieldErrors[`${cycle.key}.attempt.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.attempt.applicationDate`]}</small>}
                       </label>
                       <label className="ns-field"><span>Estado del examen</span><select value={attempt.examStatus}

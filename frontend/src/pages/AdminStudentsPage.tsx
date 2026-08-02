@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
-import { getStudentCatalogs, searchStudents } from '../features/students/api/studentApi'
+import { searchStudents } from '../features/students/api/studentApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
@@ -49,8 +49,6 @@ export function AdminStudentsPage() {
   const [data, setData] = useState<StudentPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tenantManualStudentCode, setTenantManualStudentCode] = useState(false)
-  const [tenantCertificationsEnabled, setTenantCertificationsEnabled] = useState(false)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const organization = searchParams.get('organization') ?? ''
@@ -61,22 +59,6 @@ export function AdminStudentsPage() {
     searchOrganizations({ status: 'ACTIVE', page: 0, size: 100, signal: controller.signal })
       .then((response) => setOrganizations(response.content.filter((item) => item.organizationType === 'CUSTOMER')))
       .catch(() => { if (!controller.signal.aborted) setOrganizations([]) })
-    return () => controller.abort()
-  }, [administrator])
-  useEffect(() => {
-    if (administrator) return
-    const controller = new AbortController()
-    getStudentCatalogs(undefined, controller.signal)
-      .then((response) => {
-        setTenantManualStudentCode(response.organization.manualStudentCode)
-        setTenantCertificationsEnabled(response.organization.appliesCertifications)
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setTenantManualStudentCode(false)
-          setTenantCertificationsEnabled(false)
-        }
-      })
     return () => controller.abort()
   }, [administrator])
   useEffect(() => {
@@ -131,22 +113,8 @@ export function AdminStudentsPage() {
     setSearchParams(next)
   }
   const activeSort = searchParams.get('sort')
-  const sort = activeSort ?? 'displayName'
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
-  const selectedOrganization = organizations.find((item) => item.publicId === organization)
-  const showStudentCode = administrator ? Boolean(organization && selectedOrganization?.manualStudentCode) : tenantManualStudentCode
-  const showCertificationColumns = administrator
-    ? Boolean(organization && selectedOrganization?.appliesCertifications)
-    : tenantCertificationsEnabled
-  const columnCount = 5 + (showCertificationColumns ? 2 : 0) + (administrator ? 1 : 0) + (showStudentCode ? 1 : 0)
-  useEffect(() => {
-    if (showCertificationColumns || sort !== 'expiresAt') return
-    const next = new URLSearchParams(searchParams)
-    next.delete('page')
-    next.set('sort', 'displayName')
-    next.set('direction', 'ASC')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams, showCertificationColumns, sort])
+  const columnCount = 10
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
     ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
@@ -175,9 +143,10 @@ export function AdminStudentsPage() {
                     <SortIndicator active={activeSort === 'displayName'} direction={direction} />
                   </button>
                 </th>
-                {administrator && <th>Organización</th>}
-                {showStudentCode && <th>Código a nivel organización</th>}
-                {showCertificationColumns && <th>Rol</th>}
+                <th>Rol</th>
+                <th>Tecnología actual</th>
+                <th>Expertise</th>
+                <th>Código organización</th>
                 <th>Usuario corporativo</th>
                 <th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
                   <button
@@ -189,19 +158,17 @@ export function AdminStudentsPage() {
                     <SortIndicator active={activeSort === 'admissionDate'} direction={direction} />
                   </button>
                 </th>
+                <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                  <button
+                    className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
+                    type="button"
+                    onClick={() => toggleSort('expiresAt')}
+                  >
+                    Vencimiento
+                    <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
+                  </button>
+                </th>
                 <th>Estado</th>
-                {showCertificationColumns && (
-                  <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
-                    <button
-                      className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
-                      type="button"
-                      onClick={() => toggleSort('expiresAt')}
-                    >
-                      Vencimiento
-                      <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
-                    </button>
-                  </th>
-                )}
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
@@ -210,13 +177,14 @@ export function AdminStudentsPage() {
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
             <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>
-            {administrator && <td>{student.organization ? <><strong>{student.organization.name}</strong><small>{student.organization.code}</small></> : '—'}</td>}
-            {showStudentCode && <td>{student.studentCode || 'N/A'}</td>}
-            {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}
+            <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>
+            <td>{student.currentTechnology || 'N/A'}</td>
+            <td>{student.expertise || 'N/A'}</td>
+            <td>{student.studentCode || 'N/A'}</td>
             <td>{student.corporateUser || 'N/A'}</td>
             <td>{formatDate(student.admissionDate)}</td>
+            <td>{formatDate(student.expiresAt)}</td>
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
-            {showCertificationColumns && <td>{formatDate(student.expiresAt)}</td>}
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />}

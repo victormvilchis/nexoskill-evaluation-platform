@@ -34,6 +34,7 @@ public class StudentFoundationService {
                profile.PUBLIC_ID PROFILE_PUBLIC_ID, profile.PROFILE_CODE, profile.PROFILE_NAME,
                tech_profile.PUBLIC_ID TECH_PROFILE_PUBLIC_ID,
                tech_profile.PROFILE_CODE TECH_PROFILE_CODE, tech_profile.PROFILE_NAME TECH_PROFILE_NAME,
+               experience.CURRENT_TECHNOLOGY, experience.EXPERTISE,
                s.APPLIES_TECH_CERT, s.APPLIES_DEV_SECURITY, s.APPLIES_NORMATIVE_TESTING,
                s.APPLIES_ONE, s.APPLIES_AGILE, s.APPLIES_JIRA
           FROM STUDENT s
@@ -42,6 +43,18 @@ public class StudentFoundationService {
             ON profile.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
           LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tech_profile
             ON tech_profile.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
+          LEFT JOIN (
+                SELECT exp.STUDENT_ID, exp.ORGANIZATION_ID,
+                       LISTAGG(exp.ITEM_NAME, ' · ') WITHIN GROUP
+                           (ORDER BY exp.DISPLAY_ORDER, LOWER(exp.ITEM_NAME)) CURRENT_TECHNOLOGY,
+                       LISTAGG(NVL(exp.LEVEL_CODE, 'Sin nivel'), ' · ') WITHIN GROUP
+                           (ORDER BY exp.DISPLAY_ORDER, LOWER(exp.ITEM_NAME)) EXPERTISE
+                  FROM STUDENT_EXPERIENCE_ITEM exp
+                 WHERE exp.ITEM_TYPE = 'CURRENT_TECHNOLOGY'
+                 GROUP BY exp.STUDENT_ID, exp.ORGANIZATION_ID
+          ) experience
+            ON experience.STUDENT_ID = s.STUDENT_ID
+           AND experience.ORGANIZATION_ID = s.ORGANIZATION_ID
         """;
 
     private final StudentService studentService;
@@ -470,7 +483,6 @@ public class StudentFoundationService {
     }
 
     private StudentView mapStudent(ResultSet rs, int rowNum) throws SQLException {
-        Instant now = clock.instant();
         StudentStatus physical = StudentStatus.valueOf(rs.getString("STATUS"));
         LocalDate validFrom = localDate(rs, "ACCESS_VALID_FROM");
         LocalDate expiresAt = localDate(rs, "ACCESS_EXPIRES_ON");
@@ -487,6 +499,7 @@ public class StudentFoundationService {
                         rs.getBoolean("MANUAL_STUDENT_CODE")),
                 organizationCertifications ? ref(rs, "PROFILE_PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME") : null,
                 organizationCertifications ? ref(rs, "TECH_PROFILE_PUBLIC_ID", "TECH_PROFILE_CODE", "TECH_PROFILE_NAME") : null,
+                rs.getString("CURRENT_TECHNOLOGY"), rs.getString("EXPERTISE"),
                 organizationCertifications, organizationCertifications && rs.getBoolean("APPLIES_TECH_CERT"),
                 organizationCertifications && rs.getBoolean("APPLIES_DEV_SECURITY"),
                 organizationCertifications && rs.getBoolean("APPLIES_NORMATIVE_TESTING"),
@@ -642,7 +655,8 @@ public class StudentFoundationService {
             LocalDate expiresAt, LocalDate admissionDate, boolean passwordChangeRequired,
             Instant temporaryPasswordExpiresAt, Instant lastLoginAt, Instant createdAt, Instant updatedAt,
             Long version, OrganizationRef organization, CatalogRef professionalProfile,
-            CatalogRef technologicalProfile, boolean certificationsEnabled,
+            CatalogRef technologicalProfile, String currentTechnology, String expertise,
+            boolean certificationsEnabled,
             boolean appliesTechnologicalCertification, boolean appliesDevelopmentSecurity,
             boolean appliesNormativeTesting, boolean appliesOne, boolean appliesAgile, boolean appliesJira) {}
     public record PageResult(List<StudentView> content, int page, int size, long totalElements, int totalPages) {

@@ -3,6 +3,7 @@ import { searchOrganizations } from '../features/organizations/api/organizationA
 import { createUser, getRoles } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { DateTimeField } from '../shared/components/DateField'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { InternalRoleCode, RoleOption } from '../shared/types/users'
@@ -171,8 +172,8 @@ export function CreateUserPage() {
         <section className="form-section form-wide">
           <div className="form-section-heading"><span className="form-section-number">3</span><div><h2>Vigencia</h2><p>Define el periodo de acceso del usuario.</p></div></div>
           <div className="form-grid-three">
-            <label className="form-field"><span>Inicio de vigencia</span><input type="datetime-local" value={startsAt} required onChange={(event) => setStartsAt(event.target.value)} />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
-            <label className="form-field"><span>Vencimiento</span><input type="datetime-local" value={expiresAt} disabled={withoutExpiration} required={!withoutExpiration} onChange={(event) => setExpiresAt(event.target.value)} />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
+            <label className="form-field"><span>Inicio de vigencia</span><DateTimeField value={startsAt} onChange={setStartsAt} required ariaInvalid={Boolean(fieldErrors.startsAt)} ariaLabel="Seleccionar inicio de vigencia" />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
+            <label className="form-field"><span>Vencimiento</span><DateTimeField value={expiresAt} onChange={setExpiresAt} disabled={withoutExpiration} required={!withoutExpiration} ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
             <label className="checkbox-row internal-user-expiration-check"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</label>
           </div>
         </section>
