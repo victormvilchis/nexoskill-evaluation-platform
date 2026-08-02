@@ -88,7 +88,6 @@ export interface StudentCertificationFlags {
 
 export interface CreateStudentPayload {
   organizationPublicId?: string
-  studentCode: string
   email: string
   firstName: string
   lastName: string
@@ -133,6 +132,7 @@ export interface StudentDeletionResult {
 }
 
 export interface StudentTemporaryCredentials {
+  studentCode?: string
   organizationLogin: string
   email: string
   temporaryPassword: string
@@ -142,6 +142,7 @@ export interface StudentTemporaryCredentials {
 export interface StudentCredentialResult {
   student: {
     publicId: string
+    studentCode: string
     fullName: string
     email: string
     status: StudentStatus

@@ -119,22 +119,27 @@ public class StudentImportService {
 
         List<ImportedStudent> parsed = new ArrayList<>();
         List<Issue> errors = new ArrayList<>();
+        List<Issue> warnings = new ArrayList<>();
         for (XlsxCertificationReader.RowData row : sheet.rows()) {
             ParseResult result = parseRow(row, catalogs, organization);
             parsed.add(result.student());
             errors.addAll(result.errors());
+            warnings.addAll(result.warnings());
         }
 
         Map<String, List<ImportedStudent>> fileKeys = new HashMap<>();
-        for (ImportedStudent item : parsed) fileKeys.computeIfAbsent(item.matchKey(), ignored -> new ArrayList<>()).add(item);
+        for (ImportedStudent item : parsed) {
+            if (item.matchKey() != null && !item.matchKey().isBlank()) {
+                fileKeys.computeIfAbsent(item.matchKey(), ignored -> new ArrayList<>()).add(item);
+            }
+        }
         Set<String> duplicateRowKeys = new HashSet<>();
-        List<Issue> conflicts = new ArrayList<>();
-        fileKeys.values().stream().filter(values -> values.size() > 1).forEach(values -> {
-            values.forEach(value -> duplicateRowKeys.add(value.rowKey()));
-            conflicts.add(new Issue(values.getFirst().rowNumber(), "DUPLICATE_FILE_IDENTITY",
-                    "El archivo contiene varias filas para " + values.getFirst().fullName()
-                            + ". Revisa la identidad antes de continuar."));
-        });
+        List<ConflictPreview> conflicts = new ArrayList<>();
+        fileKeys.values().stream().filter(values -> values.size() > 1).forEach(values -> values.forEach(value -> {
+            duplicateRowKeys.add(value.rowKey());
+            conflicts.add(omissionConflict(value, "DUPLICATE_FILE_IDENTITY", "Identidad repetida en el archivo",
+                    "El archivo contiene más de una fila para la misma identidad. Omite esta fila y conserva únicamente el registro correcto."));
+        }));
 
         Map<String, List<ExistingStudent>> byEmail = groupExisting(existing, true);
         Map<String, List<ExistingStudent>> byName = groupExisting(existing, false);
@@ -149,41 +154,50 @@ public class StudentImportService {
         for (ImportedStudent imported : parsed) {
             List<ExistingStudent> candidates = imported.normalizedEmail() == null
                     ? List.of() : byEmail.getOrDefault(imported.normalizedEmail(), List.of());
-            if (candidates.isEmpty()) candidates = byName.getOrDefault(imported.normalizedName(), List.of());
+            if (candidates.isEmpty() && imported.normalizedName() != null && !imported.normalizedName().isBlank()) {
+                candidates = byName.getOrDefault(imported.normalizedName(), List.of());
+            }
             if (candidates.size() > 1) {
                 candidates.forEach(candidate -> referencedIds.add(candidate.id()));
-                conflicts.add(new Issue(imported.rowNumber(), "AMBIGUOUS_IDENTITY",
-                        "Existen varios colaboradores que coinciden con " + imported.fullName()
-                                + ". No se aplicará ningún cambio automáticamente."));
+                conflicts.add(omissionConflict(imported, "AMBIGUOUS_IDENTITY", "Identidad ambigua",
+                        "Existen varios colaboradores que coinciden con esta fila. Omite el registro para no actualizar una cuenta incorrecta."));
                 continue;
             }
 
             ExistingStudent current = candidates.isEmpty() ? null : candidates.getFirst();
+            ImportedStudent identified = current != null && blank(imported.fullName())
+                    ? imported.withName(current.displayName()) : imported;
             Map<String, CertificationData> currentCertifications = current == null
                     ? Map.of() : existingCertifications.getOrDefault(current.id(), Map.of());
-            Reconciliation reconciliation = reconcileCertificationLifecycle(imported, currentCertifications);
+            Reconciliation reconciliation = reconcileCertificationLifecycle(identified, currentCertifications);
             ImportedStudent effectiveImported = reconciliation.student();
             effectiveImportedByRow.put(effectiveImported.rowKey(), effectiveImported);
-            errors.addAll(reconciliation.issues());
+            conflicts.addAll(reconciliation.conflicts());
+            warnings.addAll(reconciliation.warnings());
 
-            if (duplicateRowKeys.contains(effectiveImported.rowKey()) || effectiveImported.hasBlockingErrors()) {
-                // Una fila inválida no puede actualizar, pero sí debe evitar una posible baja falsa
-                // cuando identifica de forma segura a un colaborador ya existente.
+            if (duplicateRowKeys.contains(effectiveImported.rowKey())) {
                 candidates.forEach(candidate -> referencedIds.add(candidate.id()));
                 continue;
             }
             if (current == null) {
+                boolean nameRequired = blank(effectiveImported.fullName());
+                if (nameRequired) {
+                    errors.add(new Issue(effectiveImported.rowNumber(), "STUDENT_IMPORT_NAME_REQUIRED",
+                            "El nombre completo es necesario para generar el alta. Captúralo en la vista previa u omite únicamente esta fila."));
+                }
                 newStudents.add(new NewStudentPreview(effectiveImported.rowKey(), effectiveImported.rowNumber(),
                         effectiveImported.fullName(), effectiveImported.profileName(),
-                        effectiveImported.primaryTechnology(), effectiveImported.email(), effectiveImported.warnings()));
+                        effectiveImported.primaryTechnology(), effectiveImported.email(), nameRequired,
+                        effectiveImported.warnings()));
                 matches.put(effectiveImported.rowKey(), new Match(effectiveImported, null));
                 continue;
             }
 
             referencedIds.add(current.id());
             if (!matchedIds.add(current.id())) {
-                conflicts.add(new Issue(effectiveImported.rowNumber(), "DUPLICATE_MATCH",
-                        "Más de una fila intenta actualizar al colaborador " + current.displayName() + "."));
+                conflicts.add(omissionConflict(effectiveImported, "DUPLICATE_MATCH", "Actualización duplicada",
+                        "Más de una fila intenta actualizar al colaborador " + current.displayName()
+                                + ". Omite esta fila y conserva únicamente la actualización correcta."));
                 continue;
             }
             List<FieldChange> changes = compare(current, effectiveImported, currentCertifications,
@@ -213,13 +227,17 @@ public class StudentImportService {
         List<ImportedStudent> effectiveImported = parsed.stream()
                 .map(value -> effectiveImportedByRow.getOrDefault(value.rowKey(), value))
                 .toList();
+        Map<String, ConflictPreview> conflictMap = java.util.Collections.unmodifiableMap(conflicts.stream().collect(
+                java.util.stream.Collectors.toMap(ConflictPreview::id, value -> value,
+                        (first, second) -> first, LinkedHashMap::new)));
+        List<ConflictPreview> uniqueConflicts = List.copyOf(conflictMap.values());
         PendingImport state = new PendingImport(token, actor.internalId(), effectiveTenant.organizationId(), digest,
                 java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, effectiveImported,
                 Map.copyOf(matches), previewNewRows, previewChangeFields, previewPossibleLows,
-                List.copyOf(errors), List.copyOf(conflicts));
+                List.copyOf(errors), List.copyOf(warnings), conflictMap);
         pending.put(token, state);
         return new Preview(token, fileName, sheet.sheetName(), organization.name(), organization.code(),
-                sheet.rows().size(), newStudents, changedStudents, possibleLows, conflicts, errors,
+                sheet.rows().size(), newStudents, changedStudents, possibleLows, uniqueConflicts, warnings, errors,
                 "La vista previa caduca en " + TOKEN_MINUTES + " minutos y ningún cambio ha sido aplicado.");
     }
 
@@ -244,13 +262,16 @@ public class StudentImportService {
         Map<String, NewSelection> newSelections = indexNew(command.newStudents());
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
+        Map<String, String> conflictResolutions = indexConflictResolutions(command.conflicts());
         if (!applying.add(normalizedToken)) {
             throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
                     "La importación ya se está aplicando. Espera a que termine antes de volver a confirmar.");
         }
         try {
-            validateSelectedEmails(effectiveTenant.organizationId(), state, newSelections);
-            validateSelections(state, newSelections, changeSelections, lowSelections);
+            validateSelectedNewStudents(effectiveTenant.organizationId(), state, newSelections);
+            validateSelections(state, newSelections, changeSelections, lowSelections, conflictResolutions);
+            Map<String, ChangeSelection> effectiveChangeSelections = includeConflictFields(
+                    state, changeSelections, conflictResolutions);
             if (pending.get(normalizedToken) != state) {
                 throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
                         "La vista previa fue descartada antes de iniciar la importación. Vuelve a validar el archivo.");
@@ -263,10 +284,12 @@ public class StudentImportService {
             int deactivated = 0;
             for (ImportedStudent imported : state.imported()) {
                 Match match = state.matches().get(imported.rowKey());
-                if (match == null || imported.hasBlockingErrors()) continue;
+                if (match == null) continue;
+                ImportedStudent resolvedImported = resolveConflictDecisions(imported, state, conflictResolutions);
+                if (resolvedImported == null) continue;
                 try {
-                    RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, imported, match,
-                            newSelections, changeSelections, requestActor, actor));
+                    RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, resolvedImported, match,
+                            newSelections, effectiveChangeSelections, requestActor, actor));
                     if (outcome == null) continue;
                     if (outcome.credential() != null) credentials.add(outcome.credential());
                     created += outcome.created();
@@ -325,12 +348,12 @@ public class StudentImportService {
         if (match.existing() == null) {
             NewSelection selection = newSelections.get(imported.rowKey());
             if (selection == null || !selection.selected()) return RowOutcome.none();
-            ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(), null);
+            ImportedStudent identified = imported.withName(requireFullName(selection.fullName(), imported.rowNumber()));
+            ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), identified, actor.internalId(), null);
             String email = requireEmail(selection.email(), resolved.rowNumber());
             String ownerPublicId = tenant.globalAdministrator() ? state.organization().publicId() : null;
             StudentFoundationService.CreateResult result = foundation.create(tenant,
                     new StudentFoundationService.CreateCommand(ownerPublicId,
-                            generatedStudentCode(state.digest(), resolved),
                             email, resolved.firstName(), resolved.lastName(), resolved.fullName(), StudentStatus.ACTIVE,
                             LocalDate.now(clock), accessExpiry(state.organization()), resolved.admissionDate(),
                             resolved.profilePublicId(), resolved.technologicalProfilePublicId(),
@@ -343,7 +366,7 @@ public class StudentImportService {
             persistPrimaryTechnology(tenant.organizationId(), studentId, resolved.primaryTechnology(), actor.internalId());
             persistImportedDetails(tenant, result.student().publicId(), studentId, resolved, actor);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
-                    resolved.fullName(), email, result.temporaryPassword()));
+                    resolved.fullName(), email, result.student().studentCode(), result.temporaryPassword()));
         }
         ChangeSelection selection = changeSelections.get(match.existing().publicId());
         if (selection == null || selection.fields().isEmpty()) return RowOutcome.none();
@@ -366,11 +389,6 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
                     "No fue posible identificar al colaborador antes de aplicar sus certificaciones.");
         }
-        if (admissionDate == null) {
-            throw new BusinessException("STUDENT_IMPORT_ADMISSION_DATE_REQUIRED",
-                    "La fecha de alta importada es obligatoria para aplicar las certificaciones.");
-        }
-
         entityManager.flush();
         int updated = jdbc.update("""
             UPDATE STUDENT
@@ -379,7 +397,8 @@ public class StudentImportService {
                AND ORGANIZATION_ID = :organizationId
                AND PUBLIC_ID = :studentPublicId
             """, new MapSqlParameterSource()
-                .addValue("admissionDate", java.sql.Date.valueOf(admissionDate), java.sql.Types.DATE)
+                .addValue("admissionDate", admissionDate == null ? null : java.sql.Date.valueOf(admissionDate),
+                        java.sql.Types.DATE)
                 .addValue("studentId", studentId)
                 .addValue("organizationId", organizationId)
                 .addValue("studentPublicId", studentPublicId));
@@ -397,13 +416,13 @@ public class StudentImportService {
                     "No fue posible volver a consultar al colaborador dentro de la organización destino.");
         }
         entityManager.refresh(reloaded);
-        if (!admissionDate.equals(reloaded.getAdmissionDate())) {
+        if (!Objects.equals(admissionDate, reloaded.getAdmissionDate())) {
             throw new BusinessException("STUDENT_IMPORT_FOUNDATION_SYNC_FAILED",
-                    "La fecha de alta no quedó disponible para calcular las certificaciones. No se aplicó la fila.");
+                    "La fecha de alta no quedó sincronizada antes de aplicar las certificaciones. No se aplicó la fila.");
         }
     }
 
-    private void validateSelectedEmails(Long organizationId, PendingImport state,
+    private void validateSelectedNewStudents(Long organizationId, PendingImport state,
             Map<String, NewSelection> selections) {
         Map<String, ImportedStudent> importedByKey = state.imported().stream()
                 .collect(java.util.stream.Collectors.toMap(ImportedStudent::rowKey, value -> value, (first, second) -> first));
@@ -412,6 +431,7 @@ public class StudentImportService {
             if (selection == null || !selection.selected()) continue;
             ImportedStudent imported = importedByKey.get(selection.rowKey());
             int row = imported == null ? 0 : imported.rowNumber();
+            requireFullName(selection.fullName(), row);
             String email = requireEmail(selection.email(), row);
             String key = email.toLowerCase(Locale.ROOT);
             if (!normalized.add(key)) {
@@ -614,6 +634,7 @@ public class StudentImportService {
         return new CertificationData(type,
                 imported.applies(),
                 selectedFields.contains(prefix + "status") ? imported.certificationStatus() : current.certificationStatus(),
+                selectedFields.contains(prefix + "status") ? imported.excelCertificationStatus() : current.excelCertificationStatus(),
                 selectedFields.contains(prefix + "examStatus") ? imported.examStatus() : current.examStatus(),
                 selectedFields.contains(prefix + "examStatus") ? imported.internalExamStatus() : current.internalExamStatus(),
                 selectedFields.contains(prefix + "applicationDate") || selectedFields.contains(prefix + "lifecycle")
@@ -693,31 +714,38 @@ public class StudentImportService {
     }
 
     private ParseResult parseRow(XlsxCertificationReader.RowData row, Catalogs catalogs, Organization organization) {
-        List<Issue> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
+        List<Issue> parseIssues = new ArrayList<>();
+        List<String> rowWarnings = new ArrayList<>();
         String fullName = normalizedText(value(row, "NOMBRE EXTERNO"), 250);
         String profile = normalizedText(value(row, "PERFIL"), 200);
         String technology = normalizedText(value(row, "TECNOLOGÍA EN LA QUE SE CERTIFICA"), 200);
         String technologicalProfile = normalizedText(value(row, "PERFIL TECNOLOGICO"), 200);
-        LocalDate admission = parseDate(value(row, "FECHA DE ALTA"), "FECHA DE ALTA", row.rowNumber(), errors, true);
+        LocalDate admission = parseDate(value(row, "FECHA DE ALTA"), "FECHA DE ALTA",
+                row.rowNumber(), parseIssues, false);
+        if (admission == null) {
+            rowWarnings.add("El colaborador no tiene fecha de alta. Las fechas límite que dependan de este dato permanecerán pendientes.");
+        }
+
         String email = firstValue(row, "CORREO", "EMAIL", "CORREO ELECTRONICO", "CORREO ELECTRÓNICO");
         email = email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
-        if (email != null && !EMAIL.matcher(email).matches()) {
-            errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_EMAIL_INVALID", "El correo del Excel no tiene un formato válido."));
+        if (email != null && (!EMAIL.matcher(email).matches() || email.length() > 254)) {
+            parseIssues.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_EMAIL_INVALID",
+                    "El correo informado en el Excel no tiene un formato válido y no se utilizará para identificar al colaborador."));
+            email = null;
         }
-        if (fullName == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_NAME_REQUIRED", "NOMBRE EXTERNO es obligatorio."));
-        if (profile == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_PROFILE_REQUIRED", "PERFIL es obligatorio."));
-        if (technology == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_TECHNOLOGY_REQUIRED", "TECNOLOGÍA EN LA QUE SE CERTIFICA es obligatoria."));
-        if (technologicalProfile == null) errors.add(new Issue(row.rowNumber(), "STUDENT_IMPORT_TECH_PROFILE_REQUIRED", "PERFIL TECNOLOGICO es obligatorio."));
-        NameParts names = splitName(fullName, row.rowNumber(), errors);
+        if (profile == null) rowWarnings.add("El perfil no viene informado.");
+        if (technology == null) rowWarnings.add("La tecnología principal no viene informada.");
+        if (technologicalProfile == null) rowWarnings.add("El perfil tecnológico no viene informado.");
+
+        NameParts names = splitName(fullName, row.rowNumber(), parseIssues);
         CatalogRef profileRef = resolveCatalog(catalogs.profiles(), profile);
         CatalogRef techProfileRef = resolveCatalog(catalogs.technologicalProfiles(), technologicalProfile);
         if (profile != null && profileRef == null) {
-            warnings.add("El perfil '" + profile
+            rowWarnings.add("El perfil '" + profile
                     + "' se creará en los catálogos de la organización al confirmar.");
         }
         if (technologicalProfile != null && techProfileRef == null) {
-            warnings.add("El perfil tecnológico '" + technologicalProfile
+            rowWarnings.add("El perfil tecnológico '" + technologicalProfile
                     + "' se creará en los catálogos de la organización al confirmar.");
         }
 
@@ -725,31 +753,31 @@ public class StudentImportService {
         certifications.put("DEVELOPMENT_SECURITY", certification(row, "DEVELOPMENT_SECURITY", "¿APLICA DS?",
                 "ESTATUS CERTIFICACIÓN DS", "ESTATUS DEL EXAMEN DS", "FECHA DE APLICACIÓN DS",
                 "PROMEDIO DS", "INTENTO DS", null, admission, catalogs.policy("DEVELOPMENT_SECURITY"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
         certifications.put("TECHNOLOGICAL", certification(row, "TECHNOLOGICAL", "¿APLICA TECNOLOGICA?",
                 "ESTATUS CERTIFICACIÓN", "ESTATUS DEL EXAMEN", "FECHA DE APLICACIÓN TEC",
                 "PROMEDIO", "INTENTO", null, admission, catalogs.policy("TECHNOLOGICAL"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
         certifications.put("NORMATIVE_TESTING", certification(row, "NORMATIVE_TESTING", "¿APLICA NORMATIVA?",
                 "ESTATUS CERTIFICACIÓN NORMATIVA", "ESTATUS DEL EXAMEN NORMATIVA", "FECHA DE APLICACIÓN NORMATIVA",
                 "PROMEDIO NORMATIVA", null, "LIMITE PARA NORMATIVA", admission, catalogs.policy("NORMATIVE_TESTING"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
         certifications.put("ONE", certification(row, "ONE", "¿APLICA ONE?", "ESTATUS CERTIFICACIÓN ONE",
                 null, null, null, null, null, admission, catalogs.policy("ONE"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
         certifications.put("AGILE", certification(row, "AGILE", "¿APLICA AGILE?", "ESTATUS CERTIFICACIÓN AGILE",
                 null, null, null, null, null, admission, catalogs.policy("AGILE"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
         certifications.put("JIRA", certification(row, "JIRA", "APLICA JIRA", "ESTATUS DE VALORACIÓN JIRA",
                 null, null, null, null, null, admission, catalogs.policy("JIRA"),
-                row.rowNumber(), errors, warnings));
+                row.rowNumber(), parseIssues, rowWarnings));
 
         if (!organization.appliesCertifications() && certifications.values().stream().anyMatch(CertificationData::applies)) {
-            errors.add(new Issue(row.rowNumber(), "STUDENT_CERTIFICATIONS_NOT_ENABLED",
-                    "La organización no tiene habilitada la gestión de certificaciones."));
+            rowWarnings.add("La organización no tiene habilitada la gestión de certificaciones; la información de certificaciones de esta fila no se aplicará.");
+            certifications.replaceAll((type, value) -> emptyCertification(type));
         }
         if (technology != null && resolveQuestionTechnologyPublicId(organization.id(), technology) == null) {
-            warnings.add("La tecnología principal '" + technology
+            rowWarnings.add("La tecnología principal '" + technology
                     + "' se creará en los catálogos de la organización al confirmar.");
         }
 
@@ -758,21 +786,23 @@ public class StudentImportService {
         List<StudentExperienceService.ImportedItem> languages = parseExperience(valueStarting(row, "LENGUAJES"));
         List<StudentExperienceService.ImportedItem> known = parseExperience(valueStarting(row, "TECNOLOGIAS CONOCIDAS"));
         String rowKey = "ROW-" + row.rowNumber();
-        String normalizedName = StudentExperienceService.normalizeKey(fullName);
+        String normalizedName = fullName == null ? null : StudentExperienceService.normalizeKey(fullName);
         String normalizedEmail = email == null ? null : email.toLowerCase(Locale.ROOT);
-        String matchKey = normalizedEmail != null ? "EMAIL:" + normalizedEmail : "NAME:" + normalizedName;
-        String errorSubject = fullName == null || fullName.isBlank()
-                ? "Fila " + row.rowNumber()
-                : "Colaborador " + fullName;
-        List<Issue> contextualErrors = errors.stream()
-                .map(issue -> new Issue(issue.row(), issue.code(), errorSubject + ": " + issue.message()))
-                .toList();
+        String matchKey = normalizedEmail != null ? "EMAIL:" + normalizedEmail
+                : normalizedName == null || normalizedName.isBlank() ? null : "NAME:" + normalizedName;
+        String subject = fullName == null || fullName.isBlank()
+                ? "Fila " + row.rowNumber() : "Colaborador " + fullName;
+        List<Issue> contextualWarnings = new ArrayList<>();
+        for (Issue issue : parseIssues) {
+            contextualWarnings.add(new Issue(issue.row(), issue.code(), subject + ": " + issue.message()));
+            rowWarnings.add(issue.message());
+        }
         ImportedStudent student = new ImportedStudent(rowKey, row.rowNumber(), fullName, names.firstName(),
                 names.lastName(), normalizedName, email, normalizedEmail, matchKey, profile,
                 profileRef == null ? null : profileRef.publicId(), admission, technology, technologicalProfile,
                 techProfileRef == null ? null : techProfileRef.publicId(), certificationLevel(profile),
-                Map.copyOf(certifications), current, languages, known, List.copyOf(warnings), !contextualErrors.isEmpty());
-        return new ParseResult(student, contextualErrors);
+                Map.copyOf(certifications), current, languages, known, List.copyOf(new LinkedHashSet<>(rowWarnings)), false);
+        return new ParseResult(student, List.of(), List.copyOf(contextualWarnings));
     }
 
     private CertificationData certification(XlsxCertificationReader.RowData row, String type, String appliesHeader,
@@ -874,16 +904,12 @@ public class StudentImportService {
 
         LocalDate expiration = expirationForImport(type, lastApprovedApplicationDate, policy);
         String validity = validityStatus(expiration, approved);
-        if (applies && statusContains(certificationStatus, "VIGENTE") && "EXPIRED".equals(validity)) {
-            errors.add(new Issue(rowNumber, "STUDENT_IMPORT_EXPIRED_MARKED_VALID",
-                    typeLabel(type) + ": la fecha de aplicación produce una certificación vencida, pero el Excel la marca vigente."));
-        }
         String tracking = trackingStatus(applies, certificationStatus, examStatus, approved);
         String comparableStatus = certificationStatusLabel(applies, tracking, validity, approved);
         String processType = processTypeForImport(type, lastApprovedApplicationDate);
         LocalDate referenceDate = "RECERTIFICATION".equals(processType)
                 ? lastApprovedApplicationDate : admission;
-        return new CertificationData(type, applies, comparableStatus, examStatus, internalExamStatus,
+        return new CertificationData(type, applies, comparableStatus, certificationStatus, examStatus, internalExamStatus,
                 application, lastApprovedApplicationDate, score, administrativeFailures, deadline, explicitDeadline,
                 expiration, approved, validity, tracking,
                 processType, referenceDate, applies ? "IMPORT" : null);
@@ -914,9 +940,10 @@ public class StudentImportService {
 
     private Reconciliation reconcileCertificationLifecycle(ImportedStudent imported,
             Map<String, CertificationData> currentCertifications) {
-        if (imported == null) return new Reconciliation(null, List.of());
+        if (imported == null) return new Reconciliation(null, List.of(), List.of());
         Map<String, CertificationData> reconciled = new LinkedHashMap<>(imported.certifications());
-        List<Issue> issues = new ArrayList<>();
+        List<ConflictPreview> conflicts = new ArrayList<>();
+        List<Issue> warnings = new ArrayList<>();
         for (String type : CERT_TYPES) {
             CertificationData incoming = reconciled.get(type);
             if (incoming == null || !incoming.applies() || nonExpiring(type)) continue;
@@ -926,40 +953,116 @@ public class StudentImportService {
                     : current == null ? null : current.lastApprovedApplicationDate();
             boolean recertification = Boolean.TRUE.equals(incoming.approved()) || lastApproved != null;
             if (recertification && lastApproved == null) {
-                issues.add(new Issue(imported.rowNumber(), "STUDENT_IMPORT_RECERTIFICATION_REFERENCE_REQUIRED",
-                        "Colaborador " + imported.fullName() + ": " + typeLabel(type)
-                                + " se identifica como recertificación, pero no existe una fecha válida "
-                                + "de aplicación aprobada para calcular el vencimiento."));
+                warnings.add(new Issue(imported.rowNumber(), "STUDENT_IMPORT_RECERTIFICATION_REFERENCE_PENDING",
+                        collaboratorLabel(imported) + ": " + typeLabel(type)
+                                + " no tiene una fecha de aplicación aprobada para calcular el vencimiento."));
             }
             LocalDate deadline = recertification && !incoming.explicitDeadline()
                     ? null : incoming.deadline();
             LocalDate expiration = expirationForImport(type, lastApproved, null);
             String validity = validityStatus(expiration, recertification ? Boolean.TRUE : incoming.approved());
-            if ("EXPIRED".equals(incoming.trackingStatus()) && expiration != null
-                    && !"EXPIRED".equals(validity)) {
-                issues.add(new Issue(imported.rowNumber(), "STUDENT_IMPORT_EXPIRATION_STATUS_CONFLICT",
-                        "Colaborador " + imported.fullName() + ": " + typeLabel(type)
-                                + " está marcada como vencida, pero la última aprobación válida ("
-                                + lastApproved + ") produce vencimiento " + expiration + "."));
-            }
-            if (statusContains(incoming.certificationStatus(), "VIGENTE") && "EXPIRED".equals(validity)) {
-                issues.add(new Issue(imported.rowNumber(), "STUDENT_IMPORT_EXPIRED_MARKED_VALID",
-                        "Colaborador " + imported.fullName() + ": " + typeLabel(type)
-                                + " está marcada como vigente, pero venció el " + expiration + "."));
-            }
             Boolean everApproved = recertification ? Boolean.TRUE : incoming.approved();
             String processType = recertification ? "RECERTIFICATION" : "CERTIFICATION";
             LocalDate referenceDate = recertification ? lastApproved : imported.admissionDate();
-            String tracking = incoming.trackingStatus();
-            String comparableStatus = certificationStatusLabel(incoming.applies(), tracking, validity, everApproved);
-            reconciled.put(type, new CertificationData(type, incoming.applies(), comparableStatus,
-                    incoming.examStatus(), incoming.internalExamStatus(), incoming.applicationDate(),
-                    lastApproved, incoming.score10(), incoming.attempt(), deadline, incoming.explicitDeadline(),
-                    expiration, everApproved, validity, tracking, processType, referenceDate, incoming.resultSource()));
+            String platformTracking = "EXPIRED".equals(validity) ? "EXPIRED" : incoming.trackingStatus();
+            String platformStatus = certificationStatusLabel(
+                    incoming.applies(), platformTracking, validity, everApproved);
+            CertificationData platformData = new CertificationData(type, incoming.applies(), platformStatus,
+                    incoming.excelCertificationStatus(), incoming.examStatus(), incoming.internalExamStatus(),
+                    incoming.applicationDate(), lastApproved, incoming.score10(), incoming.attempt(), deadline,
+                    incoming.explicitDeadline(), expiration, everApproved, validity, platformTracking,
+                    processType, referenceDate, incoming.resultSource());
+            reconciled.put(type, platformData);
+
+            String excelValidity = excelValidityStatus(incoming.excelCertificationStatus());
+            if (excelValidity != null && !Objects.equals(excelValidity, validity)) {
+                String conflictId = conflictId(imported.rowKey(), "CERTIFICATION_VALIDITY", type);
+                String reason = "El Excel indica '" + text(incoming.excelCertificationStatus())
+                        + "', pero la fecha de aplicación " + text(lastApproved)
+                        + " produce vencimiento " + text(expiration)
+                        + " y el estado calculado es '" + platformStatus + "'.";
+                conflicts.add(new ConflictPreview(conflictId, imported.rowKey(), imported.rowNumber(),
+                        collaboratorName(imported), "STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+                        "CERTIFICATION_VALIDITY:" + type,
+                        "Conflicto de vigencia en " + typeLabel(type),
+                        "Estatus de certificación", type, typeLabel(type),
+                        text(incoming.excelCertificationStatus()),
+                        current == null ? "Sin registro" : text(current.certificationStatus()),
+                        platformStatus, reason,
+                        List.of(
+                                new ConflictAction("USE_PLATFORM", "Aplicar cálculo de la plataforma",
+                                        "Conserva la fecha de aplicación y aplica el estatus calculado."),
+                                new ConflictAction("USE_EXCEL", "Conservar estatus del Excel",
+                                        "Conserva la fecha de aplicación y aplica el estatus informado en el archivo."),
+                                new ConflictAction("OMIT_ROW", "Omitir este colaborador",
+                                        "No aplica cambios de esta fila y continúa con los demás colaboradores."))));
+            }
         }
-        boolean blocking = imported.hasBlockingErrors() || !issues.isEmpty();
-        return new Reconciliation(imported.withCertificationsAndWarnings(
-                Map.copyOf(reconciled), imported.warnings(), blocking), List.copyOf(issues));
+        ImportedStudent result = imported.withCertificationsAndWarnings(
+                Map.copyOf(reconciled), imported.warnings(), false);
+        return new Reconciliation(result, List.copyOf(conflicts), List.copyOf(warnings));
+    }
+
+    static String excelValidityStatus(String certificationStatus) {
+        if (certificationStatus == null || certificationStatus.isBlank()) return null;
+        String normalized = StudentExperienceService.normalizeKey(certificationStatus);
+        if (normalized.contains("VENCID") || normalized.contains("FUERA DE NORMA")) return "EXPIRED";
+        if (normalized.contains("PROXIMA A VENCER")) return "EXPIRING_SOON";
+        if (normalized.startsWith("VIGENTE")) return "VALID";
+        return null;
+    }
+
+    private static String conflictId(String rowKey, String code, String type) {
+        return rowKey + ":" + code + (type == null ? "" : ":" + type);
+    }
+
+    private static String collaboratorName(ImportedStudent imported) {
+        return blank(imported.fullName()) ? "Fila " + imported.rowNumber() : imported.fullName();
+    }
+
+    private static String collaboratorLabel(ImportedStudent imported) {
+        return blank(imported.fullName()) ? "Fila " + imported.rowNumber() : "Colaborador " + imported.fullName();
+    }
+
+    private ConflictPreview omissionConflict(ImportedStudent imported, String code, String title, String reason) {
+        return new ConflictPreview(conflictId(imported.rowKey(), code, null), imported.rowKey(),
+                imported.rowNumber(), collaboratorName(imported), code, code, title, "Identificación",
+                null, null, text(imported.fullName()), "Sin coincidencia única", "Omitir la fila",
+                reason, List.of(new ConflictAction("OMIT_ROW", "Omitir este colaborador",
+                        "No aplica cambios de esta fila y continúa con los demás colaboradores.")));
+    }
+
+    private ImportedStudent resolveConflictDecisions(ImportedStudent imported, PendingImport state,
+            Map<String, String> resolutions) {
+        ImportedStudent resolved = imported;
+        for (ConflictPreview conflict : state.conflicts().values()) {
+            if (!conflict.rowKey().equals(imported.rowKey())) continue;
+            String action = resolutions.get(conflict.id());
+            if ("OMIT_ROW".equals(action)) return null;
+            if ("USE_EXCEL".equals(action) && conflict.certificationType() != null) {
+                CertificationData current = resolved.certifications().get(conflict.certificationType());
+                if (current != null) {
+                    Map<String, CertificationData> certifications = new LinkedHashMap<>(resolved.certifications());
+                    certifications.put(conflict.certificationType(), applyExcelLifecycleChoice(current));
+                    resolved = resolved.withCertificationsAndWarnings(
+                            Map.copyOf(certifications), resolved.warnings(), false);
+                }
+            }
+        }
+        return resolved;
+    }
+
+    private CertificationData applyExcelLifecycleChoice(CertificationData current) {
+        String excelStatus = current.excelCertificationStatus();
+        String excelValidity = excelValidityStatus(excelStatus);
+        if (excelValidity == null) return current;
+        String tracking = "EXPIRED".equals(excelValidity)
+                ? "EXPIRED" : trackingStatus(current.applies(), excelStatus, current.examStatus(), current.approved());
+        return new CertificationData(current.type(), current.applies(), excelStatus, excelStatus,
+                current.examStatus(), current.internalExamStatus(), current.applicationDate(),
+                current.lastApprovedApplicationDate(), current.score10(), current.attempt(), current.deadline(),
+                current.explicitDeadline(), current.expiration(), current.approved(), excelValidity, tracking,
+                current.processType(), current.referenceDate(), current.resultSource());
     }
 
     private List<FieldChange> compare(ExistingStudent current, ImportedStudent imported,
@@ -1032,7 +1135,7 @@ public class StudentImportService {
     }
 
     private CertificationData emptyCertification(String type) {
-        return new CertificationData(type, false, null, null, "NOT_SCHEDULED", null, null, null, null, null,
+        return new CertificationData(type, false, null, null, null, "NOT_SCHEDULED", null, null, null, null, null,
                 false, null, null, "NOT_OBTAINED", "PENDING", "CERTIFICATION", null, null);
     }
 
@@ -1132,7 +1235,7 @@ public class StudentImportService {
                 Boolean approved = nullableBoolean(rs, "APPROVED");
                 CertificationData data = new CertificationData(type, applies,
                         certificationStatusLabel(applies, tracking, rs.getString("VALIDITY_STATUS"), approved),
-                        examStatusLabel(exam), exam,
+                        null, examStatusLabel(exam), exam,
                         localDate(rs, "APPLICATION_DATE"), localDate(rs, "LAST_APPROVED_APPLICATION_DATE"),
                         rs.getBigDecimal("SCORE"), nullableInteger(rs, "IMPORTED_FAILURE_COUNT"),
                         localDate(rs, "DEADLINE_DATE"), false,
@@ -1359,28 +1462,67 @@ public class StudentImportService {
 
     private Map<String, NewSelection> indexNew(List<NewSelection> selections) {
         Map<String, NewSelection> result = new HashMap<>();
-        if (selections != null) selections.forEach(value -> { if (value != null && value.rowKey() != null) result.put(value.rowKey(), value); });
+        if (selections != null) selections.forEach(value -> {
+            if (value != null && value.rowKey() != null) result.put(value.rowKey(), value);
+        });
         return result;
     }
+
     private Map<String, ChangeSelection> indexChanges(List<ChangeSelection> selections) {
         Map<String, ChangeSelection> result = new HashMap<>();
-        if (selections != null) selections.forEach(value -> { if (value != null && value.studentPublicId() != null) result.put(value.studentPublicId(), value); });
+        if (selections != null) selections.forEach(value -> {
+            if (value != null && value.studentPublicId() != null) result.put(value.studentPublicId(), value);
+        });
         return result;
     }
+
     private Map<String, LowSelection> indexLows(List<LowSelection> selections) {
         Map<String, LowSelection> result = new HashMap<>();
-        if (selections != null) selections.forEach(value -> { if (value != null && value.studentPublicId() != null) result.put(value.studentPublicId(), value); });
+        if (selections != null) selections.forEach(value -> {
+            if (value != null && value.studentPublicId() != null) result.put(value.studentPublicId(), value);
+        });
         return result;
     }
 
+    private Map<String, String> indexConflictResolutions(List<ConflictResolution> resolutions) {
+        Map<String, String> result = new HashMap<>();
+        if (resolutions != null) resolutions.forEach(value -> {
+            if (value != null && value.conflictId() != null && value.action() != null) {
+                result.put(value.conflictId(), value.action());
+            }
+        });
+        return result;
+    }
+
+    private Map<String, ChangeSelection> includeConflictFields(PendingImport state,
+            Map<String, ChangeSelection> selections, Map<String, String> resolutions) {
+        Map<String, ChangeSelection> result = new HashMap<>(selections);
+        for (ConflictPreview conflict : state.conflicts().values()) {
+            String action = resolutions.get(conflict.id());
+            if (conflict.certificationType() == null || "OMIT_ROW".equals(action)) continue;
+            Match match = state.matches().get(conflict.rowKey());
+            if (match == null || match.existing() == null) continue;
+            String studentPublicId = match.existing().publicId();
+            ChangeSelection current = result.get(studentPublicId);
+            Set<String> fields = new HashSet<>(current == null ? Set.of() : current.fields());
+            String prefix = "cert:" + conflict.certificationType() + ":";
+            fields.add(prefix + "status");
+            fields.add(prefix + "applicationDate");
+            fields.add(prefix + "lifecycle");
+            result.put(studentPublicId, new ChangeSelection(studentPublicId, fields));
+        }
+        return result;
+    }
 
     private void validateSelections(PendingImport state, Map<String, NewSelection> newSelections,
-            Map<String, ChangeSelection> changeSelections, Map<String, LowSelection> lowSelections) {
+            Map<String, ChangeSelection> changeSelections, Map<String, LowSelection> lowSelections,
+            Map<String, String> conflictResolutions) {
         if (!state.newRowKeys().containsAll(newSelections.keySet())
                 || !state.allowedChangeFields().keySet().containsAll(changeSelections.keySet())
-                || !state.possibleLowPublicIds().containsAll(lowSelections.keySet())) {
+                || !state.possibleLowPublicIds().containsAll(lowSelections.keySet())
+                || !state.conflicts().keySet().containsAll(conflictResolutions.keySet())) {
             throw new BusinessException("STUDENT_IMPORT_SELECTION_INVALID",
-                    "La selección contiene colaboradores que no pertenecen a la vista previa autorizada.");
+                    "La selección contiene registros que no pertenecen a la vista previa autorizada.");
         }
         for (ChangeSelection selection : changeSelections.values()) {
             Set<String> allowed = state.allowedChangeFields().getOrDefault(selection.studentPublicId(), Set.of());
@@ -1395,6 +1537,31 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_LOW_ACTION_INVALID",
                     "Selecciona una acción válida para cada posible baja.");
         }
+        for (ConflictPreview conflict : state.conflicts().values()) {
+            String action = conflictResolutions.get(conflict.id());
+            if (action == null || action.isBlank()) {
+                throw new BusinessException("STUDENT_IMPORT_CONFLICT_PENDING",
+                        "Selecciona cómo proceder con el conflicto de la fila " + conflict.row() + ".");
+            }
+            boolean allowed = conflict.actions().stream().anyMatch(option -> option.value().equals(action));
+            if (!allowed) {
+                throw new BusinessException("STUDENT_IMPORT_CONFLICT_ACTION_INVALID",
+                        "La decisión seleccionada para la fila " + conflict.row() + " no es válida.");
+            }
+        }
+    }
+
+    private String requireFullName(String value, int row) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException("STUDENT_IMPORT_NAME_REQUIRED",
+                    "Captura el nombre completo del nuevo colaborador de la fila " + row + ".");
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        if (normalized.length() > 250) {
+            throw new BusinessException("STUDENT_IMPORT_NAME_TOO_LONG",
+                    "El nombre completo de la fila " + row + " no puede exceder 250 caracteres.");
+        }
+        return normalized;
     }
 
     private String requireEmail(String value, int row) {
@@ -1412,11 +1579,6 @@ public class StudentImportService {
         LocalDate today = LocalDate.now(clock);
         return organization.expiresOn() != null && !organization.expiresOn().isBefore(today)
                 ? organization.expiresOn() : today.plusYears(1);
-    }
-
-    private String generatedStudentCode(String digest, ImportedStudent imported) {
-        String source = digest + ":" + imported.rowNumber() + ":" + imported.normalizedName();
-        return "IMP-" + sha256(source.getBytes(StandardCharsets.UTF_8)).substring(0, 12).toUpperCase(Locale.ROOT);
     }
 
     private ImportedStudent materializeCatalogs(Long organizationId, ImportedStudent imported, Long actorId,
@@ -1637,14 +1799,10 @@ public class StudentImportService {
         return matches.size() == 1 ? matches.getFirst() : null;
     }
 
-    private NameParts splitName(String fullName, int row, List<Issue> errors) {
-        if (fullName == null) return new NameParts("", "");
+    private NameParts splitName(String fullName, int row, List<Issue> issues) {
+        if (fullName == null || fullName.isBlank()) return new NameParts("", "");
         String[] parts = fullName.trim().split("\\s+");
-        if (parts.length < 2) {
-            errors.add(new Issue(row, "STUDENT_IMPORT_NAME_INCOMPLETE",
-                    "El nombre debe incluir nombre y apellidos para crear o actualizar una cuenta."));
-            return new NameParts(fullName, "");
-        }
+        if (parts.length == 1) return new NameParts(parts[0], "");
         int firstCount = parts.length >= 4 ? 2 : 1;
         String first = String.join(" ", java.util.Arrays.copyOfRange(parts, 0, firstCount));
         String last = String.join(" ", java.util.Arrays.copyOfRange(parts, firstCount, parts.length));
@@ -1927,6 +2085,7 @@ public class StudentImportService {
         if (value == null || !value.applies()) return "No aplica";
         return text(value.validityStatus()) + (value.expiration() == null ? "" : " · Vence " + value.expiration());
     }
+    private static boolean blank(String value) { return value == null || value.isBlank(); }
     private static String text(Object value) { return value == null || value.toString().isBlank() ? "Sin información" : value.toString(); }
     private static String nullIfBlank(String value) { return value == null || value.isBlank() ? null : value; }
     private static Integer booleanNumber(Boolean value) { return value == null ? null : value ? 1 : 0; }
@@ -1968,8 +2127,8 @@ public class StudentImportService {
     private record RowOutcome(int created, int updated, Credential credential) {
         static RowOutcome none() { return new RowOutcome(0, 0, null); }
     }
-    private record ParseResult(ImportedStudent student, List<Issue> errors) {}
-    private record Reconciliation(ImportedStudent student, List<Issue> issues) {}
+    private record ParseResult(ImportedStudent student, List<Issue> errors, List<Issue> warnings) {}
+    private record Reconciliation(ImportedStudent student, List<ConflictPreview> conflicts, List<Issue> warnings) {}
     private record NameParts(String firstName, String lastName) {}
     private record CatalogRef(String publicId, String code, String name) {}
     private record CatalogState(String publicId, String code, String name, String status) {}
@@ -2008,6 +2167,27 @@ public class StudentImportService {
             List<StudentExperienceService.ImportedItem> knownTechnologies,
             List<String> warnings, boolean hasBlockingErrors) {
         boolean flag(String type) { CertificationData value = certifications.get(type); return value != null && value.applies(); }
+        ImportedStudent withName(String value) {
+            String cleaned = value == null ? null : value.trim().replaceAll("\\s+", " ");
+            String[] parts = cleaned == null || cleaned.isBlank() ? new String[0] : cleaned.split("\\s+");
+            String nextFirst = "";
+            String nextLast = "";
+            if (parts.length == 1) {
+                nextFirst = parts[0];
+            } else if (parts.length > 1) {
+                int firstCount = parts.length >= 4 ? 2 : 1;
+                nextFirst = String.join(" ", java.util.Arrays.copyOfRange(parts, 0, firstCount));
+                nextLast = String.join(" ", java.util.Arrays.copyOfRange(parts, firstCount, parts.length));
+            }
+            String nextNormalizedName = cleaned == null ? null : StudentExperienceService.normalizeKey(cleaned);
+            String nextMatchKey = normalizedEmail != null ? "EMAIL:" + normalizedEmail
+                    : nextNormalizedName == null || nextNormalizedName.isBlank() ? null : "NAME:" + nextNormalizedName;
+            return new ImportedStudent(rowKey, rowNumber, cleaned, nextFirst, nextLast, nextNormalizedName,
+                    email, normalizedEmail, nextMatchKey, profileName, profilePublicId, admissionDate,
+                    primaryTechnology, technologicalProfileName, technologicalProfilePublicId,
+                    certificationLevel, certifications, currentTechnologies, languages, knownTechnologies,
+                    warnings, hasBlockingErrors);
+        }
         ImportedStudent withCertificationsAndWarnings(Map<String, CertificationData> nextCertifications,
                 List<String> nextWarnings) {
             return withCertificationsAndWarnings(nextCertifications, nextWarnings, hasBlockingErrors);
@@ -2022,8 +2202,8 @@ public class StudentImportService {
                     knownTechnologies, nextWarnings, nextHasBlockingErrors);
         }
     }
-    private record CertificationData(String type, boolean applies, String certificationStatus, String examStatus,
-            String internalExamStatus, LocalDate applicationDate, LocalDate lastApprovedApplicationDate,
+    private record CertificationData(String type, boolean applies, String certificationStatus, String excelCertificationStatus,
+            String examStatus, String internalExamStatus, LocalDate applicationDate, LocalDate lastApprovedApplicationDate,
             BigDecimal score10, Integer attempt,
             LocalDate deadline, boolean explicitDeadline, LocalDate expiration, Boolean approved, String validityStatus,
             String trackingStatus, String processType, LocalDate referenceDate, String resultSource) {}
@@ -2032,7 +2212,7 @@ public class StudentImportService {
             java.time.Instant expiresAt, Organization organization, List<ImportedStudent> imported,
             Map<String, Match> matches, Set<String> newRowKeys,
             Map<String, Set<String>> allowedChangeFields, Set<String> possibleLowPublicIds,
-            List<Issue> errors, List<Issue> conflicts) {}
+            List<Issue> errors, List<Issue> warnings, Map<String, ConflictPreview> conflicts) {}
     private record ExperienceSnapshot(List<StudentExperienceService.ImportedItem> current,
             List<StudentExperienceService.ImportedItem> languages,
             List<StudentExperienceService.ImportedItem> known) {
@@ -2058,23 +2238,30 @@ public class StudentImportService {
     public record Issue(int row, String code, String message) {}
     public record FieldChange(String key, String field, String currentValue, String excelValue, boolean selected) {}
     public record NewStudentPreview(String rowKey, int row, String collaborator, String profile,
-            String primaryTechnology, String suggestedEmail, List<String> warnings) {}
+            String primaryTechnology, String suggestedEmail, boolean nameRequired, List<String> warnings) {}
     public record ChangedStudentPreview(String studentPublicId, String rowKey, String collaborator,
             List<FieldChange> changes, List<String> warnings) {}
     public record PossibleLowPreview(String studentPublicId, String collaborator, String email, String action) {}
+    public record ConflictAction(String value, String label, String description) {}
+    public record ConflictPreview(String id, String rowKey, int row, String collaborator, String code,
+            String groupKey, String title, String field, String certificationType, String certification,
+            String excelValue, String currentValue, String calculatedValue, String reason,
+            List<ConflictAction> actions) {}
     public record Preview(String token, String fileName, String sheetName, String organizationName,
             String organizationCode, int totalRows, List<NewStudentPreview> newStudents,
             List<ChangedStudentPreview> changedStudents, List<PossibleLowPreview> possibleLows,
-            List<Issue> conflicts, List<Issue> errors, String notice) {}
-    public record NewSelection(String rowKey, String email, boolean selected) {}
+            List<ConflictPreview> conflicts, List<Issue> warnings, List<Issue> errors, String notice) {}
+    public record NewSelection(String rowKey, String fullName, String email, boolean selected) {}
     public record ChangeSelection(String studentPublicId, Set<String> fields) {
         public ChangeSelection { fields = fields == null ? Set.of() : Set.copyOf(fields); }
     }
     public record LowSelection(String studentPublicId, String action) {}
+    public record ConflictResolution(String conflictId, String action) {}
     public record ApplyCommand(String token, List<NewSelection> newStudents,
-            List<ChangeSelection> changedStudents, List<LowSelection> possibleLows) {}
+            List<ChangeSelection> changedStudents, List<LowSelection> possibleLows,
+            List<ConflictResolution> conflicts) {}
     public record Credential(String organization, String organizationCode, String collaborator,
-            String email, String temporaryPassword) {}
+            String email, String studentCode, String temporaryPassword) {}
     public record ApplyResult(int created, int updated, int possibleLowsProcessed,
             List<Issue> errors, List<Credential> credentials, String credentialsNotice) {}
 }

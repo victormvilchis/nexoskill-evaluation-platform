@@ -110,7 +110,7 @@ public class AdminStudentController {
         TenantContext resolvedTenant = tenant(request);
         if (foundation == null) {
             StudentService.CreateResult creation = service.create(resolvedTenant,
-                    new StudentService.CreateCommand(body.studentCode(), body.email(), body.firstName(),
+                    new StudentService.CreateCommand(body.email(), body.firstName(),
                             body.lastName(), body.displayName(),
                             body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(), body.expiresAt()),
                     actor(actor, request));
@@ -120,7 +120,7 @@ public class AdminStudentController {
                             created.email(), creation.temporaryPassword()));
         }
         StudentFoundationService.CreateResult creation = foundation.create(resolvedTenant,
-                new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.studentCode(), body.email(),
+                new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.email(),
                         body.firstName(), body.lastName(), body.displayName(), body.status(),
                         body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
@@ -268,10 +268,10 @@ public class AdminStudentController {
 
     private StudentCredentialStudentResponse credentialStudent(Object student) {
         if (student instanceof StudentFoundationService.StudentView view) {
-            return new StudentCredentialStudentResponse(view.publicId(), view.displayName(), view.email(), view.status());
+            return new StudentCredentialStudentResponse(view.publicId(), view.studentCode(), view.displayName(), view.email(), view.status());
         }
         if (student instanceof StudentService.StudentDetail detail) {
-            return new StudentCredentialStudentResponse(detail.publicId(), detail.displayName(), detail.email(), detail.status());
+            return new StudentCredentialStudentResponse(detail.publicId(), detail.studentCode(), detail.displayName(), detail.email(), detail.status());
         }
         throw new IllegalStateException("No fue posible construir la respuesta de credenciales del estudiante.");
     }
@@ -281,16 +281,12 @@ public class AdminStudentController {
     }
 
     public record CreateRequest(String organizationPublicId,
-            @NotBlank(message = "El código del estudiante es obligatorio.")
-            @Size(max = 80, message = "El código no puede superar 80 caracteres.") String studentCode,
             @NotBlank(message = "El correo electrónico es obligatorio.")
             @Email(message = "El correo electrónico no tiene un formato válido.")
             @Size(max = 254, message = "El correo no puede superar 254 caracteres.") String email,
-            @NotBlank(message = "El nombre es obligatorio.")
             @Size(max = 100, message = "El nombre no puede superar 100 caracteres.") String firstName,
-            @NotBlank(message = "Los apellidos son obligatorios.")
             @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
-            @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
+            @Size(max = 250, message = "El nombre completo no puede superar 250 caracteres.") String displayName,
             StudentStatus status,
             @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
@@ -302,11 +298,9 @@ public class AdminStudentController {
             @NotBlank(message = "El correo electrónico es obligatorio.")
             @Email(message = "El correo electrónico no tiene un formato válido.")
             @Size(max = 254, message = "El correo no puede superar 254 caracteres.") String email,
-            @NotBlank(message = "El nombre es obligatorio.")
             @Size(max = 100, message = "El nombre no puede superar 100 caracteres.") String firstName,
-            @NotBlank(message = "Los apellidos son obligatorios.")
             @Size(max = 150, message = "Los apellidos no pueden superar 150 caracteres.") String lastName,
-            @Size(max = 250, message = "El nombre visible no puede superar 250 caracteres.") String displayName,
+            @Size(max = 250, message = "El nombre completo no puede superar 250 caracteres.") String displayName,
             @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
             LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
@@ -316,7 +310,7 @@ public class AdminStudentController {
 
     public record StudentCredentialResponse(StudentCredentialStudentResponse student,
             TemporaryCredentialsResponse temporaryCredentials) {}
-    public record StudentCredentialStudentResponse(String publicId, String fullName, String email,
+    public record StudentCredentialStudentResponse(String publicId, String studentCode, String fullName, String email,
             StudentStatus status) {}
     public record TemporaryCredentialsResponse(String organizationLogin, String email,
             String temporaryPassword, boolean mustChangePassword) {}

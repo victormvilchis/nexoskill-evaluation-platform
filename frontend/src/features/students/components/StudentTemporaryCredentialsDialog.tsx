@@ -20,7 +20,8 @@ export function StudentTemporaryCredentialsDialog({ title, credentials, onClose 
   }
 
   const userAndPassword = `Correo: ${credentials.email}\nContraseña temporal: ${credentials.temporaryPassword}`
-  const complete = `Organización: ${credentials.organizationLogin}\n${userAndPassword}`
+  const codeLine = credentials.studentCode ? `Código: ${credentials.studentCode}\n` : ''
+  const complete = `Organización: ${credentials.organizationLogin}\n${codeLine}${userAndPassword}`
 
   return (
     <div className="dialog-backdrop" role="presentation">
@@ -32,6 +33,10 @@ export function StudentTemporaryCredentialsDialog({ title, credentials, onClose 
           <p>La contraseña temporal se mostrará una sola vez. Compártela de forma segura. El colaborador deberá cambiarla durante su primer inicio de sesión.</p>
         </div>
         <div className="temporary-credentials">
+          {credentials.studentCode && <div><span>Código</span><code>{credentials.studentCode}</code>
+            <button className="secondary-button" type="button"
+              onClick={() => void copy(credentials.studentCode!, 'Código copiado.')}>Copiar código</button>
+          </div>}
           <div><span>Organización</span><code>{credentials.organizationLogin}</code>
             <button className="secondary-button" type="button"
               onClick={() => void copy(credentials.organizationLogin, 'Organización copiada.')}>Copiar organización</button>

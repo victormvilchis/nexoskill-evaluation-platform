@@ -131,7 +131,7 @@ export function StudentManagementPage() {
     setError(undefined)
     try {
       const response = await resetStudentPassword(publicId)
-      setTemporaryCredentials(response.temporaryCredentials)
+      setTemporaryCredentials({ ...response.temporaryCredentials, studentCode: response.student.studentCode })
       setPendingAction(undefined)
       await loadAdministration()
       setHistoryPage(0)

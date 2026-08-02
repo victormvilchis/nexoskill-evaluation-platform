@@ -80,7 +80,7 @@ class StudentFoundationServiceTest {
     void rejectsCertificationDataWhenOrganizationDoesNotApplyCertifications() {
         when(organization.isAppliesCertifications()).thenReturn(false);
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
-                null, "ST-99", "student@example.com", "Nombre", "Apellidos", null, StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY,
+                null, "student@example.com", "Nombre", "Apellidos", null, StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY,
                 "00000000-0000-0000-0000-000000000031", null,
                 false, false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
@@ -92,7 +92,7 @@ class StudentFoundationServiceTest {
     @Test
     void managerCannotSendOrganizationEvenWhenItMatchesTheSession() {
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
-                tenant.organizationPublicId(), "ST-99", "student@example.com", "Nombre", "Apellidos",
+                tenant.organizationPublicId(), "student@example.com", "Nombre", "Apellidos",
                 null, StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), null,
                 null, null, false, false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,

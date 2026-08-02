@@ -103,6 +103,15 @@ class StudentImportServiceParsingTest {
     }
 
     @Test
+    void classifiesTheReportedIrvinStatusAsAResolvableValidityDifference() {
+        LocalDate applicationDate = LocalDate.of(2025, 7, 11);
+
+        assertEquals("VALID", StudentImportService.excelValidityStatus("VIGENTE - REGULAR"));
+        assertEquals(LocalDate.of(2026, 7, 11), StudentImportService.expirationForImport(
+                "DEVELOPMENT_SECURITY", applicationDate));
+    }
+
+    @Test
     void identifiesRecertificationOnlyWhenThereIsAnApprovedReferenceDate() {
         assertEquals("RECERTIFICATION", StudentImportService.processTypeForImport(
                 "TECHNOLOGICAL", LocalDate.of(2025, 11, 26)));

@@ -200,6 +200,11 @@ public class StudentJpaEntity {
         updatedAt = now;
     }
 
+    public void assignStudentCode(String studentCode, Long actorId, Instant now) {
+        this.studentCode = studentCode;
+        touch(actorId, now);
+    }
+
     public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
             String displayName, LocalDate validFrom, LocalDate expiresAt, Long actorId, Instant now) {
         this.email = email;

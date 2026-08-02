@@ -108,7 +108,7 @@ public class StudentFoundationService {
                 command.appliesAgile(), command.appliesJira());
         StudentStatus initialStatus = command.status() == null ? StudentStatus.ACTIVE : command.status();
         StudentService.CreateResult creation = studentService.create(effective,
-                new StudentService.CreateCommand(command.studentCode(), command.email(), command.firstName(),
+                new StudentService.CreateCommand(command.email(), command.firstName(),
                         command.lastName(), command.displayName(), initialStatus,
                         command.validFrom(), command.expiresAt()), actor);
         StudentService.StudentDetail created = creation.student();
@@ -116,7 +116,7 @@ public class StudentFoundationService {
                 command.professionalProfilePublicId(), command.technologicalProfilePublicId(),
                 command.appliesTechnologicalCertification(), command.appliesDevelopmentSecurity(),
                 command.appliesNormativeTesting(), command.appliesOne(), command.appliesAgile(),
-                command.appliesJira(), actor.userId(), false);
+                command.appliesJira(), actor.userId(), null);
         recordFoundationAudit(actor, "STUDENT_FOUNDATION_CREATED", created.publicId(), organization, command);
         return new CreateResult(get(tenant, created.publicId()), creation.temporaryPassword());
     }
@@ -137,7 +137,7 @@ public class StudentFoundationService {
         updateFoundation(publicId, organization, command.admissionDate(), command.professionalProfilePublicId(),
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
-                command.appliesAgile(), command.appliesJira(), actor.userId(), !java.util.Objects.equals(previous.admissionDate(), command.admissionDate()));
+                command.appliesAgile(), command.appliesJira(), actor.userId(), previous.admissionDate());
         recordApplicabilityChanges(actor, previous, command, organization);
         recordFoundationAudit(actor, "STUDENT_FOUNDATION_UPDATED", publicId, organization, command);
         return get(tenant, publicId);
@@ -245,17 +245,12 @@ public class StudentFoundationService {
                     "La organización seleccionada no tiene habilitada la gestión de certificaciones.",
                     Map.of("certifications", "Retira los datos de perfil y certificación para esta organización."));
         }
-        if (organization.isAppliesCertifications() && admissionDate == null) {
-            throw new BusinessException("STUDENT_ADMISSION_DATE_REQUIRED",
-                    "La fecha de alta es obligatoria cuando la organización aplica certificaciones.",
-                    Map.of("admissionDate", "La fecha de alta es obligatoria cuando la organización aplica certificaciones."));
-        }
     }
 
     private void updateFoundation(String studentPublicId, OrganizationJpaEntity organization, LocalDate admissionDate,
             String professionalProfilePublicId, String technologicalProfilePublicId, boolean appliesTechnological,
             boolean appliesDevelopment, boolean appliesNormative, boolean appliesOne, boolean appliesAgile,
-            boolean appliesJira, Long actorId, boolean admissionDateChanged) {
+            boolean appliesJira, Long actorId, LocalDate previousAdmissionDate) {
         boolean enabled = organization.isAppliesCertifications();
         Long profileId = enabled ? resolveCatalogId("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID",
                 professionalProfilePublicId, organization.getId(), "professionalProfilePublicId",
@@ -268,8 +263,8 @@ public class StudentFoundationService {
                 .addValue("professionalProfileId", profileId)
                 .addValue("technologicalProfileId", technologicalProfileId)
                 .addValue("enabled", anyArea ? 1 : 0)
-                .addValue("admissionDate", enabled ? java.sql.Date.valueOf(admissionDate) : null,
-                        java.sql.Types.DATE)
+                .addValue("admissionDate", enabled && admissionDate != null
+                        ? java.sql.Date.valueOf(admissionDate) : null, java.sql.Types.DATE)
                 .addValue("appliesTechnological", enabled && appliesTechnological ? 1 : 0)
                 .addValue("appliesDevelopment", enabled && appliesDevelopment ? 1 : 0)
                 .addValue("appliesNormative", enabled && appliesNormative ? 1 : 0)
@@ -295,8 +290,11 @@ public class StudentFoundationService {
              WHERE PUBLIC_ID = :studentPublicId
             """, params);
         synchronizeCycleApplicability(studentPublicId, params);
+        boolean admissionDateChanged = !java.util.Objects.equals(previousAdmissionDate, admissionDate);
         if (admissionDateChanged && enabled && admissionDate != null) {
             recalculatePendingDeadlines(studentPublicId, admissionDate);
+        } else if (admissionDateChanged && previousAdmissionDate != null && admissionDate == null) {
+            clearAdmissionBasedDeadlines(studentPublicId, previousAdmissionDate);
         }
     }
 
@@ -342,6 +340,29 @@ public class StudentFoundationService {
                               AND p.STATUS = 'ACTIVE'
                               AND (p.DEADLINE_MONTHS IS NOT NULL OR p.DEADLINE_DAYS IS NOT NULL))
             """, Map.of("admissionDate", java.sql.Date.valueOf(admissionDate), "studentPublicId", studentPublicId));
+    }
+
+    private void clearAdmissionBasedDeadlines(String studentPublicId, LocalDate previousAdmissionDate) {
+        jdbc.update("""
+            UPDATE STUDENT_CERTIFICATION_CYCLE c
+               SET c.DEADLINE_DATE = NULL,
+                   c.UPDATED_AT = SYSTIMESTAMP
+             WHERE c.STUDENT_ID = (SELECT STUDENT_ID FROM STUDENT WHERE PUBLIC_ID = :studentPublicId)
+               AND c.CERTIFICATION_TYPE NOT IN ('ONE','AGILE','JIRA')
+               AND c.APPLICATION_DATE IS NULL
+               AND c.LAST_APPROVED_APPLICATION_DATE IS NULL
+               AND NVL(c.APPROVED, 0) = 0
+               AND EXISTS (
+                    SELECT 1
+                      FROM ORGANIZATION_CERTIFICATION_POLICY p
+                     WHERE p.ORGANIZATION_ID = c.ORGANIZATION_ID
+                       AND p.CERTIFICATION_TYPE = c.CERTIFICATION_TYPE
+                       AND p.STATUS = 'ACTIVE'
+                       AND c.DEADLINE_DATE = ADD_MONTHS(:previousAdmissionDate, NVL(p.DEADLINE_MONTHS, 0))
+                           + NVL(p.DEADLINE_DAYS, 0)
+               )
+            """, Map.of("previousAdmissionDate", java.sql.Date.valueOf(previousAdmissionDate),
+                    "studentPublicId", studentPublicId));
     }
 
     private Long resolveCatalogId(String table, String idColumn, String publicId, Long organizationId,
@@ -547,7 +568,7 @@ public class StudentFoundationService {
     public record SearchCriteria(String query, StudentEffectiveStatus status, boolean includeDeleted,
             String organizationPublicId, String profilePublicId, String technologicalProfilePublicId,
             String technologyPublicId, Boolean certificationsEnabled, String sort, String direction) {}
-    public record CreateCommand(String organizationPublicId, String studentCode, String email, String firstName,
+    public record CreateCommand(String organizationPublicId, String email, String firstName,
             String lastName, String displayName, StudentStatus status, LocalDate validFrom,
             LocalDate expiresAt, LocalDate admissionDate, String professionalProfilePublicId,
             String technologicalProfilePublicId, boolean appliesTechnologicalCertification,

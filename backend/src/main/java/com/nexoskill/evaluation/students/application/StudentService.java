@@ -21,10 +21,11 @@ import com.nexoskill.evaluation.users.application.service.SecureTemporaryPasswor
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.text.Normalizer;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -93,7 +94,8 @@ public class StudentService {
 
     @Transactional
     public CreateResult create(TenantContext tenant, CreateCommand command, Actor actor) {
-        Long organizationId = requireOperationalOrganization(tenant);
+        OrganizationJpaEntity organization = requireOperationalOrganizationEntity(tenant);
+        Long organizationId = organization.getId();
         validateRequired(command);
         validateDates(command.validFrom(), command.expiresAt());
         StudentStatus initialStatus = command.status() == null ? StudentStatus.ACTIVE : command.status();
@@ -113,30 +115,34 @@ public class StudentService {
         }
         String temporaryPassword = generateValidTemporaryPassword(command.email());
         String normalizedEmail = EmailNormalizer.normalize(command.email());
-        String code = normalizeCode(command.studentCode());
         if (studentRepository.existsByOrganizationIdAndNormalizedEmail(organizationId, normalizedEmail)) {
             throw fieldError("STUDENT_EMAIL_EXISTS", "El correo ya está registrado.",
                     "email", "Ya existe un estudiante con este correo dentro de la organización.");
         }
-        if (studentRepository.existsByOrganizationIdAndStudentCode(organizationId, code)) {
-            throw fieldError("STUDENT_CODE_EXISTS", "El código ya está registrado.",
-                    "studentCode", "Ya existe un estudiante con este código dentro de la organización.");
-        }
-        StudentJpaEntity student = StudentJpaEntity.create(UUID.randomUUID().toString(), organizationId, code,
+        String publicId = UUID.randomUUID().toString();
+        ResolvedName name = resolveName(command.firstName(), command.lastName(), command.displayName());
+        StudentJpaEntity student = StudentJpaEntity.create(publicId, organizationId,
+                provisionalStudentCode(organization.getName(), publicId),
                 command.email().trim(), normalizedEmail, passwordHasher.encode(temporaryPassword),
-                command.firstName().trim(), command.lastName().trim(),
-                displayName(command.displayName(), command.firstName(), command.lastName()), initialStatus,
+                name.firstName(), name.lastName(), name.displayName(), initialStatus,
                 command.validFrom(), command.expiresAt(),
                 now.plus(properties.getSecurity().getTemporaryPasswordDuration()), actor.userId(), now);
         try {
             student = studentRepository.saveAndFlush(student);
+            if (student.getId() == null) {
+                throw new BusinessException("STUDENT_CODE_GENERATION_FAILED",
+                        "No fue posible obtener el identificador del colaborador para generar su código.");
+            }
+            student.assignStudentCode(finalStudentCode(organization.getName(), student.getId()), actor.userId(), now);
+            student = studentRepository.saveAndFlush(student);
         } catch (DataIntegrityViolationException exception) {
             throw new BusinessException("STUDENT_CONFLICT",
-                    "El correo o código del estudiante ya está registrado en la organización.",
-                    Map.of("email", "Verifica que el correo y el código no estén registrados."));
+                    "El correo del estudiante ya está registrado en la organización.",
+                    Map.of("email", "Verifica que el correo no esté registrado."));
         }
         audit(actor, "STUDENT_CREATED", student,
-                Map.of("initialStatus", initialStatus.name(), "passwordChangeRequired", true), now);
+                Map.of("initialStatus", initialStatus.name(), "passwordChangeRequired", true,
+                        "studentCode", student.getStudentCode()), now);
         audit(actor, "STUDENT_TEMPORARY_PASSWORD_GENERATED", student,
                 Map.of("oneTimeDisplay", true, "passwordChangeRequired", true), now);
         return new CreateResult(detail(student, now), temporaryPassword);
@@ -159,9 +165,9 @@ public class StudentService {
         Instant now = clock.instant();
         LocalDate previousValidFrom = student.getValidFrom();
         LocalDate previousExpiresAt = student.getExpiresAt();
-        student.updateProfile(command.email().trim(), normalizedEmail, command.firstName().trim(),
-                command.lastName().trim(), displayName(command.displayName(), command.firstName(), command.lastName()),
-                command.validFrom(), command.expiresAt(), actor.userId(), now);
+        ResolvedName name = resolveName(command.firstName(), command.lastName(), command.displayName());
+        student.updateProfile(command.email().trim(), normalizedEmail, name.firstName(), name.lastName(),
+                name.displayName(), command.validFrom(), command.expiresAt(), actor.userId(), now);
         student = studentRepository.save(student);
         StudentEffectiveStatus effectiveStatus = student.effectiveStatusOn(LocalDate.now(clock));
         if (effectiveStatus != StudentEffectiveStatus.ACTIVE) {
@@ -296,6 +302,10 @@ public class StudentService {
     }
 
     private Long requireOperationalOrganization(TenantContext tenant) {
+        return requireOperationalOrganizationEntity(tenant).getId();
+    }
+
+    private OrganizationJpaEntity requireOperationalOrganizationEntity(TenantContext tenant) {
         Long organizationId = requireOrganization(tenant);
         OrganizationJpaEntity organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
@@ -304,20 +314,24 @@ public class StudentService {
                     "La organización debe estar activa y vigente para activar estudiantes.",
                     Map.of("organizationPublicId", "Selecciona una organización comercial activa y vigente."));
         }
-        return organizationId;
+        return organization;
     }
 
     private void validateRequired(CreateCommand command) {
         if (command == null) throw new BusinessException("VALIDATION_ERROR", "La solicitud contiene datos inválidos.");
-        if (blank(command.firstName())) throw fieldError("STUDENT_FIRST_NAME_REQUIRED", "El nombre es obligatorio.", "firstName", "El nombre es obligatorio.");
-        if (blank(command.lastName())) throw fieldError("STUDENT_LAST_NAME_REQUIRED", "Los apellidos son obligatorios.", "lastName", "Los apellidos son obligatorios.");
+        if (blank(command.displayName()) && blank(command.firstName()) && blank(command.lastName())) {
+            throw fieldError("STUDENT_NAME_REQUIRED", "El nombre completo es obligatorio.",
+                    "displayName", "El nombre completo del colaborador es obligatorio.");
+        }
         if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
     }
 
     private void validateUpdateRequired(UpdateCommand command) {
         if (command == null) throw new BusinessException("VALIDATION_ERROR", "La solicitud contiene datos inválidos.");
-        if (blank(command.firstName())) throw fieldError("STUDENT_FIRST_NAME_REQUIRED", "El nombre es obligatorio.", "firstName", "El nombre es obligatorio.");
-        if (blank(command.lastName())) throw fieldError("STUDENT_LAST_NAME_REQUIRED", "Los apellidos son obligatorios.", "lastName", "Los apellidos son obligatorios.");
+        if (blank(command.displayName()) && blank(command.firstName()) && blank(command.lastName())) {
+            throw fieldError("STUDENT_NAME_REQUIRED", "El nombre completo es obligatorio.",
+                    "displayName", "El nombre completo del colaborador es obligatorio.");
+        }
         if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
     }
 
@@ -351,11 +365,23 @@ public class StudentService {
         }
     }
 
-    private String normalizeCode(String code) {
-        if (blank(code)) throw fieldError("STUDENT_CODE_REQUIRED", "El código es obligatorio.", "studentCode", "El código del estudiante es obligatorio.");
-        String normalized = code.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_").replaceAll("_+", "_");
-        if (normalized.length() > 80) throw fieldError("STUDENT_CODE_INVALID", "El código es demasiado largo.", "studentCode", "El código no puede superar 80 caracteres.");
-        return normalized;
+    private String provisionalStudentCode(String organizationName, String publicId) {
+        String suffix = publicId.replace("-", "").toUpperCase(java.util.Locale.ROOT);
+        return organizationPrefix(organizationName) + "00" + suffix.substring(0, Math.min(16, suffix.length()));
+    }
+
+    private String finalStudentCode(String organizationName, Long studentId) {
+        int randomDigits = ThreadLocalRandom.current().nextInt(100);
+        return organizationPrefix(organizationName) + String.format(java.util.Locale.ROOT, "%02d", randomDigits)
+                + studentId;
+    }
+
+    static String organizationPrefix(String organizationName) {
+        String normalized = Normalizer.normalize(organizationName == null ? "" : organizationName,
+                Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z]", "").toUpperCase(java.util.Locale.ROOT);
+        String prefix = normalized.length() >= 3 ? normalized.substring(0, 3) : normalized;
+        return (prefix + "XXX").substring(0, 3);
     }
 
     private BusinessException fieldError(String code, String message, String field, String fieldMessage) {
@@ -363,9 +389,21 @@ public class StudentService {
     }
 
     private boolean blank(String value) { return value == null || value.isBlank(); }
+    private String cleanNamePart(String value) { return value == null ? "" : value.trim(); }
     private String normalizeQuery(String query) { return blank(query) ? null : query.trim(); }
-    private String displayName(String displayName, String firstName, String lastName) {
-        return blank(displayName) ? firstName.trim() + " " + lastName.trim() : displayName.trim();
+
+    private ResolvedName resolveName(String firstName, String lastName, String displayName) {
+        String cleanFirst = cleanNamePart(firstName);
+        String cleanLast = cleanNamePart(lastName);
+        String cleanDisplay = !blank(displayName) ? displayName.trim()
+                : (cleanFirst + " " + cleanLast).trim();
+        if (cleanFirst.isBlank()) {
+            String[] parts = cleanDisplay.split("\s+", 2);
+            cleanFirst = parts[0];
+            if (cleanLast.isBlank() && parts.length > 1) cleanLast = parts[1];
+        }
+        if (cleanLast.isBlank()) cleanLast = "-";
+        return new ResolvedName(cleanFirst, cleanLast, cleanDisplay);
     }
 
     private void audit(Actor actor, String event, StudentJpaEntity student, Map<String, Object> extra, Instant now) {
@@ -395,8 +433,10 @@ public class StudentService {
                 session.getRevocationReason() == null ? null : session.getRevocationReason().name());
     }
 
+    private record ResolvedName(String firstName, String lastName, String displayName) {}
+
     public record Actor(Long userId, String ipAddress, String userAgent) {}
-    public record CreateCommand(String studentCode, String email, String firstName, String lastName,
+    public record CreateCommand(String email, String firstName, String lastName,
             String displayName, StudentStatus status, LocalDate validFrom, LocalDate expiresAt) {}
     public record UpdateCommand(String email, String firstName, String lastName, String displayName,
             LocalDate validFrom, LocalDate expiresAt, Long version) {}

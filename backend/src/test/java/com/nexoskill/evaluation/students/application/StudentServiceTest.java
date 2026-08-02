@@ -65,7 +65,11 @@ class StudentServiceTest {
         setId(organization, 20L);
         when(organizations.findById(20L)).thenReturn(Optional.of(organization));
         when(passwords.encode(any())).thenReturn("encoded-password");
-        when(students.saveAndFlush(any(StudentJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(students.saveAndFlush(any(StudentJpaEntity.class))).thenAnswer(invocation -> {
+            StudentJpaEntity saved = invocation.getArgument(0);
+            if (saved.getId() == null) setId(saved, 30L);
+            return saved;
+        });
     }
 
     @Test
@@ -93,14 +97,21 @@ class StudentServiceTest {
     @Test
     void shouldCreateAnInactiveStudentWithoutCreatingASession() {
         StudentService.CreateResult result = service.create(TENANT,
-                new StudentService.CreateCommand("stu-001", "ana@example.com", "Ana", "López", null,
+                new StudentService.CreateCommand("ana@example.com", "", "", "Ana López",
                         StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30)),
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
         assertThat(result.temporaryPassword()).isEqualTo("Generated1!");
-        assertThat(result.student().studentCode()).isEqualTo("STU-001");
+        assertThat(result.student().studentCode()).matches("ACM\\d{2}30");
         assertThat(result.student().status()).isEqualTo(StudentStatus.INACTIVE);
         verify(passwords).encode("Generated1!");
         verify(sessions, never()).save(any(StudentSessionJpaEntity.class));
+    }
+
+
+    @Test
+    void shouldNormalizeOrganizationPrefixWithoutAccents() {
+        assertThat(StudentService.organizationPrefix("Ábaco")).isEqualTo("ABA");
+        assertThat(StudentService.organizationPrefix("BBVA")).isEqualTo("BBV");
     }
 
     @Test

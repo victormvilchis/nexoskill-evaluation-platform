@@ -855,8 +855,7 @@ public class StudentCertificationService {
     private LocalDate deadline(Scope scope, CertificationType type) {
         if (nonExpiring(type)) return null;
         LocalDate admission = scope.student().getAdmissionDate();
-        if (admission == null) throw new BusinessException("CERTIFICATION_ADMISSION_DATE_REQUIRED",
-                "La fecha de alta es obligatoria para calcular las fechas límite.");
+        if (admission == null) return null;
         Policy policy = policy(scope.organizationId(), type);
         if (policy.deadlineMonths() == null && policy.deadlineDays() == null) return null;
         return CertificationLifecycleCalculator.deadline(admission, policy.deadlineMonths(), policy.deadlineDays());

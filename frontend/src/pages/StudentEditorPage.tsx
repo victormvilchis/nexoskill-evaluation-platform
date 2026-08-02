@@ -243,14 +243,15 @@ export function StudentEditorPage({ mode }: Props) {
   function validateForm() {
     const errors: Record<string, string> = {}
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
-    if (!studentCode.trim() && mode === 'create') errors.studentCode = 'El código del colaborador es obligatorio.'
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
-    if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
-    if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
+    if (mode === 'create') {
+      if (!displayName.trim()) errors.displayName = 'El nombre completo es obligatorio.'
+    } else if (!displayName.trim() && !firstName.trim() && !lastName.trim()) {
+      errors.displayName = 'El nombre completo es obligatorio.'
+    }
     if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
     if (!expiresAt) errors.expiresAt = 'La fecha de vencimiento es obligatoria.'
     if (validFrom && expiresAt && expiresAt < validFrom) errors.expiresAt = 'La fecha de vencimiento no puede ser anterior al inicio de vigencia.'
-    if (appliesCertifications && !admissionDate) errors.admissionDate = 'La fecha de alta es obligatoria cuando la organización aplica certificaciones.'
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) focusFirstFieldError(errors)
     return Object.keys(errors).length === 0
@@ -267,11 +268,11 @@ export function StudentEditorPage({ mode }: Props) {
     try {
       if (mode === 'create') {
         const response = await createStudent({
-          ...(administrator ? { organizationPublicId } : {}), studentCode: studentCode.trim(), email: email.trim(),
-          firstName: firstName.trim(), lastName: lastName.trim(), displayName: displayName.trim() || undefined,
+          ...(administrator ? { organizationPublicId } : {}), email: email.trim(),
+          firstName: '', lastName: '', displayName: displayName.trim(),
           status: 'ACTIVE', validFrom, expiresAt, ...certificationPayload
         })
-        setTemporaryCredentials(response.temporaryCredentials)
+        setTemporaryCredentials({ ...response.temporaryCredentials, studentCode: response.student.studentCode })
         try {
           await updateStudentExperience(response.student.publicId, cleanExperience(experience))
         } catch {
@@ -319,11 +320,15 @@ export function StudentEditorPage({ mode }: Props) {
         {mode === 'create' && !administrator && catalogError && <div className="error-message" role="alert">{catalogError}</div>}
         {organizationResolved && <>
           <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Datos generales</p><h2>Identidad y acceso</h2></div></div><div className="foundation-form-grid">
-            <label className="form-field"><span>Código</span>{readOnly ? <strong className="readonly-value">{studentCode}</strong> : <input name="studentCode" value={studentCode} onChange={(event) => setStudentCode(event.target.value)} disabled={mode === 'edit'} required aria-invalid={Boolean(fieldErrors.studentCode)} />}{field('studentCode')}</label>
+            <label className="form-field"><span>Código</span>{mode === 'create'
+              ? <strong className="readonly-value">Se generará automáticamente al crear el colaborador</strong>
+              : <strong className="readonly-value">{studentCode}</strong>}</label>
             <label className="form-field"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
-            <label className="form-field"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
-            <label className="form-field"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
-            <label className="form-field"><span>Nombre visible</span>{readOnly ? <strong className="readonly-value">{displayName}</strong> : <input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />}</label>
+            {mode === 'create' ? <label className="form-field"><span>Nombre completo</span><input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required aria-invalid={Boolean(fieldErrors.displayName)} />{field('displayName')}</label> : <>
+              <label className="form-field"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
+              <label className="form-field"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
+              <label className="form-field"><span>Nombre completo</span>{readOnly ? <strong className="readonly-value">{displayName}</strong> : <input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} aria-invalid={Boolean(fieldErrors.displayName)} />}{field('displayName')}</label>
+            </>}
             <label className="form-field"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <input name="validFrom" type="date" value={validFrom} onChange={(event) => setValidFrom(event.target.value)} required aria-invalid={Boolean(fieldErrors.validFrom)} />}{field('validFrom')}</label>
             <label className="form-field"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <input name="expiresAt" type="date" value={expiresAt} min={validFrom || undefined} onChange={(event) => setExpiresAt(event.target.value)} required aria-invalid={Boolean(fieldErrors.expiresAt)} />}{field('expiresAt')}</label>
             {readOnly && student?.organization && <label className="form-field"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
@@ -332,7 +337,7 @@ export function StudentEditorPage({ mode }: Props) {
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
             <label className="form-field"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={(event) => setProfessionalProfilePublicId(event.target.value)} disabled={profileOptions.length === 0}><option value="">Seleccionar perfil</option>{profileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
             <label className="form-field"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={(event) => setTechnologicalProfilePublicId(event.target.value)} disabled={technologicalProfileOptions.length === 0}><option value="">Seleccionar perfil tecnológico</option>{technologicalProfileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
-            <label className="form-field"><span>Fecha de alta</span>{readOnly ? <strong className="readonly-value">{formatDate(admissionDate)}</strong> : <input name="admissionDate" type="date" value={admissionDate} onChange={(event) => setAdmissionDate(event.target.value)} required aria-invalid={Boolean(fieldErrors.admissionDate)} />}{field('admissionDate')}{!readOnly && mode === 'edit' && <small>Al cambiarla se recalculan solo las fechas límite pendientes.</small>}</label>
+            <label className="form-field"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{formatDate(admissionDate)}</strong> : <input name="admissionDate" type="date" value={admissionDate} onChange={(event) => setAdmissionDate(event.target.value)} aria-invalid={Boolean(fieldErrors.admissionDate)} />}{field('admissionDate')}{!readOnly && admissionDate && mode === 'edit' && <small>Al cambiarla se recalculan únicamente las fechas límite pendientes.</small>}{!readOnly && !admissionDate && <small className="warning-text">Las fechas límite que dependan de la fecha de alta permanecerán pendientes.</small>}</label>
           </div>}</section>}
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">Selecciona únicamente las áreas que aplican.</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} onChange={(event) => { const nextValue = event.target.checked; if (mode === 'edit' && !nextValue && flags[option.key] && !window.confirm('Esta área dejará de estar disponible para nuevos seguimientos. El historial existente se conservará.')) return; setFlags((current) => ({ ...current, [option.key]: nextValue })) }} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />

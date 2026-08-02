@@ -15,10 +15,11 @@ export interface StudentImportFieldChange {
 export interface NewStudentPreview {
   rowKey: string
   row: number
-  collaborator: string
+  collaborator: string | null
   profile: string | null
   primaryTechnology: string | null
   suggestedEmail: string | null
+  nameRequired: boolean
   warnings: string[]
 }
 
@@ -37,6 +38,32 @@ export interface PossibleLowPreview {
   action: 'KEEP'
 }
 
+export type StudentImportConflictActionValue = 'USE_PLATFORM' | 'USE_EXCEL' | 'OMIT_ROW'
+
+export interface StudentImportConflictAction {
+  value: StudentImportConflictActionValue
+  label: string
+  description: string
+}
+
+export interface StudentImportConflict {
+  id: string
+  rowKey: string
+  row: number
+  collaborator: string
+  code: string
+  groupKey: string
+  title: string
+  field: string
+  certificationType: string | null
+  certification: string | null
+  excelValue: string
+  currentValue: string
+  calculatedValue: string
+  reason: string
+  actions: StudentImportConflictAction[]
+}
+
 export interface StudentImportPreview {
   token: string
   fileName: string
@@ -47,16 +74,18 @@ export interface StudentImportPreview {
   newStudents: NewStudentPreview[]
   changedStudents: ChangedStudentPreview[]
   possibleLows: PossibleLowPreview[]
-  conflicts: StudentImportIssue[]
+  conflicts: StudentImportConflict[]
+  warnings: StudentImportIssue[]
   errors: StudentImportIssue[]
   notice: string
 }
 
 export interface StudentImportApplyCommand {
   token: string
-  newStudents: Array<{ rowKey: string; email: string; selected: boolean }>
+  newStudents: Array<{ rowKey: string; fullName: string; email: string; selected: boolean }>
   changedStudents: Array<{ studentPublicId: string; fields: string[] }>
   possibleLows: Array<{ studentPublicId: string; action: 'KEEP' | 'DEACTIVATE' | 'IGNORE' }>
+  conflicts: Array<{ conflictId: string; action: StudentImportConflictActionValue }>
 }
 
 export interface StudentImportCredential {
@@ -64,6 +93,7 @@ export interface StudentImportCredential {
   organizationCode: string
   collaborator: string
   email: string
+  studentCode: string
   temporaryPassword: string
 }
 

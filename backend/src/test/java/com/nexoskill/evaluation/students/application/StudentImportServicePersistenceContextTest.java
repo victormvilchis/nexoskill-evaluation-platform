@@ -97,15 +97,20 @@ class StudentImportServicePersistenceContextTest {
     }
 
     @Test
-    void rejectsCertificationApplicationWithoutAnImportedAdmissionDate() {
-        StudentImportService service = service(
-                mock(NamedParameterJdbcTemplate.class), mock(EntityManager.class));
+    void acceptsCertificationApplicationWithoutAnImportedAdmissionDate() {
+        EntityManager entityManager = mock(EntityManager.class);
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        StudentJpaEntity student = mock(StudentJpaEntity.class);
+        when(jdbc.update(anyString(), any(SqlParameterSource.class))).thenReturn(1);
+        when(entityManager.find(StudentJpaEntity.class, 91L)).thenReturn(student);
+        when(student.getOrganizationId()).thenReturn(8L);
+        when(student.getPublicId()).thenReturn("student-public-id");
+        when(student.getAdmissionDate()).thenReturn(null);
+        StudentImportService service = service(jdbc, entityManager);
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> service.synchronizeStudentFoundationForCertification(
-                        91L, 8L, "student-public-id", null));
+        service.synchronizeStudentFoundationForCertification(91L, 8L, "student-public-id", null);
 
-        assertEquals("STUDENT_IMPORT_ADMISSION_DATE_REQUIRED", exception.getCode());
+        verify(entityManager).refresh(student);
     }
 
     private StudentImportService service(NamedParameterJdbcTemplate jdbc, EntityManager entityManager) {
