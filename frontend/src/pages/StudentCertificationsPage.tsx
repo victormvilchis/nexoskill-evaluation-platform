@@ -489,6 +489,9 @@ export function StudentCertificationsPage() {
       <div className="error-message" role="alert">{error || 'No fue posible consultar las certificaciones.'}</div></main>
   }
 
+  const inactiveBecauseNoAdmissionDate = !detail.student.admissionDate
+  const inactiveStudent = inactiveBecauseNoAdmissionDate || detail.student.status !== 'ACTIVE'
+
   return (
     <main className="content-page certification-page certification-workspace">
       <BackButton fallback="/admin/students" />
@@ -501,6 +504,9 @@ export function StudentCertificationsPage() {
       </header>
 
       {error && <div className="error-message" role="alert">{error}</div>}
+      {inactiveStudent && <div className="warning-message" role="status">{inactiveBecauseNoAdmissionDate
+        ? 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones. La información existente permanece disponible para consulta.'
+        : 'El colaborador no se encuentra activo. No es posible gestionar sus certificaciones. La información existente permanece disponible para consulta.'}</div>}
 
       <section className="ns-card certification-student-summary">
         <div><span>Colaborador</span><strong>{detail.student.displayName}</strong></div>
@@ -508,7 +514,7 @@ export function StudentCertificationsPage() {
         <div><span>Estado</span><strong>{STUDENT_STATUS_LABELS[detail.student.status] ?? detail.student.status}</strong></div>
         <div><span>Inicio de vigencia</span><strong>{formatDate(detail.student.validFrom)}</strong></div>
         <div><span>Vencimiento de acceso</span><strong>{formatDate(detail.student.expiresAt)}</strong></div>
-        <div><span>Fecha de alta</span><strong>{formatDate(detail.student.admissionDate)}</strong></div>
+        <div><span>Fecha de alta</span><strong>{detail.student.admissionDate ? formatDate(detail.student.admissionDate) : 'N/A'}</strong></div>
         <div><span>Perfil</span><strong>{detail.student.professionalProfile?.name ?? 'Sin perfil'}</strong></div>
         <div><span>Perfil tecnológico</span><strong>{detail.student.technologicalProfile?.name ?? 'Sin perfil tecnológico'}</strong></div>
       </section>
@@ -523,7 +529,7 @@ export function StudentCertificationsPage() {
       </nav>
 
       <form className="certification-form" onSubmit={submit} noValidate>
-        <fieldset disabled={saving}>
+        <fieldset disabled={saving || inactiveStudent}>
           {activeTab === 'SUMMARY' && (
             <section className="certification-panel">
               <div className="certification-metrics">
@@ -611,9 +617,9 @@ export function StudentCertificationsPage() {
 
         <footer className="certification-actions">
           <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/students')}>Cancelar</button>
-          <button className="primary-button" type="submit" disabled={saving || !dirty}>
+          {!inactiveStudent && <button className="primary-button" type="submit" disabled={saving || !dirty}>
             {saving ? 'Guardando…' : 'Guardar cambios'}
-          </button>
+          </button>}
         </footer>
       </form>
     </main>

@@ -213,7 +213,8 @@ public class StudentImportService {
             if (current == null) {
                 newStudents.add(new NewStudentPreview(effectiveImported.rowKey(), effectiveImported.rowNumber(),
                         effectiveImported.fullName(), effectiveImported.profileName(),
-                        effectiveImported.primaryTechnology(), effectiveImported.email(), effectiveImported.warnings()));
+                        effectiveImported.primaryTechnology(), effectiveImported.email(), effectiveImported.admissionDate(),
+                        effectiveImported.warnings()));
                 matches.put(effectiveImported.rowKey(), new Match(effectiveImported, null));
                 continue;
             }
@@ -263,7 +264,7 @@ public class StudentImportService {
                 Map.copyOf(conflictFingerprints), Map.copyOf(automaticConflictResolutions));
         pending.put(token, state);
         return new Preview(token, fileName, sheet.sheetName(), organization.name(), organization.code(),
-                sheet.rows().size(), newStudents, changedStudents, possibleLows, uniqueConflicts, warnings, errors,
+                organization.manualStudentCode(), sheet.rows().size(), newStudents, changedStudents, possibleLows, uniqueConflicts, warnings, errors,
                 "La vista previa caduca en " + TOKEN_MINUTES + " minutos y ningún cambio ha sido aplicado.");
     }
 
@@ -398,7 +399,7 @@ public class StudentImportService {
                     new StudentFoundationService.CreateCommand(ownerPublicId,
                             email, resolved.firstName(), resolved.lastName(), resolved.fullName(), StudentStatus.ACTIVE,
                             LocalDate.now(clock), accessExpiry(state.organization()), resolved.admissionDate(),
-                            resolved.profilePublicId(), resolved.technologicalProfilePublicId(),
+                            selection.studentCode(), selection.corporateUser(), resolved.profilePublicId(), resolved.technologicalProfilePublicId(),
                             resolved.flag("TECHNOLOGICAL"), resolved.flag("DEVELOPMENT_SECURITY"),
                             resolved.flag("NORMATIVE_TESTING"), resolved.flag("ONE"), resolved.flag("AGILE"), resolved.flag("JIRA")),
                     requestActor);
@@ -410,7 +411,8 @@ public class StudentImportService {
             persistConflictDecisions(state, imported.rowKey(), studentId,
                     conflictResolutions);
             return new RowOutcome(1, 0, new Credential(state.organization().name(), state.organization().code(),
-                    resolved.fullName(), email, result.student().studentCode(), result.temporaryPassword()));
+                    resolved.fullName(), email, result.student().studentCode(), result.student().corporateUser(),
+                    result.temporaryPassword()));
         }
         ChangeSelection selection = changeSelections.get(match.existing().publicId());
         if (selection == null || selection.fields().isEmpty()) return RowOutcome.none();
@@ -472,35 +474,102 @@ public class StudentImportService {
             Map<String, NewSelection> selections) {
         Map<String, ImportedStudent> importedByKey = state.imported().stream()
                 .collect(java.util.stream.Collectors.toMap(ImportedStudent::rowKey, value -> value, (first, second) -> first));
-        Set<String> normalized = new LinkedHashSet<>();
+        Set<String> normalizedEmails = new LinkedHashSet<>();
+        Set<String> normalizedCodes = new LinkedHashSet<>();
+        Set<String> normalizedCorporateUsers = new LinkedHashSet<>();
         for (NewSelection selection : selections.values()) {
             if (selection == null || !selection.selected()) continue;
             ImportedStudent imported = importedByKey.get(selection.rowKey());
             int row = imported == null ? 0 : imported.rowNumber();
             requireFullName(imported == null ? null : imported.fullName(), row);
             String email = requireEmail(selection.email(), row);
-            String key = email.toLowerCase(Locale.ROOT);
-            if (!normalized.add(key)) {
+            String emailKey = email.toLowerCase(Locale.ROOT);
+            if (!normalizedEmails.add(emailKey)) {
                 throw new BusinessException("STUDENT_IMPORT_EMAIL_DUPLICATE_SELECTION",
                         "El correo " + email + " está repetido entre los colaboradores seleccionados.");
             }
+            if (state.organization().manualStudentCode()) {
+                String code = requireManualStudentCode(selection.studentCode(), row);
+                if (!normalizedCodes.add(code)) {
+                    throw new BusinessException("STUDENT_IMPORT_CODE_DUPLICATE_SELECTION",
+                            "El Código a nivel organización " + code + " está repetido entre los colaboradores seleccionados.");
+                }
+            }
+            String corporateUser = normalizeOptionalCorporateUser(selection.corporateUser(), row);
+            if (corporateUser != null) {
+                if (imported == null || imported.admissionDate() == null) {
+                    throw new BusinessException("STUDENT_IMPORT_CORPORATE_USER_REQUIRES_ADMISSION_DATE",
+                            "El Usuario corporativo de la fila " + row + " requiere una Fecha de alta.");
+                }
+                if (!normalizedCorporateUsers.add(corporateUser)) {
+                    throw new BusinessException("STUDENT_IMPORT_CORPORATE_USER_DUPLICATE_SELECTION",
+                            "El Usuario corporativo " + corporateUser + " está repetido entre los colaboradores seleccionados.");
+                }
+            }
         }
-        if (normalized.isEmpty()) return;
-        List<String> emailList = List.copyOf(normalized);
+        if (!normalizedEmails.isEmpty()) {
+            List<String> existing = queryExistingValues("LOWER(EMAIL)", "LOWER(EMAIL)", "emails",
+                    List.copyOf(normalizedEmails), "ORGANIZATION_ID = :organizationId",
+                    organizationId);
+            if (!existing.isEmpty()) {
+                throw new BusinessException("STUDENT_IMPORT_EMAIL_IN_USE",
+                        "El correo " + existing.getFirst() + " ya está utilizado por otro colaborador de la organización.");
+            }
+        }
+        if (!normalizedCodes.isEmpty()) {
+            List<String> existing = queryExistingValues("STUDENT_CODE", "UPPER(STUDENT_CODE)", "values",
+                    List.copyOf(normalizedCodes), "ORGANIZATION_ID = :organizationId",
+                    organizationId);
+            if (!existing.isEmpty()) {
+                throw new BusinessException("STUDENT_IMPORT_CODE_IN_USE",
+                        "El Código a nivel organización " + existing.getFirst() + " ya está asignado a otro colaborador.");
+            }
+        }
+        if (!normalizedCorporateUsers.isEmpty()) {
+            List<String> existing = queryExistingValues("NORMALIZED_CORPORATE_USER", "NORMALIZED_CORPORATE_USER", "values",
+                    List.copyOf(normalizedCorporateUsers), "1 = 1", null);
+            if (!existing.isEmpty()) {
+                throw new BusinessException("STUDENT_IMPORT_CORPORATE_USER_IN_USE",
+                        "El Usuario corporativo " + existing.getFirst() + " ya está asignado a otro colaborador.");
+            }
+        }
+    }
+
+    private List<String> queryExistingValues(String selectExpression, String compareExpression, String parameter,
+            List<String> values, String predicate, Long organizationId) {
         List<String> existing = new ArrayList<>();
-        for (int start = 0; start < emailList.size() && existing.isEmpty(); start += 900) {
-            List<String> batch = emailList.subList(start, Math.min(start + 900, emailList.size()));
-            existing.addAll(jdbc.query("""
-                SELECT LOWER(EMAIL) FROM STUDENT
-                 WHERE ORGANIZATION_ID = :organizationId AND STATUS <> 'DELETED'
-                   AND LOWER(EMAIL) IN (:emails)
-                """, new MapSqlParameterSource("organizationId", organizationId).addValue("emails", batch),
+        for (int start = 0; start < values.size() && existing.isEmpty(); start += 900) {
+            List<String> batch = values.subList(start, Math.min(start + 900, values.size()));
+            MapSqlParameterSource params = new MapSqlParameterSource(parameter, batch);
+            if (organizationId != null) params.addValue("organizationId", organizationId);
+            existing.addAll(jdbc.query("SELECT " + selectExpression + " FROM STUDENT WHERE " + predicate
+                    + " AND " + compareExpression + " IN (:" + parameter + ")", params,
                     (rs, rowNum) -> rs.getString(1)));
         }
-        if (!existing.isEmpty()) {
-            throw new BusinessException("STUDENT_IMPORT_EMAIL_IN_USE",
-                    "El correo " + existing.getFirst() + " ya está utilizado por otro colaborador de la organización.");
+        return existing;
+    }
+
+    private String requireManualStudentCode(String value, int row) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException("STUDENT_IMPORT_CODE_REQUIRED",
+                    "Captura el Código a nivel organización del nuevo colaborador de la fila " + row + ".");
         }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() > 80 || !normalized.matches("[A-Z0-9_-]+")) {
+            throw new BusinessException("STUDENT_IMPORT_CODE_INVALID",
+                    "El Código a nivel organización de la fila " + row + " no es válido.");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalCorporateUser(String value, int row) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        if (normalized.length() > 100) {
+            throw new BusinessException("STUDENT_IMPORT_CORPORATE_USER_INVALID",
+                    "El Usuario corporativo de la fila " + row + " no puede superar 100 caracteres.");
+        }
+        return normalized;
     }
     private Issue importFailure(int row, String action, RuntimeException exception) {
         Throwable current = exception;
@@ -544,7 +613,7 @@ public class StudentImportService {
                     detail.email(), selectedFields.contains("name") ? imported.firstName() : detail.firstName(),
                     selectedFields.contains("name") ? imported.lastName() : detail.lastName(),
                     selectedFields.contains("name") ? imported.fullName() : detail.displayName(),
-                    detail.validFrom(), detail.expiresAt(), effectiveAdmissionDate,
+                    detail.validFrom(), detail.expiresAt(), effectiveAdmissionDate, detail.studentCode(), detail.corporateUser(),
                     selectedFields.contains("profile") ? imported.profilePublicId()
                             : detail.professionalProfile() == null ? null : detail.professionalProfile().publicId(),
                     selectedFields.contains("technologicalProfile") ? imported.technologicalProfilePublicId()
@@ -559,6 +628,10 @@ public class StudentImportService {
         }
         Long studentId = current.id();
         boolean certificationChanges = selectedFields.stream().anyMatch(field -> field.startsWith("cert:"));
+        if (effectiveAdmissionDate == null && certificationChanges) {
+            throw new BusinessException("STUDENT_CERTIFICATION_INACTIVE",
+                    "El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.");
+        }
         if (identity || certificationChanges) {
             synchronizeStudentFoundationForCertification(studentId, current.organizationId(),
                     current.publicId(), effectiveAdmissionDate);
@@ -1539,13 +1612,13 @@ public class StudentImportService {
     private Organization organization(Long organizationId) {
         List<Organization> rows = jdbc.query("""
             SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME, ORGANIZATION_CODE,
-                   EXPIRES_ON, APPLIES_CERTIFICATIONS
+                   EXPIRES_ON, APPLIES_CERTIFICATIONS, MANUAL_STUDENT_CODE
               FROM ORGANIZATION
              WHERE ORGANIZATION_ID = :organizationId AND ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
             """, Map.of("organizationId", organizationId), (rs, rowNum) -> new Organization(
                 rs.getLong("ORGANIZATION_ID"), rs.getString("PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
                 rs.getString("ORGANIZATION_CODE"), localDate(rs, "EXPIRES_ON"),
-                rs.getBoolean("APPLIES_CERTIFICATIONS")));
+                rs.getBoolean("APPLIES_CERTIFICATIONS"), rs.getBoolean("MANUAL_STUDENT_CODE")));
         if (rows.isEmpty()) throw new BusinessException("ORGANIZATION_INACTIVE", "La organización actual no está disponible.");
         return rows.getFirst();
     }
@@ -1553,13 +1626,13 @@ public class StudentImportService {
     private Organization organizationByPublicId(String publicId) {
         List<Organization> rows = jdbc.query("""
             SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME, ORGANIZATION_CODE,
-                   EXPIRES_ON, APPLIES_CERTIFICATIONS
+                   EXPIRES_ON, APPLIES_CERTIFICATIONS, MANUAL_STUDENT_CODE
               FROM ORGANIZATION
              WHERE PUBLIC_ID = :publicId AND ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
             """, Map.of("publicId", publicId), (rs, rowNum) -> new Organization(
                 rs.getLong("ORGANIZATION_ID"), rs.getString("PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
                 rs.getString("ORGANIZATION_CODE"), localDate(rs, "EXPIRES_ON"),
-                rs.getBoolean("APPLIES_CERTIFICATIONS")));
+                rs.getBoolean("APPLIES_CERTIFICATIONS"), rs.getBoolean("MANUAL_STUDENT_CODE")));
         if (rows.isEmpty()) {
             throw new BusinessException("ORGANIZATION_NOT_FOUND",
                     "La organización seleccionada no existe o no está activa.");
@@ -2353,7 +2426,8 @@ public class StudentImportService {
         }
     }
     private record CertificationPolicy(Integer deadlineMonths, Integer deadlineDays, Integer validityYears) {}
-    private record Organization(Long id, String publicId, String name, String code, LocalDate expiresOn, boolean appliesCertifications) {}
+    private record Organization(Long id, String publicId, String name, String code, LocalDate expiresOn,
+            boolean appliesCertifications, boolean manualStudentCode) {}
     private record ExistingStudent(Long id, Long organizationId, String publicId, String studentCode, String email,
             String normalizedEmail, String firstName, String lastName, String displayName, String normalizedName,
             String status, LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate,
@@ -2446,7 +2520,7 @@ public class StudentImportService {
     public record Issue(int row, String code, String message) {}
     public record FieldChange(String key, String field, String currentValue, String excelValue, boolean selected) {}
     public record NewStudentPreview(String rowKey, int row, String collaborator, String profile,
-            String primaryTechnology, String suggestedEmail, List<String> warnings) {}
+            String primaryTechnology, String suggestedEmail, LocalDate admissionDate, List<String> warnings) {}
     public record ChangedStudentPreview(String studentPublicId, String rowKey, String collaborator,
             List<FieldChange> changes, List<String> warnings) {}
     public record PossibleLowPreview(String studentPublicId, String collaborator, String email, String action) {}
@@ -2462,10 +2536,14 @@ public class StudentImportService {
         }
     }
     public record Preview(String token, String fileName, String sheetName, String organizationName,
-            String organizationCode, int totalRows, List<NewStudentPreview> newStudents,
+            String organizationCode, boolean manualStudentCode, int totalRows, List<NewStudentPreview> newStudents,
             List<ChangedStudentPreview> changedStudents, List<PossibleLowPreview> possibleLows,
             List<ConflictPreview> conflicts, List<Issue> warnings, List<Issue> errors, String notice) {}
-    public record NewSelection(String rowKey, String email, boolean selected) {}
+    public record NewSelection(String rowKey, String email, String studentCode, String corporateUser, boolean selected) {
+        public NewSelection(String rowKey, String email, boolean selected) {
+            this(rowKey, email, null, null, selected);
+        }
+    }
     public record ChangeSelection(String studentPublicId, Set<String> fields) {
         public ChangeSelection { fields = fields == null ? Set.of() : Set.copyOf(fields); }
     }
@@ -2475,7 +2553,7 @@ public class StudentImportService {
             List<ChangeSelection> changedStudents, List<LowSelection> possibleLows,
             List<ConflictResolution> conflicts) {}
     public record Credential(String organization, String organizationCode, String collaborator,
-            String email, String studentCode, String temporaryPassword) {}
+            String email, String studentCode, String corporateUser, String temporaryPassword) {}
     public record ApplyResult(int created, int updated, int possibleLowsProcessed,
             List<Issue> errors, List<Credential> credentials, String credentialsNotice) {}
 }

@@ -83,6 +83,7 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
           status: 'ACTIVE',
           contentMode: 'CUSTOM',
           appliesCertifications: false,
+          manualStudentCode: false,
           studentCount: 0,
           updatedAt: ''
         }))))

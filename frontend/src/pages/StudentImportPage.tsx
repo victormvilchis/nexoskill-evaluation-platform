@@ -18,7 +18,12 @@ import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
 
 type LowAction = 'KEEP' | 'DEACTIVATE' | 'IGNORE'
-type NewState = NewStudentPreview & { selected: boolean; email: string }
+type NewState = NewStudentPreview & {
+  selected: boolean
+  email: string
+  studentCode: string
+  corporateUser: string
+}
 type ChangeState = ChangedStudentPreview & { selectedFields: Set<string> }
 
 type ConflictDecisions = Record<string, StudentImportConflictActionValue | ''>
@@ -28,7 +33,7 @@ function validEmail(value: string) {
 }
 
 function credentialText(value: StudentImportCredential) {
-  return `Colaborador: ${value.collaborator}\nOrganización: ${value.organizationCode || value.organization}\nCódigo: ${value.studentCode}\nCorreo: ${value.email}\nContraseña temporal: ${value.temporaryPassword}`
+  return `Colaborador: ${value.collaborator}\nOrganización: ${value.organizationCode || value.organization}\nCódigo a nivel organización: ${value.studentCode}\nUsuario corporativo: ${value.corporateUser || 'N/A'}\nCorreo: ${value.email}\nContraseña temporal: ${value.temporaryPassword}`
 }
 
 async function copyText(value: string) {
@@ -123,15 +128,37 @@ export function StudentImportPage() {
 
   const newRowError = useMemo(() => {
     const normalizedEmails = new Map<string, number>()
+    const normalizedCodes = new Map<string, number>()
+    const normalizedCorporateUsers = new Map<string, number>()
     for (const row of selectedNew) {
       if (omittedRows.has(row.rowKey)) continue
       const email = row.email.trim().toLowerCase()
       if (!validEmail(email)) return `Captura un correo válido para ${row.collaborator || `la fila ${row.row}`}.`
       normalizedEmails.set(email, (normalizedEmails.get(email) ?? 0) + 1)
+      if (preview?.manualStudentCode) {
+        const code = row.studentCode.trim().toUpperCase()
+        if (!code) return `Captura el Código a nivel organización para ${row.collaborator || `la fila ${row.row}`}.`
+        if (!/^[A-Z0-9_-]+$/.test(code) || code.length > 80) {
+          return `El Código a nivel organización de ${row.collaborator || `la fila ${row.row}`} no es válido.`
+        }
+        normalizedCodes.set(code, (normalizedCodes.get(code) ?? 0) + 1)
+      }
+      const corporateUser = row.corporateUser.trim().toUpperCase()
+      if (corporateUser) {
+        if (!row.admissionDate) return `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} requiere una Fecha de alta.`
+        if (corporateUser.length > 100) return `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} no puede superar 100 caracteres.`
+        normalizedCorporateUsers.set(corporateUser, (normalizedCorporateUsers.get(corporateUser) ?? 0) + 1)
+      }
     }
-    const duplicate = [...normalizedEmails.entries()].find(([, count]) => count > 1)
-    return duplicate ? `El correo ${duplicate[0]} está repetido entre los colaboradores nuevos.` : undefined
-  }, [selectedNew, omittedRows])
+    const duplicateEmail = [...normalizedEmails.entries()].find(([, count]) => count > 1)
+    if (duplicateEmail) return `El correo ${duplicateEmail[0]} está repetido entre los colaboradores nuevos.`
+    const duplicateCode = [...normalizedCodes.entries()].find(([, count]) => count > 1)
+    if (duplicateCode) return `El Código a nivel organización ${duplicateCode[0]} está repetido entre los colaboradores nuevos.`
+    const duplicateCorporateUser = [...normalizedCorporateUsers.entries()].find(([, count]) => count > 1)
+    return duplicateCorporateUser
+      ? `El Usuario corporativo ${duplicateCorporateUser[0]} está repetido entre los colaboradores nuevos.`
+      : undefined
+  }, [selectedNew, omittedRows, preview?.manualStudentCode])
 
   const visibleErrors = useMemo(() => {
     return preview?.errors ?? []
@@ -169,7 +196,9 @@ export function StudentImportPage() {
       setNewRows(response.newStudents.map((row) => ({
         ...row,
         selected: true,
-        email: row.suggestedEmail ?? ''
+        email: row.suggestedEmail ?? '',
+        studentCode: '',
+        corporateUser: ''
       })))
       setChangedRows(response.changedStudents.map((row) => ({
         ...row,
@@ -258,6 +287,8 @@ export function StudentImportPage() {
         newStudents: newRows.map((row) => ({
           rowKey: row.rowKey,
           email: row.email.trim(),
+          studentCode: preview.manualStudentCode ? row.studentCode.trim() : undefined,
+          corporateUser: row.admissionDate && row.corporateUser.trim() ? row.corporateUser.trim() : undefined,
           selected: row.selected
         })),
         changedStudents: changedRows.map((row) => ({
@@ -325,13 +356,14 @@ export function StudentImportPage() {
               <CopyButtonContent copied={copiedKey === 'emails'} label="Copiar correos" />
             </button>
           </div>
-          <div className="ns-data-table-wrap"><table className="ns-data-table ns-credential-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Código</th><th>Organización</th><th>Resultado</th><th>Contraseña temporal</th><th>Acciones</th></tr></thead><tbody>
+          <div className="ns-data-table-wrap"><table className="ns-data-table ns-credential-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Código a nivel organización</th><th>Usuario corporativo</th><th>Organización</th><th>Resultado</th><th>Contraseña temporal</th><th>Acciones</th></tr></thead><tbody>
             {result.credentials.map((credential) => {
               const key = `credential:${credential.email}`
               return <tr key={credential.email}>
                 <td><strong>{credential.collaborator}</strong></td>
                 <td>{credential.email}</td>
                 <td><code>{credential.studentCode}</code></td>
+                <td>{credential.corporateUser || 'N/A'}</td>
                 <td>{credential.organization}</td>
                 <td><span className="status-badge active">Creado</span></td>
                 <td><code>{credential.temporaryPassword}</code></td>
@@ -403,18 +435,25 @@ export function StudentImportPage() {
         </section>
 
         {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div></div>
-          <p className="muted">El correo se captura manualmente y el código se generará al confirmar.</p>
-          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Correo</th><th>Código</th></tr></thead><tbody>
+          <p className="muted">El correo es obligatorio. El Usuario corporativo es opcional y solo se habilita cuando existe Fecha de alta. {preview.manualStudentCode ? 'Captura también el Código a nivel organización.' : 'El Código a nivel organización se generará automáticamente al confirmar.'}</p>
+          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Correo</th>{preview.manualStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th>{!preview.manualStudentCode && <th>Código a nivel organización</th>}</tr></thead><tbody>
             {newRows.map((row, index) => <tr key={row.rowKey} className={omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
               <td><input type="checkbox" checked={row.selected} disabled={omittedRows.has(row.rowKey)} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td>
               <td><strong>{row.collaborator}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
-              <td>{row.profile || '—'}</td><td>{row.primaryTechnology || '—'}</td>
+              <td>{row.profile || 'N/A'}</td><td>{row.primaryTechnology || 'N/A'}</td><td>{row.admissionDate || 'N/A'}</td>
               <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
                 className={`ns-import-email-input${row.selected && !omittedRows.has(row.rowKey) && row.email && !validEmail(row.email) ? ' is-invalid' : ''}`}
                 type="email" value={row.email} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="nombre@dominio.com" autoComplete="off"
                 onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} /></label></td>
-              <td><span className="muted">Se generará automáticamente</span></td>
+              {preview.manualStudentCode && <td><label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
+                value={row.studentCode} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="Código obligatorio" autoComplete="off" maxLength={80}
+                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label></td>}
+              <td><label className="ns-import-email-field"><span className="sr-only">Usuario corporativo de la fila {row.row}</span><input
+                value={row.corporateUser} disabled={!row.selected || omittedRows.has(row.rowKey) || !row.admissionDate}
+                placeholder={row.admissionDate ? 'Opcional' : 'Requiere Fecha de alta'} autoComplete="off" maxLength={100}
+                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, corporateUser: event.target.value.toUpperCase() } : item))} /></label></td>
+              {!preview.manualStudentCode && <td><span className="muted">Se generará automáticamente</span></td>}
             </tr>)}
           </tbody></table></div>{newRowError && <div className="error-message" role="alert">{newRowError}</div>}
         </section>}

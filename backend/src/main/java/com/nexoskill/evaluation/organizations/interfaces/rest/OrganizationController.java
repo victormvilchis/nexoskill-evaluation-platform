@@ -67,7 +67,7 @@ public class OrganizationController {
                 request.name(), request.code(), request.contentMode(), request.expiresOn(),
                 request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
                 request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
-                request.cycleEndsOn(), request.appliesCertifications())));
+                request.cycleEndsOn(), request.appliesCertifications(), request.manualStudentCode())));
     }
 
     @PutMapping("/{publicId}")
@@ -77,7 +77,7 @@ public class OrganizationController {
                 request.name(), request.contentMode(), request.expiresOn(),
                 request.contractedSeats(), request.includedReplacements(), request.additionalReplacements(),
                 request.standardReleaseHours(), request.exhaustedReleaseDays(), request.cycleStartsOn(),
-                request.cycleEndsOn(), request.version(), request.appliesCertifications())));
+                request.cycleEndsOn(), request.version(), request.appliesCertifications(), request.manualStudentCode())));
     }
 
     @PostMapping("/{publicId}/activate")
@@ -139,7 +139,7 @@ public class OrganizationController {
         OrganizationJpaEntity entity = item.organization();
         return new OrganizationSummary(entity.getPublicId(), entity.getCode(), entity.getName(),
                 entity.getOrganizationType(), entity.getStatus(), entity.getContentMode(),
-                entity.isAppliesCertifications(), item.studentCount(), entity.getExpiresOn(), entity.getUpdatedAt());
+                entity.isAppliesCertifications(), entity.isManualStudentCode(), item.studentCount(), entity.getExpiresOn(), entity.getUpdatedAt());
     }
 
     private OrganizationResponse response(OrganizationService.OrganizationAggregate aggregate) {
@@ -147,7 +147,7 @@ public class OrganizationController {
         OrganizationLicensePolicyJpaEntity policy = aggregate.policy();
         return new OrganizationResponse(organization.getPublicId(), organization.getCode(), organization.getName(),
                 organization.getOrganizationType(), organization.getStatus(), organization.getContentMode(),
-                organization.isAppliesCertifications(), aggregate.studentCount(),
+                organization.isAppliesCertifications(), organization.isManualStudentCode(), aggregate.studentCount(),
                 organization.getValidFrom(), organization.getExpiresOn(),
                 policy == null ? null : policy.getContractedSeats(),
                 policy == null ? null : policy.getIncludedReplacements(),
@@ -170,6 +170,7 @@ public class OrganizationController {
             @Size(max = 80, message = "El código no puede superar 80 caracteres.") String code,
             @NotNull(message = "Selecciona una modalidad de contenido.") ContentMode contentMode,
             Boolean appliesCertifications,
+            Boolean manualStudentCode,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
             @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.") Integer contractedSeats,
@@ -185,6 +186,7 @@ public class OrganizationController {
             @Size(max = 200, message = "El nombre no puede superar 200 caracteres.") String name,
             @NotNull(message = "Selecciona una modalidad de contenido.") ContentMode contentMode,
             Boolean appliesCertifications,
+            Boolean manualStudentCode,
             LocalDate expiresOn,
             @NotNull(message = "Los asientos contratados son obligatorios.")
             @Min(value = 0, message = "Los asientos contratados no pueden ser negativos.") Integer contractedSeats,
@@ -202,12 +204,12 @@ public class OrganizationController {
 
     public record OrganizationSummary(String publicId, String code, String name, OrganizationType organizationType,
                                       OrganizationStatus status, ContentMode contentMode,
-                                      boolean appliesCertifications, long studentCount,
+                                      boolean appliesCertifications, boolean manualStudentCode, long studentCount,
                                       LocalDate expiresOn, Instant updatedAt) { }
 
     public record OrganizationResponse(String publicId, String code, String name, OrganizationType organizationType,
                                        OrganizationStatus status, ContentMode contentMode,
-                                       boolean appliesCertifications, long studentCount,
+                                       boolean appliesCertifications, boolean manualStudentCode, long studentCount,
                                        LocalDate validFrom, LocalDate expiresOn,
                                        Integer contractedSeats, Integer includedReplacements,
                                        Integer additionalReplacements, Integer standardReleaseHours,

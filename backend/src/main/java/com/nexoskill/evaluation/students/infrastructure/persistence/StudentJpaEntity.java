@@ -72,6 +72,12 @@ public class StudentJpaEntity {
     @Column(name = "ADMISSION_DATE")
     private LocalDate admissionDate;
 
+    @Column(name = "CORPORATE_USER", length = 100)
+    private String corporateUser;
+
+    @Column(name = "NORMALIZED_CORPORATE_USER", length = 100)
+    private String normalizedCorporateUser;
+
     @Column(name = "FAILED_LOGIN_ATTEMPTS", nullable = false)
     private int failedLoginAttempts;
 
@@ -125,6 +131,16 @@ public class StudentJpaEntity {
             String normalizedEmail, String passwordHash, String firstName, String lastName, String displayName,
             StudentStatus status, LocalDate validFrom, LocalDate expiresAt, Instant temporaryPasswordExpiresAt,
             Long actorId, Instant now) {
+        return create(publicId, organizationId, studentCode, email, normalizedEmail, passwordHash, firstName,
+                lastName, displayName, status, validFrom, expiresAt, validFrom, null, null,
+                temporaryPasswordExpiresAt, actorId, now);
+    }
+
+    public static StudentJpaEntity create(String publicId, Long organizationId, String studentCode, String email,
+            String normalizedEmail, String passwordHash, String firstName, String lastName, String displayName,
+            StudentStatus status, LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate,
+            String corporateUser, String normalizedCorporateUser, Instant temporaryPasswordExpiresAt,
+            Long actorId, Instant now) {
         StudentJpaEntity entity = new StudentJpaEntity();
         entity.publicId = publicId;
         entity.organizationId = organizationId;
@@ -135,8 +151,11 @@ public class StudentJpaEntity {
         entity.firstName = firstName;
         entity.lastName = lastName;
         entity.displayName = displayName;
-        entity.status = status;
+        entity.status = admissionDate == null ? StudentStatus.INACTIVE : status;
         entity.setAccessDates(validFrom, expiresAt);
+        entity.admissionDate = admissionDate;
+        entity.corporateUser = corporateUser;
+        entity.normalizedCorporateUser = normalizedCorporateUser;
         entity.failedLoginAttempts = 0;
         entity.passwordChangeRequired = true;
         entity.temporaryPasswordExpiresAt = temporaryPasswordExpiresAt;
@@ -150,7 +169,7 @@ public class StudentJpaEntity {
 
     public StudentEffectiveStatus effectiveStatusOn(LocalDate today) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
-        if (status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
+        if (admissionDate == null || status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
         if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) {
             return StudentEffectiveStatus.EXPIRED;
         }
@@ -163,6 +182,7 @@ public class StudentJpaEntity {
 
     public boolean canAuthenticateOn(LocalDate today, Instant now) {
         return status == StudentStatus.ACTIVE
+                && admissionDate != null
                 && validFrom != null && !today.isBefore(validFrom)
                 && expiresAt != null && !today.isAfter(expiresAt)
                 && (lockedUntil == null || !lockedUntil.isAfter(now));
@@ -205,17 +225,26 @@ public class StudentJpaEntity {
         touch(actorId, now);
     }
 
-    public void updateProfile(String email, String normalizedEmail, String firstName, String lastName,
-            String displayName, LocalDate validFrom, LocalDate expiresAt, Long actorId, Instant now) {
+    public void updateProfile(String studentCode, String email, String normalizedEmail, String firstName, String lastName,
+            String displayName, LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate,
+            String corporateUser, String normalizedCorporateUser, Long actorId, Instant now) {
+        this.studentCode = studentCode;
         this.email = email;
         this.normalizedEmail = normalizedEmail;
         this.firstName = firstName;
         this.lastName = lastName;
         this.displayName = displayName;
         setAccessDates(validFrom, expiresAt);
+        this.admissionDate = admissionDate;
+        this.corporateUser = corporateUser;
+        this.normalizedCorporateUser = normalizedCorporateUser;
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        if (this.status == StudentStatus.ACTIVE && expiresAt != null && today.isAfter(expiresAt)) {
+        if (admissionDate == null) {
+            this.status = StudentStatus.INACTIVE;
+        } else if (expiresAt != null && today.isAfter(expiresAt)) {
             this.status = StudentStatus.EXPIRED;
+        } else if (this.status != StudentStatus.DELETED) {
+            this.status = StudentStatus.ACTIVE;
         }
         touch(actorId, now);
     }
@@ -231,6 +260,7 @@ public class StudentJpaEntity {
 
     public void deactivate(Long actorId, Instant now) {
         this.status = StudentStatus.INACTIVE;
+        this.admissionDate = null;
         touch(actorId, now);
     }
 
@@ -295,6 +325,8 @@ public class StudentJpaEntity {
     public LocalDate getValidFrom() { return validFrom; }
     public LocalDate getExpiresAt() { return expiresAt; }
     public LocalDate getAdmissionDate() { return admissionDate; }
+    public String getCorporateUser() { return corporateUser; }
+    public String getNormalizedCorporateUser() { return normalizedCorporateUser; }
     public int getFailedLoginAttempts() { return failedLoginAttempts; }
     public Instant getLockedUntil() { return lockedUntil; }
     public Instant getLastLoginAt() { return lastLoginAt; }

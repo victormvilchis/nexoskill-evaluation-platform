@@ -13,11 +13,13 @@ export interface StudentOrganizationRef {
   code: string
   name: string
   appliesCertifications: boolean
+  manualStudentCode: boolean
 }
 
 export interface StudentSummary {
   publicId: string
   studentCode: string
+  corporateUser: string | null
   email: string
   firstName?: string
   lastName?: string
@@ -88,6 +90,8 @@ export interface StudentCertificationFlags {
 
 export interface CreateStudentPayload {
   organizationPublicId?: string
+  studentCode?: string
+  corporateUser?: string
   email: string
   firstName: string
   lastName: string
@@ -107,6 +111,8 @@ export interface CreateStudentPayload {
 }
 
 export interface UpdateStudentPayload {
+  studentCode?: string
+  corporateUser?: string
   email: string
   firstName: string
   lastName: string

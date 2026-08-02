@@ -29,6 +29,11 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     boolean existsByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
 
+    Optional<StudentJpaEntity> findByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
+
+    Optional<StudentJpaEntity> findByNormalizedCorporateUser(String normalizedCorporateUser);
+
+
     boolean existsByOrganizationId(Long organizationId);
 
     long countByOrganizationIdAndStatusNot(Long organizationId, StudentStatus status);
@@ -58,18 +63,20 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
                :status is null
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+                   and s.admissionDate is not null
                    and s.validFrom <= :now and (s.expiresAt is null or s.expiresAt >= :now))
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED
                    and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
                         or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
                             and s.expiresAt is not null and s.expiresAt < :now)))
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE)
+                   and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE or s.admissionDate is null))
           )
           and (:query is null
                or lower(s.displayName) like lower(concat('%', :query, '%'))
                or lower(s.email) like lower(concat('%', :query, '%'))
-               or lower(s.studentCode) like lower(concat('%', :query, '%')))
+               or lower(s.studentCode) like lower(concat('%', :query, '%'))
+               or lower(s.corporateUser) like lower(concat('%', :query, '%')))
         """)
     Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId,
             @Param("query") String query,

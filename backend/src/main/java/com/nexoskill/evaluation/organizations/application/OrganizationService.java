@@ -138,6 +138,7 @@ public class OrganizationService {
                     validFrom, command.expiresOn(), actorId, now);
             boolean appliesCertifications = Boolean.TRUE.equals(command.appliesCertifications());
             organizationToCreate.configureCertifications(appliesCertifications, actorId, now);
+            organizationToCreate.configureStudentCode(Boolean.TRUE.equals(command.manualStudentCode()), actorId, now);
 
             OrganizationJpaEntity organization = organizationRepository.saveAndFlush(organizationToCreate);
             if (organization == null || organization.getId() == null) {
@@ -195,6 +196,7 @@ public class OrganizationService {
         try {
             aggregate.organization().updateCustomer(name, contentMode, command.expiresOn(), actorId, now);
             aggregate.organization().configureCertifications(requestedCertificationSetting, actorId, now);
+            aggregate.organization().configureStudentCode(Boolean.TRUE.equals(command.manualStudentCode()), actorId, now);
             aggregate.policy().update(policy.contractedSeats(), policy.includedReplacements(),
                     policy.additionalReplacements(), policy.standardReleaseHours(),
                     policy.exhaustedReplacementReleaseDays(), policy.cycleStartsOn(),
@@ -527,14 +529,14 @@ public class OrganizationService {
                                 Integer contractedSeats, Integer includedReplacements,
                                 Integer additionalReplacements, Integer standardReleaseHours,
                                 Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
-                                LocalDate cycleEndsOn, Boolean appliesCertifications) {
+                                LocalDate cycleEndsOn, Boolean appliesCertifications, Boolean manualStudentCode) {
         public CreateCommand(String name, String code, ContentMode contentMode, LocalDate expiresOn,
                              Integer contractedSeats, Integer includedReplacements,
                              Integer additionalReplacements, Integer standardReleaseHours,
                              Integer exhaustedReleaseDays, LocalDate cycleStartsOn, LocalDate cycleEndsOn) {
             this(name, code, contentMode, expiresOn, contractedSeats, includedReplacements,
                     additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
-                    cycleStartsOn, cycleEndsOn, false);
+                    cycleStartsOn, cycleEndsOn, false, false);
         }
 
         public CreateCommand(String name, String code, ContentMode contentMode, LocalDate ignoredValidFrom,
@@ -543,7 +545,7 @@ public class OrganizationService {
                              Integer exhaustedReleaseDays, LocalDate cycleStartsOn, LocalDate cycleEndsOn) {
             this(name, code, contentMode, expiresOn, contractedSeats, includedReplacements,
                     additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
-                    cycleStartsOn, cycleEndsOn, false);
+                    cycleStartsOn, cycleEndsOn, false, false);
         }
     }
 
@@ -551,7 +553,7 @@ public class OrganizationService {
                                 Integer contractedSeats, Integer includedReplacements,
                                 Integer additionalReplacements, Integer standardReleaseHours,
                                 Integer exhaustedReleaseDays, LocalDate cycleStartsOn,
-                                LocalDate cycleEndsOn, Long version, Boolean appliesCertifications) {
+                                LocalDate cycleEndsOn, Long version, Boolean appliesCertifications, Boolean manualStudentCode) {
         public UpdateCommand(String name, ContentMode contentMode, LocalDate expiresOn,
                              Integer contractedSeats, Integer includedReplacements,
                              Integer additionalReplacements, Integer standardReleaseHours,
@@ -559,7 +561,7 @@ public class OrganizationService {
                              LocalDate cycleEndsOn, Long version) {
             this(name, contentMode, expiresOn, contractedSeats, includedReplacements,
                     additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
-                    cycleStartsOn, cycleEndsOn, version, false);
+                    cycleStartsOn, cycleEndsOn, version, false, false);
         }
 
         public UpdateCommand(String name, ContentMode contentMode, LocalDate ignoredValidFrom, LocalDate expiresOn,
@@ -569,7 +571,7 @@ public class OrganizationService {
                              LocalDate cycleEndsOn, Long version) {
             this(name, contentMode, expiresOn, contractedSeats, includedReplacements,
                     additionalReplacements, standardReleaseHours, exhaustedReleaseDays,
-                    cycleStartsOn, cycleEndsOn, version, false);
+                    cycleStartsOn, cycleEndsOn, version, false, false);
         }
     }
 }

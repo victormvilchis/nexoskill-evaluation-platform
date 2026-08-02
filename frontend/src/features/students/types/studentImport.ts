@@ -19,6 +19,7 @@ export interface NewStudentPreview {
   profile: string | null
   primaryTechnology: string | null
   suggestedEmail: string | null
+  admissionDate: string | null
   warnings: string[]
 }
 
@@ -71,6 +72,7 @@ export interface StudentImportPreview {
   sheetName: string
   organizationName: string
   organizationCode: string
+  manualStudentCode: boolean
   totalRows: number
   newStudents: NewStudentPreview[]
   changedStudents: ChangedStudentPreview[]
@@ -83,7 +85,7 @@ export interface StudentImportPreview {
 
 export interface StudentImportApplyCommand {
   token: string
-  newStudents: Array<{ rowKey: string; email: string; selected: boolean }>
+  newStudents: Array<{ rowKey: string; email: string; studentCode?: string; corporateUser?: string; selected: boolean }>
   changedStudents: Array<{ studentPublicId: string; fields: string[] }>
   possibleLows: Array<{ studentPublicId: string; action: 'KEEP' | 'DEACTIVATE' | 'IGNORE' }>
   conflicts: Array<{ conflictId: string; action: StudentImportConflictActionValue }>
@@ -95,6 +97,7 @@ export interface StudentImportCredential {
   collaborator: string
   email: string
   studentCode: string
+  corporateUser: string | null
   temporaryPassword: string
 }
 

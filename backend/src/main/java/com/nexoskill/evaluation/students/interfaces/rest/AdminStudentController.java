@@ -112,7 +112,8 @@ public class AdminStudentController {
             StudentService.CreateResult creation = service.create(resolvedTenant,
                     new StudentService.CreateCommand(body.email(), body.firstName(),
                             body.lastName(), body.displayName(),
-                            body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(), body.expiresAt()),
+                            body.status() == null ? StudentStatus.ACTIVE : body.status(), body.validFrom(), body.expiresAt(),
+                            body.admissionDate(), body.studentCode(), body.corporateUser()),
                     actor(actor, request));
             StudentService.StudentDetail created = creation.student();
             return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId()))
@@ -122,7 +123,8 @@ public class AdminStudentController {
         StudentFoundationService.CreateResult creation = foundation.create(resolvedTenant,
                 new StudentFoundationService.CreateCommand(body.organizationPublicId(), body.email(),
                         body.firstName(), body.lastName(), body.displayName(), body.status(),
-                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
+                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.studentCode(), body.corporateUser(),
+                        body.professionalProfilePublicId(),
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
                         Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
                         Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
@@ -140,11 +142,13 @@ public class AdminStudentController {
         if (foundation == null) {
             return service.update(tenant(request), publicId,
                     new StudentService.UpdateCommand(body.email(), body.firstName(), body.lastName(), body.displayName(),
-                            body.validFrom(), body.expiresAt(), body.version()), actor(actor, request));
+                            body.validFrom(), body.expiresAt(), body.admissionDate(), body.studentCode(),
+                            body.corporateUser(), body.version()), actor(actor, request));
         }
         return foundation.update(tenant(request), publicId,
                 new StudentFoundationService.UpdateCommand(body.email(), body.firstName(), body.lastName(), body.displayName(),
-                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.professionalProfilePublicId(),
+                        body.validFrom(), body.expiresAt(), body.admissionDate(), body.studentCode(), body.corporateUser(),
+                        body.professionalProfilePublicId(),
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
                         Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
                         Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
@@ -290,7 +294,10 @@ public class AdminStudentController {
             StudentStatus status,
             @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
-            LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
+            LocalDate admissionDate,
+            @Size(max = 80, message = "El Código a nivel organización no puede superar 80 caracteres.") String studentCode,
+            @Size(max = 100, message = "El Usuario corporativo no puede superar 100 caracteres.") String corporateUser,
+            String professionalProfilePublicId, String technologicalProfilePublicId,
             Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
             Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile, Boolean appliesJira) {}
 
@@ -303,7 +310,10 @@ public class AdminStudentController {
             @Size(max = 250, message = "El nombre completo no puede superar 250 caracteres.") String displayName,
             @NotNull(message = "El inicio de vigencia es obligatorio.") LocalDate validFrom,
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
-            LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
+            LocalDate admissionDate,
+            @Size(max = 80, message = "El Código a nivel organización no puede superar 80 caracteres.") String studentCode,
+            @Size(max = 100, message = "El Usuario corporativo no puede superar 100 caracteres.") String corporateUser,
+            String professionalProfilePublicId, String technologicalProfilePublicId,
             Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
             Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile, Boolean appliesJira,
             @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}

@@ -10,6 +10,7 @@ export interface OrganizationSummary {
   status: OrganizationStatus
   contentMode: ContentMode
   appliesCertifications: boolean
+  manualStudentCode: boolean
   studentCount: number
   expiresOn?: string
   updatedAt: string
@@ -35,6 +36,7 @@ export interface OrganizationPayload {
   code?: string
   contentMode: ContentMode
   appliesCertifications: boolean
+  manualStudentCode: boolean
   expiresOn?: string
   contractedSeats: number
   includedReplacements: number

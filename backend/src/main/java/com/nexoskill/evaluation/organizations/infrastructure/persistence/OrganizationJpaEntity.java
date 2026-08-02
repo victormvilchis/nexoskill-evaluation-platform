@@ -48,6 +48,9 @@ public class OrganizationJpaEntity {
     @Column(name = "APPLIES_CERTIFICATIONS", nullable = false)
     private boolean appliesCertifications;
 
+    @Column(name = "MANUAL_STUDENT_CODE", nullable = false)
+    private boolean manualStudentCode;
+
     @Column(name = "CREATED_BY")
     private Long createdBy;
 
@@ -100,6 +103,7 @@ public class OrganizationJpaEntity {
         entity.validFrom = validFrom;
         entity.expiresOn = expiresOn;
         entity.appliesCertifications = false;
+        entity.manualStudentCode = false;
         entity.createdBy = actorId;
         entity.updatedBy = actorId;
         entity.createdAt = now;
@@ -164,6 +168,13 @@ public class OrganizationJpaEntity {
         this.updatedAt = now;
     }
 
+    public void configureStudentCode(boolean manualStudentCode, Long actorId, Instant now) {
+        ensureCustomerMutable();
+        this.manualStudentCode = manualStudentCode;
+        this.updatedBy = actorId;
+        this.updatedAt = now;
+    }
+
     private void ensureCustomerMutable() {
         if (organizationType == OrganizationType.GLOBAL) {
             throw new IllegalStateException("La organización global no puede modificarse desde el flujo comercial.");
@@ -191,6 +202,7 @@ public class OrganizationJpaEntity {
     public LocalDate getValidFrom() { return validFrom; }
     public LocalDate getExpiresOn() { return expiresOn; }
     public boolean isAppliesCertifications() { return appliesCertifications; }
+    public boolean isManualStudentCode() { return manualStudentCode; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getStatusChangedAt() { return statusChangedAt; }

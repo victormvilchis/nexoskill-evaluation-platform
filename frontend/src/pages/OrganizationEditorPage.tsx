@@ -41,6 +41,7 @@ function initialModel(): OrganizationPayload {
     code: '',
     contentMode: 'CLEAN',
     appliesCertifications: false,
+    manualStudentCode: false,
     contractedSeats: 10,
     includedReplacements: 2,
     additionalReplacements: 0,
@@ -57,6 +58,7 @@ function detailToPayload(detail: OrganizationDetail): OrganizationPayload {
     code: detail.code,
     contentMode: detail.contentMode,
     appliesCertifications: detail.appliesCertifications,
+    manualStudentCode: detail.manualStudentCode,
     expiresOn: detail.expiresOn,
     contractedSeats: detail.contractedSeats ?? 0,
     includedReplacements: detail.includedReplacements ?? 0,
@@ -294,6 +296,22 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                     </span>
                     <small className="org-field-help">
                       Habilita el seguimiento independiente de certificaciones para Gestores y Supervisores.
+                    </small>
+                  </label>
+                )}
+                {!global && (
+                  <label className="ns-field org-certification-toggle">
+                    <span>Código de colaborador</span>
+                    <span className="org-check-row">
+                      <input
+                        type="checkbox"
+                        checked={model.manualStudentCode}
+                        onChange={(event) => set('manualStudentCode', event.target.checked)}
+                      />
+                      Código de colaborador manual
+                    </span>
+                    <small className="org-field-help">
+                      Al habilitarlo, el Código a nivel organización deberá capturarse para cada colaborador.
                     </small>
                   </label>
                 )}

@@ -68,9 +68,9 @@ function cleanExperience(value: StudentExperiencePayload): StudentExperiencePayl
     knownTechnologies: clean(value.knownTechnologies)
   }
 }
-function hasCertificationData(admissionDate: string, professionalProfilePublicId: string,
+function hasCertificationData(professionalProfilePublicId: string,
   technologicalProfilePublicId: string, flags: CertificationFlags) {
-  return Boolean(admissionDate || professionalProfilePublicId || technologicalProfilePublicId
+  return Boolean(professionalProfilePublicId || technologicalProfilePublicId
     || Object.values(flags).some(Boolean))
 }
 
@@ -96,6 +96,7 @@ export function StudentEditorPage({ mode }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [organizationPublicId, setOrganizationPublicId] = useState('')
   const [studentCode, setStudentCode] = useState('')
+  const [corporateUser, setCorporateUser] = useState('')
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -143,6 +144,7 @@ export function StudentEditorPage({ mode }: Props) {
         setExperience(experienceValue)
         setOrganizationPublicId(detail.organization?.publicId ?? '')
         setStudentCode(detail.studentCode)
+        setCorporateUser(detail.corporateUser ?? '')
         setEmail(detail.email)
         setFirstName(detail.firstName)
         setLastName(detail.lastName)
@@ -201,16 +203,18 @@ export function StudentEditorPage({ mode }: Props) {
   const organizationResolved = mode === 'create' ? Boolean(catalogs?.organization) : Boolean(student?.organization)
   const appliesCertifications = mode === 'create'
     ? Boolean(catalogs?.appliesCertifications) : Boolean(student?.organization?.appliesCertifications)
+  const manualStudentCode = mode === 'create'
+    ? Boolean(catalogs?.organization.manualStudentCode) : Boolean(student?.organization?.manualStudentCode)
   const profileOptions = includeCurrent(catalogs?.profiles ?? [], student?.professionalProfile)
   const technologicalProfileOptions = includeCurrent(catalogs?.technologicalProfiles ?? [], student?.technologicalProfile)
 
   function clearCertificationData() {
-    setAdmissionDate(''); setProfessionalProfilePublicId(''); setTechnologicalProfilePublicId(''); setFlags(EMPTY_FLAGS)
+    setProfessionalProfilePublicId(''); setTechnologicalProfilePublicId(''); setFlags(EMPTY_FLAGS)
   }
   async function changeOrganization(nextPublicId: string) {
     const requestId = ++organizationRequest.current
-    const hadData = hasCertificationData(admissionDate, professionalProfilePublicId, technologicalProfilePublicId, flags)
-    setOrganizationPublicId(nextPublicId); setCatalogs(undefined); setCatalogError(undefined)
+    const hadData = hasCertificationData(professionalProfilePublicId, technologicalProfilePublicId, flags)
+    setOrganizationPublicId(nextPublicId); setCatalogs(undefined); setCatalogError(undefined); setStudentCode('')
     setFieldErrors((current) => ({ ...current, organizationPublicId: '' }))
     if (!nextPublicId) { if (hadData) clearCertificationData(); return }
     setCatalogLoading(true)
@@ -244,6 +248,8 @@ export function StudentEditorPage({ mode }: Props) {
     const errors: Record<string, string> = {}
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
+    if (manualStudentCode && !studentCode.trim()) errors.studentCode = 'El Código a nivel organización es obligatorio.'
+    if (corporateUser.trim() && !admissionDate) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
     if (mode === 'create') {
       if (!displayName.trim()) errors.displayName = 'El nombre completo es obligatorio.'
     } else if (!displayName.trim() && !firstName.trim() && !lastName.trim()) {
@@ -259,9 +265,10 @@ export function StudentEditorPage({ mode }: Props) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (readOnly || saving || !validateForm()) return
+    if (mode === 'edit' && student?.admissionDate && !admissionDate
+      && !window.confirm('Al eliminar la Fecha de alta, el colaborador será dado de baja, quedará inactivo, perderá el acceso a la plataforma y ya no será posible gestionar sus certificaciones.')) return
     setSaving(true); setError(null)
     const certificationPayload = appliesCertifications ? {
-      ...(admissionDate ? { admissionDate } : {}),
       ...(professionalProfilePublicId ? { professionalProfilePublicId } : {}),
       ...(technologicalProfilePublicId ? { technologicalProfilePublicId } : {}), ...flags
     } : {}
@@ -270,7 +277,11 @@ export function StudentEditorPage({ mode }: Props) {
         const response = await createStudent({
           ...(administrator ? { organizationPublicId } : {}), email: email.trim(),
           firstName: '', lastName: '', displayName: displayName.trim(),
-          status: 'ACTIVE', validFrom, expiresAt, ...certificationPayload
+          status: admissionDate ? 'ACTIVE' : 'INACTIVE', validFrom, expiresAt,
+          admissionDate: admissionDate || undefined,
+          studentCode: manualStudentCode ? studentCode.trim() : undefined,
+          corporateUser: admissionDate && corporateUser.trim() ? corporateUser.trim() : undefined,
+          ...certificationPayload
         })
         setTemporaryCredentials({ ...response.temporaryCredentials, studentCode: response.student.studentCode })
         try {
@@ -281,10 +292,14 @@ export function StudentEditorPage({ mode }: Props) {
         }
         toast.success('Colaborador creado correctamente', 'Guarda las credenciales antes de cerrar esta vista.')
       } else if (student && publicId) {
-        const admissionChanged = appliesCertifications && student.admissionDate !== admissionDate
+        const admissionChanged = (student.admissionDate ?? '') !== admissionDate
         await updateStudent(publicId, {
           email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
-          displayName: displayName.trim() || undefined, validFrom, expiresAt, ...certificationPayload, version: student.version
+          displayName: displayName.trim() || undefined, validFrom, expiresAt,
+          admissionDate: admissionDate || undefined,
+          studentCode: manualStudentCode ? studentCode.trim() : undefined,
+          corporateUser: admissionDate ? (corporateUser.trim() || undefined) : undefined,
+          ...certificationPayload, version: student.version
         })
         let experienceWarning = false
         try {
@@ -312,7 +327,7 @@ export function StudentEditorPage({ mode }: Props) {
   return (
     <main className="content-page editor-page student-editor-foundation">
       <BackButton fallback="/admin/students" />
-      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>{mode === 'create' ? 'Nuevo colaborador' : mode === 'edit' ? 'Editar colaborador' : 'Ver colaborador'}</h1><p className="muted">Inicio de vigencia y vencimiento controlan el acceso; la fecha de alta se usa para el seguimiento de certificaciones.</p></div></header>
+      <header className="page-heading compact"><div><p className="eyebrow">Colaboradores</p><h1>{mode === 'create' ? 'Nuevo colaborador' : mode === 'edit' ? 'Editar colaborador' : 'Ver colaborador'}</h1><p className="muted">La Fecha de alta determina si el colaborador está activo y puede gestionar certificaciones.</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <form className="student-foundation-form" onSubmit={handleSubmit} noValidate>
         {administrator && mode === 'create' && <section className="editor-card student-organization-first"><div className="section-heading"><div><p className="eyebrow">Organización</p><h2>Selecciona primero la organización</h2></div></div><div className="foundation-form-grid"><label className="form-field"><span>Organización</span><select name="organizationPublicId" value={organizationPublicId} onChange={(event) => void changeOrganization(event.target.value)} disabled={organizationLoading} required aria-invalid={Boolean(fieldErrors.organizationPublicId)}><option value="">Seleccionar organización</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</select>{field('organizationPublicId')}</label>{organizationLoading && <p className="form-help">Cargando organizaciones comerciales activas…</p>}{!organizationLoading && !organizationPublicId && <p className="form-help">Selecciona una organización para habilitar el resto del formulario.</p>}{organizationPublicId && catalogLoading && <p className="form-help">Consultando la configuración de {selectedOrganization?.name ?? 'la organización'}…</p>}{organizationError && <div className="error-message" role="alert">{organizationError}</div>}{catalogError && <div className="error-message" role="alert">{catalogError}</div>}</div></section>}
@@ -320,9 +335,13 @@ export function StudentEditorPage({ mode }: Props) {
         {mode === 'create' && !administrator && catalogError && <div className="error-message" role="alert">{catalogError}</div>}
         {organizationResolved && <>
           <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Datos generales</p><h2>Identidad y acceso</h2></div></div><div className="foundation-form-grid">
-            <label className="form-field"><span>Código</span>{mode === 'create'
-              ? <strong className="readonly-value">Se generará automáticamente al crear el colaborador</strong>
-              : <strong className="readonly-value">{studentCode}</strong>}</label>
+            <label className="form-field"><span>Código a nivel organización</span>{manualStudentCode && !readOnly
+              ? <input name="studentCode" value={studentCode} maxLength={80} onChange={(event) => setStudentCode(event.target.value.toUpperCase())} required aria-invalid={Boolean(fieldErrors.studentCode)} />
+              : <strong className="readonly-value">{mode === 'create' ? 'Se generará automáticamente al guardar' : (studentCode || 'N/A')}</strong>}{field('studentCode')}</label>
+            <label className="form-field"><span>Usuario corporativo <small>(opcional)</small></span>{readOnly
+              ? <strong className="readonly-value">{corporateUser || 'N/A'}</strong>
+              : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate}
+                  onChange={(event) => setCorporateUser(event.target.value)} aria-invalid={Boolean(fieldErrors.corporateUser)} />}{field('corporateUser')}{!readOnly && !admissionDate && <small>Captura una Fecha de alta para habilitar el campo Usuario corporativo.</small>}</label>
             <label className="form-field"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
             {mode === 'create' ? <label className="form-field"><span>Nombre completo</span><input name="displayName" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required aria-invalid={Boolean(fieldErrors.displayName)} />{field('displayName')}</label> : <>
               <label className="form-field"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
@@ -331,15 +350,16 @@ export function StudentEditorPage({ mode }: Props) {
             </>}
             <label className="form-field"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <input name="validFrom" type="date" value={validFrom} onChange={(event) => setValidFrom(event.target.value)} required aria-invalid={Boolean(fieldErrors.validFrom)} />}{field('validFrom')}</label>
             <label className="form-field"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <input name="expiresAt" type="date" value={expiresAt} min={validFrom || undefined} onChange={(event) => setExpiresAt(event.target.value)} required aria-invalid={Boolean(fieldErrors.expiresAt)} />}{field('expiresAt')}</label>
+            <label className="form-field"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <input name="admissionDate" type="date" value={admissionDate} onChange={(event) => setAdmissionDate(event.target.value)} aria-invalid={Boolean(fieldErrors.admissionDate)} />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.</small>}</label>
             {readOnly && student?.organization && <label className="form-field"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
             {readOnly && student && <label className="form-field"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Desactivado' : 'Vencido'}</strong></label>}
           </div></section>
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
-            <label className="form-field"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={(event) => setProfessionalProfilePublicId(event.target.value)} disabled={profileOptions.length === 0}><option value="">Seleccionar perfil</option>{profileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
-            <label className="form-field"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={(event) => setTechnologicalProfilePublicId(event.target.value)} disabled={technologicalProfileOptions.length === 0}><option value="">Seleccionar perfil tecnológico</option>{technologicalProfileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
-            <label className="form-field"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{formatDate(admissionDate)}</strong> : <input name="admissionDate" type="date" value={admissionDate} onChange={(event) => setAdmissionDate(event.target.value)} aria-invalid={Boolean(fieldErrors.admissionDate)} />}{field('admissionDate')}{!readOnly && admissionDate && mode === 'edit' && <small>Al cambiarla se recalculan únicamente las fechas límite pendientes.</small>}{!readOnly && !admissionDate && <small className="warning-text">Las fechas límite que dependan de la fecha de alta permanecerán pendientes.</small>}</label>
+            <label className="form-field"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={(event) => setProfessionalProfilePublicId(event.target.value)} disabled={!admissionDate || profileOptions.length === 0}><option value="">Seleccionar perfil</option>{profileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && !admissionDate && <small>El colaborador está inactivo; la información de certificaciones es solo de consulta.</small>}{!readOnly && admissionDate && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
+            <label className="form-field"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={(event) => setTechnologicalProfilePublicId(event.target.value)} disabled={!admissionDate || technologicalProfileOptions.length === 0}><option value="">Seleccionar perfil tecnológico</option>{technologicalProfileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && admissionDate && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
+
           </div>}</section>}
-          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">Selecciona únicamente las áreas que aplican.</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} onChange={(event) => { const nextValue = event.target.checked; if (mode === 'edit' && !nextValue && flags[option.key] && !window.confirm('Esta área dejará de estar disponible para nuevos seguimientos. El historial existente se conservará.')) return; setFlags((current) => ({ ...current, [option.key]: nextValue })) }} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
+          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate} onChange={(event) => { const nextValue = event.target.checked; if (mode === 'edit' && !nextValue && flags[option.key] && !window.confirm('Esta área dejará de estar disponible para nuevos seguimientos. El historial existente se conservará.')) return; setFlags((current) => ({ ...current, [option.key]: nextValue })) }} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
         {!readOnly && organizationResolved && <div className="form-actions"><button className="primary-button" type="submit" disabled={saving || catalogLoading || Boolean(catalogError)}>{saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}</button></div>}

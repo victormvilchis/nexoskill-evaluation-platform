@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
-import { searchStudents } from '../features/students/api/studentApi'
+import { getStudentCatalogs, searchStudents } from '../features/students/api/studentApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
@@ -28,7 +28,7 @@ function statusFromQuery(value: string | null): StudentEffectiveStatus | 'ALL' {
   return value && validStatuses.has(value as StudentEffectiveStatus) ? value as StudentEffectiveStatus : 'ACTIVE'
 }
 function formatDate(value: string | null) {
-  if (!value) return 'Sin vencimiento'
+  if (!value) return 'N/A'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
 export function AdminStudentsPage() {
@@ -43,6 +43,7 @@ export function AdminStudentsPage() {
   const [data, setData] = useState<StudentPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tenantManualStudentCode, setTenantManualStudentCode] = useState(false)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const organization = searchParams.get('organization') ?? ''
@@ -53,6 +54,14 @@ export function AdminStudentsPage() {
     searchOrganizations({ status: 'ACTIVE', page: 0, size: 100, signal: controller.signal })
       .then((response) => setOrganizations(response.content.filter((item) => item.organizationType === 'CUSTOMER')))
       .catch(() => { if (!controller.signal.aborted) setOrganizations([]) })
+    return () => controller.abort()
+  }, [administrator])
+  useEffect(() => {
+    if (administrator) return
+    const controller = new AbortController()
+    getStudentCatalogs(undefined, controller.signal)
+      .then((response) => setTenantManualStudentCode(response.organization.manualStudentCode))
+      .catch(() => { if (!controller.signal.aborted) setTenantManualStudentCode(false) })
     return () => controller.abort()
   }, [administrator])
   useEffect(() => {
@@ -72,8 +81,8 @@ export function AdminStudentsPage() {
     searchStudents({
       query: searchParams.get('query') ?? '', status: statusFromQuery(searchParams.get('status')),
       organizationPublicId: administrator ? organization || undefined : undefined,
-      page, size, sort: searchParams.get('sort') ?? 'updatedAt',
-      direction: searchParams.get('direction') === 'ASC' ? 'ASC' : 'DESC', signal: controller.signal
+      page, size, sort: searchParams.get('sort') ?? 'displayName',
+      direction: searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC', signal: controller.signal
     }).then((response) => {
       setData({ ...response, content: response.content ?? [] })
       if (response.totalPages > 0 && page >= response.totalPages) goToPage(response.totalPages - 1)
@@ -87,6 +96,12 @@ export function AdminStudentsPage() {
     if (value) next.set(name, value); else next.delete(name)
     setSearchParams(next)
   }
+  function changeSort(value: string) {
+    const [nextSort = 'displayName', nextDirection = 'ASC'] = value.split(':')
+    const next = new URLSearchParams(searchParams); next.delete('page')
+    next.set('sort', nextSort); next.set('direction', nextDirection)
+    setSearchParams(next)
+  }
   function clearFilters() { setQuery(''); setStatus('ACTIVE'); setSearchParams(new URLSearchParams()) }
   function goToPage(nextPage: number) {
     const next = new URLSearchParams(searchParams)
@@ -98,7 +113,11 @@ export function AdminStudentsPage() {
     if (nextSize === 10) next.delete('size'); else next.set('size', String(nextSize))
     setSearchParams(next)
   }
-  const columnCount = administrator ? 6 : 5
+  const sort = searchParams.get('sort') ?? 'displayName'
+  const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
+  const selectedOrganization = organizations.find((item) => item.publicId === organization)
+  const showStudentCode = administrator ? Boolean(organization && selectedOrganization?.manualStudentCode) : tenantManualStudentCode
+  const columnCount = 6 + (administrator ? 1 : 0) + (showStudentCode ? 1 : 0)
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
     ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
@@ -107,26 +126,33 @@ export function AdminStudentsPage() {
     <main className="content-page resource-page ns-list-page student-page student-global-page">
       <header className="ns-page-header"><div><p className="eyebrow">Administración</p><h1>Colaboradores</h1><p className="muted">Las acciones respetan la organización propietaria y el ciclo de vida activo, desactivado o vencido.</p></div><div className="ns-page-header-actions ns-student-header-actions">{canImport && <Link className="button-link ns-excel-import-button" to={importTarget} aria-label="Cargar Excel de colaboradores"><span className="ns-excel-import-icon-wrap" aria-hidden="true"><svg className="ns-excel-import-icon" focusable="false" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.5h9l4 4v13h-13v-17Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14.5 3.5v4h4M8.25 11l3 5m0-5-3 5M14 11v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span><span>Cargar Excel</span></Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link" to="/admin/students/new"><Icon name="plus" size={16} /> Crear colaborador</Link>}</div></header>
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
-        <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo o código" />
+        <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo, código o usuario corporativo" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
         <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as StudentEffectiveStatus | 'ALL')}>{statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
+        <ResourceSelectField label="Ordenar" value={`${sort}:${direction}`} onChange={changeSort}>
+          <option value="displayName:ASC">Nombre · A a Z</option><option value="displayName:DESC">Nombre · Z a A</option>
+          <option value="admissionDate:ASC">Fecha de alta · antigua a reciente</option><option value="admissionDate:DESC">Fecha de alta · reciente a antigua</option>
+          <option value="expiresAt:ASC">Vencimiento · próximo a lejano</option><option value="expiresAt:DESC">Vencimiento · lejano a próximo</option>
+        </ResourceSelectField>
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="ns-data-panel" aria-busy={loading}>
-        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}<th>Estado</th><th>Vencimiento</th><th>Certificaciones</th><th className="ns-actions-column">Acciones</th></tr></thead><tbody>
+        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th><th>Fecha de alta</th><th>Estado</th><th>Vencimiento</th><th className="ns-actions-column">Acciones</th></tr></thead><tbody>
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
             <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>
             {administrator && <td>{student.organization ? <><strong>{student.organization.name}</strong><small>{student.organization.code}</small></> : '—'}</td>}
+            {showStudentCode && <td>{student.studentCode || 'N/A'}</td>}
+            <td>{student.corporateUser || 'N/A'}</td>
+            <td>{formatDate(student.admissionDate)}</td>
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
             <td>{formatDate(student.expiresAt)}</td>
-            <td>{student.certificationsEnabled ? <span className="status-badge status-active">Habilitadas</span> : <span className="muted">—</span>}</td>
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />}
               {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Administrar" to={`/admin/students/${student.publicId}/manage`} tone="primary" />}
-              {certificationOperator && student.certificationsEnabled && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
+              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
             </TableActions></td>
           </tr>)}
         </tbody></table></div>

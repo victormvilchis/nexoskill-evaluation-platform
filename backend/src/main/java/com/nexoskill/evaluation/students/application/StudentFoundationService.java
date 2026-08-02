@@ -25,12 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StudentFoundationService {
     private static final String BASE_SELECT = """
-        SELECT s.PUBLIC_ID, s.STUDENT_CODE, s.EMAIL, s.FIRST_NAME, s.LAST_NAME, s.DISPLAY_NAME,
+        SELECT s.PUBLIC_ID, s.STUDENT_CODE, s.CORPORATE_USER, s.EMAIL, s.FIRST_NAME, s.LAST_NAME, s.DISPLAY_NAME,
                s.STATUS, s.ACCESS_VALID_FROM, s.ACCESS_EXPIRES_ON, s.ADMISSION_DATE,
                s.PASSWORD_CHANGE_REQUIRED, s.TEMP_PASSWORD_EXPIRES_AT, s.LAST_LOGIN_AT,
                s.CREATED_AT, s.UPDATED_AT, s.VERSION_NO,
                o.PUBLIC_ID ORGANIZATION_PUBLIC_ID, o.ORGANIZATION_CODE, o.ORGANIZATION_NAME,
-               o.APPLIES_CERTIFICATIONS,
+               o.APPLIES_CERTIFICATIONS, o.MANUAL_STUDENT_CODE,
                profile.PUBLIC_ID PROFILE_PUBLIC_ID, profile.PROFILE_CODE, profile.PROFILE_NAME,
                tech_profile.PUBLIC_ID TECH_PROFILE_PUBLIC_ID,
                tech_profile.PROFILE_CODE TECH_PROFILE_CODE, tech_profile.PROFILE_NAME TECH_PROFILE_NAME,
@@ -106,11 +106,12 @@ public class StudentFoundationService {
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), command.appliesJira());
-        StudentStatus initialStatus = command.status() == null ? StudentStatus.ACTIVE : command.status();
+        StudentStatus initialStatus = command.admissionDate() == null ? StudentStatus.INACTIVE : StudentStatus.ACTIVE;
         StudentService.CreateResult creation = studentService.create(effective,
                 new StudentService.CreateCommand(command.email(), command.firstName(),
                         command.lastName(), command.displayName(), initialStatus,
-                        command.validFrom(), command.expiresAt()), actor);
+                        command.validFrom(), command.expiresAt(), command.admissionDate(),
+                        command.studentCode(), command.corporateUser()), actor);
         StudentService.StudentDetail created = creation.student();
         updateFoundation(created.publicId(), organization, command.admissionDate(),
                 command.professionalProfilePublicId(), command.technologicalProfilePublicId(),
@@ -126,14 +127,16 @@ public class StudentFoundationService {
         TenantContext effective = effectiveTenantForStudent(tenant, publicId);
         OrganizationJpaEntity organization = organizationRepository.findById(effective.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+        StudentView previous = get(tenant, publicId);
         validateCertificationConfiguration(organization, command.admissionDate(), command.professionalProfilePublicId(),
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), command.appliesJira());
-        StudentView previous = get(tenant, publicId);
+        validateInactiveCertificationChanges(previous, command);
         studentService.update(effective, publicId,
                 new StudentService.UpdateCommand(command.email(), command.firstName(), command.lastName(),
-                        command.displayName(), command.validFrom(), command.expiresAt(), command.version()), actor);
+                        command.displayName(), command.validFrom(), command.expiresAt(), command.admissionDate(),
+                        command.studentCode(), command.corporateUser(), command.version()), actor);
         updateFoundation(publicId, organization, command.admissionDate(), command.professionalProfilePublicId(),
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
@@ -143,11 +146,31 @@ public class StudentFoundationService {
         return get(tenant, publicId);
     }
 
+    private void validateInactiveCertificationChanges(StudentView previous, UpdateCommand command) {
+        if (command.admissionDate() != null) return;
+        boolean changed = !java.util.Objects.equals(
+                    previous.professionalProfile() == null ? null : previous.professionalProfile().publicId(),
+                    command.professionalProfilePublicId())
+                || !java.util.Objects.equals(
+                    previous.technologicalProfile() == null ? null : previous.technologicalProfile().publicId(),
+                    command.technologicalProfilePublicId())
+                || previous.appliesTechnologicalCertification() != command.appliesTechnologicalCertification()
+                || previous.appliesDevelopmentSecurity() != command.appliesDevelopmentSecurity()
+                || previous.appliesNormativeTesting() != command.appliesNormativeTesting()
+                || previous.appliesOne() != command.appliesOne()
+                || previous.appliesAgile() != command.appliesAgile()
+                || previous.appliesJira() != command.appliesJira();
+        if (changed) {
+            throw new BusinessException("STUDENT_CERTIFICATION_INACTIVE",
+                    "El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.");
+        }
+    }
+
     @Transactional(readOnly = true)
     public CatalogBundle catalogs(TenantContext tenant, String organizationPublicId) {
         OrganizationJpaEntity organization = resolveCatalogOrganization(tenant, organizationPublicId);
         OrganizationRef organizationRef = new OrganizationRef(organization.getPublicId(), organization.getCode(),
-                organization.getName(), organization.isAppliesCertifications());
+                organization.getName(), organization.isAppliesCertifications(), organization.isManualStudentCode());
         if (!organization.isAppliesCertifications()) {
             return new CatalogBundle(organizationRef, false, List.of(), List.of());
         }
@@ -238,7 +261,7 @@ public class StudentFoundationService {
     private void validateCertificationConfiguration(OrganizationJpaEntity organization, LocalDate admissionDate,
             String profile, String technologicalProfile, boolean appliesTechnological, boolean appliesDevelopment,
             boolean appliesNormative, boolean appliesOne, boolean appliesAgile, boolean appliesJira) {
-        boolean hasData = admissionDate != null || notBlank(profile) || notBlank(technologicalProfile)
+        boolean hasData = notBlank(profile) || notBlank(technologicalProfile)
                 || appliesTechnological || appliesDevelopment || appliesNormative || appliesOne || appliesAgile || appliesJira;
         if (!organization.isAppliesCertifications() && hasData) {
             throw new BusinessException("STUDENT_CERTIFICATIONS_NOT_ENABLED",
@@ -263,7 +286,7 @@ public class StudentFoundationService {
                 .addValue("professionalProfileId", profileId)
                 .addValue("technologicalProfileId", technologicalProfileId)
                 .addValue("enabled", anyArea ? 1 : 0)
-                .addValue("admissionDate", enabled && admissionDate != null
+                .addValue("admissionDate", admissionDate != null
                         ? java.sql.Date.valueOf(admissionDate) : null, java.sql.Types.DATE)
                 .addValue("appliesTechnological", enabled && appliesTechnological ? 1 : 0)
                 .addValue("appliesDevelopment", enabled && appliesDevelopment ? 1 : 0)
@@ -401,7 +424,8 @@ public class StudentFoundationService {
         }
         where.append(" AND s.STATUS <> 'DELETED' ");
         if (notBlank(criteria.query())) {
-            where.append(" AND (LOWER(s.DISPLAY_NAME) LIKE :query OR LOWER(s.EMAIL) LIKE :query OR LOWER(s.STUDENT_CODE) LIKE :query) ");
+            where.append(" AND (LOWER(s.DISPLAY_NAME) LIKE :query OR LOWER(s.EMAIL) LIKE :query "
+                    + "OR LOWER(s.STUDENT_CODE) LIKE :query OR LOWER(s.CORPORATE_USER) LIKE :query) ");
             params.addValue("query", "%" + criteria.query().trim().toLowerCase() + "%");
         }
         appendStatus(where, criteria.status());
@@ -426,9 +450,9 @@ public class StudentFoundationService {
     private void appendStatus(StringBuilder where, StudentEffectiveStatus status) {
         if (status == null) return;
         switch (status) {
-            case ACTIVE -> where.append(" AND s.STATUS = 'ACTIVE' AND s.ACCESS_VALID_FROM <= :today AND s.ACCESS_EXPIRES_ON >= :today ");
+            case ACTIVE -> where.append(" AND s.STATUS = 'ACTIVE' AND s.ADMISSION_DATE IS NOT NULL AND s.ACCESS_VALID_FROM <= :today AND s.ACCESS_EXPIRES_ON >= :today ");
             case EXPIRED -> where.append(" AND (s.STATUS = 'EXPIRED' OR (s.STATUS = 'ACTIVE' AND s.ACCESS_EXPIRES_ON < :today)) ");
-            case INACTIVE -> where.append(" AND s.STATUS = 'INACTIVE' ");
+            case INACTIVE -> where.append(" AND (s.STATUS = 'INACTIVE' OR s.ADMISSION_DATE IS NULL) ");
             case DELETED -> where.append(" AND 1 = 0 ");
         }
     }
@@ -438,6 +462,7 @@ public class StudentFoundationService {
             case "displayName" -> "LOWER(s.DISPLAY_NAME)";
             case "email" -> "LOWER(s.EMAIL)";
             case "expiresAt" -> "s.ACCESS_EXPIRES_ON";
+            case "admissionDate" -> "s.ADMISSION_DATE";
             case "organization" -> "LOWER(o.ORGANIZATION_NAME)";
             default -> "NVL(s.UPDATED_AT, s.CREATED_AT)";
         };
@@ -449,15 +474,17 @@ public class StudentFoundationService {
         StudentStatus physical = StudentStatus.valueOf(rs.getString("STATUS"));
         LocalDate validFrom = localDate(rs, "ACCESS_VALID_FROM");
         LocalDate expiresAt = localDate(rs, "ACCESS_EXPIRES_ON");
-        StudentEffectiveStatus effective = effectiveStatus(physical, expiresAt, LocalDate.now(clock));
+        LocalDate admissionDate = localDate(rs, "ADMISSION_DATE");
+        StudentEffectiveStatus effective = effectiveStatus(physical, admissionDate, expiresAt, LocalDate.now(clock));
         boolean organizationCertifications = rs.getBoolean("APPLIES_CERTIFICATIONS");
-        return new StudentView(rs.getString("PUBLIC_ID"), rs.getString("STUDENT_CODE"), rs.getString("EMAIL"),
+        return new StudentView(rs.getString("PUBLIC_ID"), rs.getString("STUDENT_CODE"), rs.getString("CORPORATE_USER"), rs.getString("EMAIL"),
                 rs.getString("FIRST_NAME"), rs.getString("LAST_NAME"), rs.getString("DISPLAY_NAME"), physical,
-                effective, validFrom, expiresAt, localDate(rs, "ADMISSION_DATE"),
+                effective, validFrom, expiresAt, admissionDate,
                 rs.getBoolean("PASSWORD_CHANGE_REQUIRED"), instant(rs, "TEMP_PASSWORD_EXPIRES_AT"),
                 instant(rs, "LAST_LOGIN_AT"), instant(rs, "CREATED_AT"), instant(rs, "UPDATED_AT"),
                 rs.getLong("VERSION_NO"), new OrganizationRef(rs.getString("ORGANIZATION_PUBLIC_ID"),
-                        rs.getString("ORGANIZATION_CODE"), rs.getString("ORGANIZATION_NAME"), organizationCertifications),
+                        rs.getString("ORGANIZATION_CODE"), rs.getString("ORGANIZATION_NAME"), organizationCertifications,
+                        rs.getBoolean("MANUAL_STUDENT_CODE")),
                 organizationCertifications ? ref(rs, "PROFILE_PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME") : null,
                 organizationCertifications ? ref(rs, "TECH_PROFILE_PUBLIC_ID", "TECH_PROFILE_CODE", "TECH_PROFILE_NAME") : null,
                 organizationCertifications, organizationCertifications && rs.getBoolean("APPLIES_TECH_CERT"),
@@ -483,9 +510,9 @@ public class StudentFoundationService {
         return value == null ? null : value.toLocalDate();
     }
 
-    private StudentEffectiveStatus effectiveStatus(StudentStatus status, LocalDate expiresAt, LocalDate today) {
+    private StudentEffectiveStatus effectiveStatus(StudentStatus status, LocalDate admissionDate, LocalDate expiresAt, LocalDate today) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
-        if (status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
+        if (admissionDate == null || status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
         if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) return StudentEffectiveStatus.EXPIRED;
         return StudentEffectiveStatus.ACTIVE;
     }
@@ -570,21 +597,47 @@ public class StudentFoundationService {
             String technologyPublicId, Boolean certificationsEnabled, String sort, String direction) {}
     public record CreateCommand(String organizationPublicId, String email, String firstName,
             String lastName, String displayName, StudentStatus status, LocalDate validFrom,
-            LocalDate expiresAt, LocalDate admissionDate, String professionalProfilePublicId,
+            LocalDate expiresAt, LocalDate admissionDate, String studentCode, String corporateUser,
+            String professionalProfilePublicId,
             String technologicalProfilePublicId, boolean appliesTechnologicalCertification,
             boolean appliesDevelopmentSecurity, boolean appliesNormativeTesting, boolean appliesOne,
-            boolean appliesAgile, boolean appliesJira) {}
+            boolean appliesAgile, boolean appliesJira) {
+        public CreateCommand(String organizationPublicId, String email, String firstName, String lastName,
+                String displayName, StudentStatus status, LocalDate validFrom, LocalDate expiresAt,
+                LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
+                boolean appliesTechnologicalCertification, boolean appliesDevelopmentSecurity,
+                boolean appliesNormativeTesting, boolean appliesOne, boolean appliesAgile, boolean appliesJira) {
+            this(organizationPublicId, email, firstName, lastName, displayName, status, validFrom, expiresAt,
+                    admissionDate, null, null, professionalProfilePublicId, technologicalProfilePublicId,
+                    appliesTechnologicalCertification, appliesDevelopmentSecurity, appliesNormativeTesting,
+                    appliesOne, appliesAgile, appliesJira);
+        }
+    }
     public record UpdateCommand(String email, String firstName, String lastName, String displayName,
-            LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate, String professionalProfilePublicId,
+            LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate, String studentCode,
+            String corporateUser, String professionalProfilePublicId,
             String technologicalProfilePublicId, boolean appliesTechnologicalCertification,
             boolean appliesDevelopmentSecurity, boolean appliesNormativeTesting, boolean appliesOne,
-            boolean appliesAgile, boolean appliesJira, Long version) {}
+            boolean appliesAgile, boolean appliesJira, Long version) {
+        public UpdateCommand(String email, String firstName, String lastName, String displayName,
+                LocalDate validFrom, LocalDate expiresAt, LocalDate admissionDate,
+                String professionalProfilePublicId, String technologicalProfilePublicId,
+                boolean appliesTechnologicalCertification, boolean appliesDevelopmentSecurity,
+                boolean appliesNormativeTesting, boolean appliesOne, boolean appliesAgile,
+                boolean appliesJira, Long version) {
+            this(email, firstName, lastName, displayName, validFrom, expiresAt, admissionDate,
+                    null, null, professionalProfilePublicId, technologicalProfilePublicId,
+                    appliesTechnologicalCertification, appliesDevelopmentSecurity, appliesNormativeTesting,
+                    appliesOne, appliesAgile, appliesJira, version);
+        }
+    }
     public record CreateResult(StudentView student, String temporaryPassword) {}
     public record CatalogRef(String publicId, String code, String name) {}
     public record CatalogBundle(OrganizationRef organization, boolean appliesCertifications,
             List<CatalogRef> profiles, List<CatalogRef> technologicalProfiles) {}
-    public record OrganizationRef(String publicId, String code, String name, boolean appliesCertifications) {}
-    public record StudentView(String publicId, String studentCode, String email, String firstName, String lastName,
+    public record OrganizationRef(String publicId, String code, String name, boolean appliesCertifications,
+            boolean manualStudentCode) {}
+    public record StudentView(String publicId, String studentCode, String corporateUser, String email, String firstName, String lastName,
             String displayName, StudentStatus status, StudentEffectiveStatus effectiveStatus, LocalDate validFrom,
             LocalDate expiresAt, LocalDate admissionDate, boolean passwordChangeRequired,
             Instant temporaryPasswordExpiresAt, Instant lastLoginAt, Instant createdAt, Instant updatedAt,

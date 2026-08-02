@@ -89,6 +89,7 @@ public class StudentCertificationService {
     public StudentCertificationDetail save(TenantContext tenant, String studentPublicId, SaveCommand command,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         if (command == null) {
             throw new BusinessException("CERTIFICATION_CONFIGURATION_REQUIRED",
                     "La configuración de certificaciones es obligatoria.");
@@ -122,6 +123,7 @@ public class StudentCertificationService {
     public CycleView createCycle(TenantContext tenant, String studentPublicId, CycleCommand command,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         String publicId = createCycle(scope, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_CYCLE_CREATED", scope, publicId,
                 "Se creó un ciclo de certificación.", ipAddress, userAgent);
@@ -132,6 +134,7 @@ public class StudentCertificationService {
     public CycleView updateCycle(TenantContext tenant, String studentPublicId, String cyclePublicId,
             CycleCommand command, AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         updateCycle(scope, cyclePublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_CYCLE_UPDATED", scope, cyclePublicId,
                 "Se actualizó un ciclo de certificación.", ipAddress, userAgent);
@@ -142,6 +145,7 @@ public class StudentCertificationService {
     public CycleView makePrimary(TenantContext tenant, String studentPublicId, String cyclePublicId,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         CycleRow row = requireCycle(scope, cyclePublicId);
         if (row.type() != CertificationType.TECHNOLOGICAL || !row.active()) {
             throw new BusinessException("CERTIFICATION_PRIMARY_INVALID",
@@ -168,6 +172,7 @@ public class StudentCertificationService {
     public CycleView cancel(TenantContext tenant, String studentPublicId, String cyclePublicId,
             String reason, AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         CycleRow row = requireCycle(scope, cyclePublicId);
         jdbc.update("""
             UPDATE STUDENT_CERTIFICATION_CYCLE
@@ -397,6 +402,7 @@ public class StudentCertificationService {
     public AttemptView addAttempt(TenantContext tenant, String studentPublicId, String cyclePublicId,
             AttemptCommand command, AuthenticatedUser actor, String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         AttemptView created = addAttemptInternal(scope, cyclePublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_ATTEMPT_CREATED", scope, cyclePublicId,
                 "Se registró un intento de certificación.", ipAddress, userAgent);
@@ -408,6 +414,7 @@ public class StudentCertificationService {
             String attemptPublicId, AttemptCommand command, AuthenticatedUser actor,
             String ipAddress, String userAgent) {
         Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        requireActiveStudent(scope);
         AttemptView updated = updateAttemptInternal(scope, cyclePublicId, attemptPublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_ATTEMPT_UPDATED", scope, cyclePublicId,
                 "Se actualizó un intento de certificación.", ipAddress, userAgent);
@@ -1058,6 +1065,17 @@ public class StudentCertificationService {
                     nullableLong(rs, "PREVIOUS_APPROVED_CYCLE_ID"), rs.getBoolean("ACTIVE"), rs.getLong("VERSION_NO")));
         if (rows.isEmpty()) throw new BusinessException("CERTIFICATION_CYCLE_NOT_FOUND", "El ciclo no existe.");
         return rows.getFirst();
+    }
+
+    private void requireActiveStudent(Scope scope) {
+        if (scope == null || scope.student() == null || scope.student().getAdmissionDate() == null) {
+            throw new BusinessException("STUDENT_CERTIFICATION_INACTIVE",
+                    "El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.");
+        }
+        if (scope.student().getStatus() != StudentStatus.ACTIVE) {
+            throw new BusinessException("STUDENT_CERTIFICATION_INACTIVE",
+                    "El colaborador no se encuentra activo. No es posible gestionar sus certificaciones.");
+        }
     }
 
     private Scope resolveStudentScope(TenantContext tenant, String studentPublicId, AuthenticatedUser actor,

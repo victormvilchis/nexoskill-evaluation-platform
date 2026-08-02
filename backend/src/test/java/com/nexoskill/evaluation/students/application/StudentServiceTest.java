@@ -48,6 +48,7 @@ class StudentServiceTest {
     private OrganizationRepository organizations;
     private PasswordHasher passwords;
     private SecureTemporaryPasswordGenerator passwordGenerator;
+    private OrganizationJpaEntity organization;
     private StudentService service;
 
     @BeforeEach
@@ -60,7 +61,7 @@ class StudentServiceTest {
         when(passwordGenerator.generate()).thenReturn("Generated1!");
         service = new StudentService(students, sessions, organizations, passwords, new PasswordPolicy(),
                 passwordGenerator, new AppProperties(), mock(AuditLogPort.class), CLOCK);
-        OrganizationJpaEntity organization = OrganizationJpaEntity.create("org-public", "ACME", "Acme",
+        organization = OrganizationJpaEntity.create("org-public", "ACME", "Acme",
                 ContentMode.CLEAN, LocalDate.of(2026, 1, 1), LocalDate.of(2027, 1, 1), 1L, NOW);
         setId(organization, 20L);
         when(organizations.findById(20L)).thenReturn(Optional.of(organization));
@@ -101,7 +102,7 @@ class StudentServiceTest {
                         StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30)),
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
         assertThat(result.temporaryPassword()).isEqualTo("Generated1!");
-        assertThat(result.student().studentCode()).matches("ACM\\d{2}30");
+        assertThat(result.student().studentCode()).matches("AC\\d{2}30");
         assertThat(result.student().status()).isEqualTo(StudentStatus.INACTIVE);
         verify(passwords).encode("Generated1!");
         verify(sessions, never()).save(any(StudentSessionJpaEntity.class));
@@ -110,8 +111,52 @@ class StudentServiceTest {
 
     @Test
     void shouldNormalizeOrganizationPrefixWithoutAccents() {
-        assertThat(StudentService.organizationPrefix("Ábaco")).isEqualTo("ABA");
-        assertThat(StudentService.organizationPrefix("BBVA")).isEqualTo("BBV");
+        assertThat(StudentService.organizationPrefix("Ábaco")).isEqualTo("AB");
+        assertThat(StudentService.organizationPrefix("BBVA")).isEqualTo("BB");
+    }
+
+    @Test
+    void shouldRequireAStudentCodeWhenTheOrganizationUsesManualCodes() {
+        organization.configureStudentCode(true, 1L, NOW);
+
+        assertThatThrownBy(() -> service.create(TENANT,
+                new StudentService.CreateCommand("ana@example.com", "", "", "Ana López",
+                        StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY, null, null),
+                new StudentService.Actor(1L, "127.0.0.1", "browser")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_CODE_REQUIRED"));
+    }
+
+    @Test
+    void shouldRejectCorporateUserWithoutAdmissionDate() {
+        assertThatThrownBy(() -> service.create(TENANT,
+                new StudentService.CreateCommand("ana@example.com", "", "", "Ana López",
+                        StudentStatus.INACTIVE, TODAY, TODAY.plusDays(30), null, null, "XMF7210"),
+                new StudentService.Actor(1L, "127.0.0.1", "browser")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getCode())
+                                .isEqualTo("STUDENT_CORPORATE_USER_REQUIRES_ADMISSION_DATE"));
+    }
+
+    @Test
+    void shouldPreserveCorporateUserWhenAdmissionDateIsRemoved() {
+        StudentJpaEntity student = StudentJpaEntity.create("student-public", 20L, "AC1230",
+                "ana@example.com", "ana@example.com", "password-hash", "Ana", "López", "Ana López",
+                StudentStatus.ACTIVE, TODAY.minusDays(1), TODAY.plusDays(30), TODAY,
+                "XMF7210", "XMF7210", NOW.plusSeconds(7200), 1L, NOW.minusSeconds(3600));
+        setId(student, 30L);
+        when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public"))
+                .thenReturn(Optional.of(student));
+
+        StudentService.StudentDetail updated = service.update(TENANT, "student-public",
+                new StudentService.UpdateCommand("ana@example.com", "Ana", "López", "Ana López",
+                        TODAY.minusDays(1), TODAY.plusDays(30), null, null, null, student.getVersion()),
+                new StudentService.Actor(1L, "127.0.0.1", "browser"));
+
+        assertThat(updated.status()).isEqualTo(StudentStatus.INACTIVE);
+        assertThat(updated.corporateUser()).isEqualTo("XMF7210");
+        verify(sessions).revokeActive(student.getId(), StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
+                StudentSessionRevocationReason.DEACTIVATED, NOW);
     }
 
     @Test
@@ -122,6 +167,7 @@ class StudentServiceTest {
         StudentService.StudentDetail updated = service.deactivate(TENANT, "student-public",
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
         assertThat(updated.status()).isEqualTo(StudentStatus.INACTIVE);
+        assertThat(student.getAdmissionDate()).isNull();
         verify(sessions).revokeActive(student.getId(), StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
                 StudentSessionRevocationReason.DEACTIVATED, NOW);
     }

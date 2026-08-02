@@ -36,7 +36,7 @@ const STATUS_LABELS = {
 } as const
 
 function formatDate(value?: string | null) {
-  if (!value) return 'Sin registro'
+  if (!value) return 'N/A'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
 
@@ -200,7 +200,8 @@ export function StudentManagementPage() {
   }
 
   const { student, sessions, seat, activeSessions, lastAdministrativeChange } = administration
-  const canActivate = student.effectiveStatus === 'INACTIVE' || student.effectiveStatus === 'EXPIRED'
+  const canActivate = Boolean(student.admissionDate)
+    && (student.effectiveStatus === 'INACTIVE' || student.effectiveStatus === 'EXPIRED')
   const canDeactivate = student.effectiveStatus === 'ACTIVE' || student.effectiveStatus === 'EXPIRED'
 
   return (
@@ -218,6 +219,8 @@ export function StudentManagementPage() {
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="ns-card student-management-summary">
+        <div><span>Código a nivel organización</span><strong>{student.studentCode || 'N/A'}</strong></div>
+        <div><span>Usuario corporativo</span><strong>{student.corporateUser || 'N/A'}</strong></div>
         <div><span>Correo</span><strong>{student.email}</strong></div>
         <div><span>Organización</span><strong>{student.organization?.name ?? 'Sin organización'}</strong></div>
         <div><span>Inicio de vigencia</span><strong>{formatDate(student.validFrom)}</strong></div>
@@ -230,7 +233,7 @@ export function StudentManagementPage() {
 
       <section className="ns-card student-administration-section">
         <div className="ns-card-heading"><div><span className="ns-step">1</span><h2>Estado y acceso</h2></div></div>
-        <p className="muted">Las fechas se modifican únicamente desde Editar colaborador. Cambiarlas no activa automáticamente una cuenta vencida.</p>
+        <p className="muted">La Fecha de alta se modifica únicamente desde Editar colaborador. Sin este dato, el colaborador permanece inactivo y no puede reactivarse.</p>
         <div className="student-management-actions">
           {canActivate && permissions.has('STUDENT_STATUS_CHANGE') && (
             <button className="primary-button" type="button" disabled={busy} onClick={() => setPendingAction('ACTIVATE')}>Activar</button>
@@ -310,7 +313,7 @@ export function StudentManagementPage() {
         onConfirm={() => void executeStatusAction()} />
 
       <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Desactivar colaborador"
-        description="El colaborador perderá el acceso inmediatamente. Sus sesiones serán revocadas y el asiento entrará en el proceso de liberación; sus avances, resultados, asignaciones y certificaciones se conservarán."
+        description="Se eliminará la Fecha de alta. El colaborador perderá el acceso inmediatamente, sus sesiones serán revocadas y ya no podrá gestionar certificaciones; sus identificadores, avances, resultados y certificaciones existentes se conservarán."
         confirmLabel="Desactivar" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
