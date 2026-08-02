@@ -657,23 +657,7 @@ public class StudentCertificationService {
     }
 
     private Metrics metrics(Applicability applicability, List<CycleView> cycles) {
-        int applicable = (applicability.technological() ? 1 : 0) + (applicability.developmentSecurity() ? 1 : 0)
-                + (applicability.normativeTesting() ? 1 : 0) + (applicability.one() ? 1 : 0)
-                + (applicability.agile() ? 1 : 0) + (applicability.jira() ? 1 : 0);
-        return new Metrics(applicable,
-                (int) cycles.stream().filter(c -> c.active() && (c.trackingStatus() == CertificationTrackingStatus.PENDING
-                        || c.trackingStatus() == CertificationTrackingStatus.NOT_SCHEDULED)).count(),
-                (int) cycles.stream().filter(c -> c.active() && c.trackingStatus() == CertificationTrackingStatus.SCHEDULED).count(),
-                (int) cycles.stream().filter(c -> c.active() && Boolean.TRUE.equals(c.approved())).count(),
-                (int) cycles.stream().filter(c -> c.active() && Boolean.FALSE.equals(c.approved())).count(),
-                (int) cycles.stream().filter(c -> c.active()
-                        && c.validityStatus() == CertificationValidityStatus.VALID).count(),
-                (int) cycles.stream().filter(c -> c.active()
-                        && c.validityStatus() == CertificationValidityStatus.EXPIRING_SOON).count(),
-                (int) cycles.stream().filter(c -> c.active()
-                        && c.validityStatus() == CertificationValidityStatus.EXPIRED).count(),
-                (int) cycles.stream().filter(c -> c.processType() == CertificationProcessType.RECERTIFICATION
-                        && c.active() && !Boolean.TRUE.equals(c.approved())).count());
+        return CertificationSummaryCalculator.calculate(applicability, cycles);
     }
 
     private String createCycle(Scope scope, CycleCommand command, Long actorId) {

@@ -198,6 +198,129 @@ function hasExpiration(type: CertificationType) {
   return type === 'TECHNOLOGICAL' || type === 'DEVELOPMENT_SECURITY' || type === 'NORMATIVE_TESTING'
 }
 
+type RecommendationTone = 'priority' | 'preventive' | 'informative' | 'positive'
+
+type ManagementRecommendation = {
+  key: string
+  tone: RecommendationTone
+  title: string
+  description: string
+}
+
+function hasApprovedHistory(cycle: CertificationCycleView) {
+  return cycle.approved === true
+    || Boolean(cycle.lastApprovedApplicationDate)
+    || cycle.trackingStatus === 'APPROVED'
+    || cycle.latestExamStatus === 'PASSED'
+}
+
+function isScheduledCycle(cycle: CertificationCycleView) {
+  return cycle.trackingStatus === 'SCHEDULED'
+    || cycle.latestExamStatus === 'SCHEDULED'
+    || cycle.latestExamStatus === 'RESCHEDULED'
+}
+
+function resultTimestamp(cycle: CertificationCycleView) {
+  return cycle.applicationDate ?? cycle.lastApprovedApplicationDate ?? cycle.scheduledDate ?? ''
+}
+
+function latestCycle(cycles: CertificationCycleView[], predicate: (cycle: CertificationCycleView) => boolean) {
+  return cycles.filter(predicate).sort((left, right) => resultTimestamp(right).localeCompare(resultTimestamp(left)))[0]
+}
+
+function recommendationAreaName(type: CertificationType, cycle?: CertificationCycleView) {
+  if (type === 'TECHNOLOGICAL' && cycle?.technologyName) {
+    const level = cycle.certificationLevel ? ` · ${cycle.certificationLevel}` : ''
+    return `Tecnológica (${cycle.technologyName}${level})`
+  }
+  return TYPE_LABELS[type]
+}
+
+function buildManagementRecommendations(
+  applicability: CertificationApplicability | undefined,
+  cycles: CertificationCycleView[]
+): ManagementRecommendation[] {
+  if (!applicability) return []
+  const recommendations: ManagementRecommendation[] = []
+
+  FLAG_OPTIONS.filter((option) => applicability[option.key]).forEach((option) => {
+    const areaCycles = cycles.filter((cycle) => cycle.active && cycle.type === option.type)
+    const approvedCycles = areaCycles.filter(hasApprovedHistory)
+    const approved = approvedCycles.length > 0
+    const scheduledCycle = latestCycle(areaCycles, isScheduledCycle)
+    const failedCycle = latestCycle(areaCycles, (cycle) => cycle.trackingStatus === 'NOT_APPROVED'
+      || cycle.latestExamStatus === 'FAILED'
+      || (cycle.approved === false && Boolean(cycle.applicationDate)))
+    const validApproval = hasExpiration(option.type)
+      ? approvedCycles.some((cycle) => cycle.validityStatus === 'VALID' || cycle.validityStatus === 'EXPIRING_SOON')
+      : approved
+    const expiredCycle = !validApproval
+      ? latestCycle(approvedCycles, (cycle) => cycle.validityStatus === 'EXPIRED')
+      : undefined
+    const expiringCycle = latestCycle(approvedCycles, (cycle) => cycle.validityStatus === 'EXPIRING_SOON')
+    const areaName = recommendationAreaName(option.type, expiredCycle ?? expiringCycle ?? failedCycle ?? scheduledCycle)
+
+    if (expiredCycle) {
+      const expiration = expiredCycle.expirationDate ? ` desde el ${formatDate(expiredCycle.expirationDate)}` : ''
+      recommendations.push({
+        key: `${option.type}-expired`,
+        tone: 'priority',
+        title: `Recertificación pendiente de ${areaName}`,
+        description: `La certificación se encuentra vencida${expiration}. Se recomienda priorizar la preparación y programación de una nueva aplicación.`
+      })
+    } else if (expiringCycle) {
+      const expiration = expiringCycle.expirationDate ? ` el ${formatDate(expiringCycle.expirationDate)}` : ''
+      recommendations.push({
+        key: `${option.type}-expiring`,
+        tone: 'preventive',
+        title: `Preparar recertificación de ${areaName}`,
+        description: `La certificación está próxima a vencer${expiration}. Se recomienda revisar el material de preparación y comenzar a coordinar su siguiente aplicación.`
+      })
+    }
+
+    if (failedCycle) {
+      recommendations.push({
+        key: `${option.type}-failed`,
+        tone: 'priority',
+        title: `Revisar preparación de ${areaName}`,
+        description: 'La última aplicación no fue aprobada. Se recomienda revisar los temas pendientes antes de programar el siguiente intento.'
+      })
+    }
+
+    if (scheduledCycle) {
+      const scheduledDate = scheduledCycle.scheduledDate ? ` para el ${formatDate(scheduledCycle.scheduledDate)}` : ''
+      recommendations.push({
+        key: `${option.type}-scheduled`,
+        tone: 'informative',
+        title: `Aplicación programada de ${areaName}`,
+        description: `Existe una aplicación programada${scheduledDate}. Se recomienda verificar que el colaborador cuente con el material y la información necesarios.`
+      })
+    }
+
+    if (!approved && !scheduledCycle && !failedCycle) {
+      recommendations.push({
+        key: `${option.type}-initial`,
+        tone: 'informative',
+        title: hasExpiration(option.type) ? `Certificación inicial pendiente de ${areaName}` : `Seguimiento pendiente de ${areaName}`,
+        description: hasExpiration(option.type)
+          ? 'El área aplica para este colaborador y todavía requiere completar su certificación inicial.'
+          : `${areaName} aplica para este colaborador y aún no se encuentra completado. Se recomienda revisar su avance.`
+      })
+    }
+  })
+
+  if (recommendations.length === 0) {
+    return [{
+      key: 'all-clear',
+      tone: 'positive',
+      title: 'Sin acciones prioritarias',
+      description: 'Las certificaciones y seguimientos del colaborador se encuentran en orden. No se identifican recomendaciones prioritarias en este momento.'
+    }]
+  }
+
+  return recommendations
+}
+
 export function StudentCertificationsPage() {
   const { publicId = '' } = useParams()
   const navigate = useNavigate()
@@ -328,7 +451,10 @@ export function StudentCertificationsPage() {
     && applicableTypes.includes(cycle.type)
     && Boolean(cycle.publicId)
     && supportsAttempts(cycle.type)), [applicableTypes, cycles])
-
+  const managementRecommendations = useMemo(() => buildManagementRecommendations(
+    detail?.applicability,
+    detail?.cycles ?? []
+  ), [detail])
 
   function updateCycle(key: string, changes: Partial<EditableCycle>) {
     setCycles((current) => current.map((cycle) => cycle.key === key ? { ...cycle, ...changes } : cycle))
@@ -532,22 +658,69 @@ export function StudentCertificationsPage() {
       <form className="certification-form" onSubmit={submit} noValidate>
         <fieldset disabled={saving || inactiveStudent}>
           {activeTab === 'SUMMARY' && (
-            <section className="certification-panel">
-              <div className="certification-metrics">
-                <Metric label="Áreas aplicables" value={detail.metrics.applicableAreas} />
-                <Metric label="Pendientes" value={detail.metrics.pending} />
-                <Metric label="Programadas" value={detail.metrics.scheduled} />
-                <Metric label="Aprobadas" value={detail.metrics.approved} />
-                <Metric label="No aprobadas" value={detail.metrics.notApproved} />
-                <Metric label="Vigentes" value={detail.metrics.valid} />
-                <Metric label="Próximas a vencer" value={detail.metrics.expiringSoon} />
-                <Metric label="Vencidas" value={detail.metrics.expired} />
-                <Metric label="Recertificaciones pendientes" value={detail.metrics.pendingRecertifications} />
-              </div>
-              <div className="ns-card certification-summary-note">
-                <h2>Seguimientos sin vencimiento</h2>
-                <p>ONE, Agile y Jira conservan aplicabilidad, estatus, observaciones e historial; no generan intentos, fechas límite ni vencimientos.</p>
-              </div>
+            <section className="certification-panel certification-summary-dashboard">
+              <section className="certification-summary-group" aria-labelledby="coverage-summary-title">
+                <header>
+                  <div>
+                    <p className="eyebrow">Cobertura</p>
+                    <h2 id="coverage-summary-title">Situación de las áreas aplicables</h2>
+                  </div>
+                  <p>Las tarjetas distinguen cobertura histórica, pendientes iniciales, programaciones y resultados no aprobados.</p>
+                </header>
+                <div className="certification-metrics certification-metrics--coverage">
+                  <Metric label="Áreas aplicables" value={detail.metrics.applicableAreas} tone="neutral"
+                    description="Universo total que corresponde al colaborador." />
+                  <Metric label="Aprobadas" value={detail.metrics.approved} tone="positive"
+                    description="Con antecedente aprobado o seguimiento completado." />
+                  <Metric label="Pendientes" value={detail.metrics.pending} tone="warning"
+                    description="Requieren completar su certificación inicial." />
+                  <Metric label="No aprobadas" value={detail.metrics.notApproved} tone="danger"
+                    description="Última presentación con resultado no aprobado." />
+                  <Metric label="Programadas" value={detail.metrics.scheduled} tone="info"
+                    description="Aplicaciones futuras ya registradas." />
+                </div>
+              </section>
+
+              <section className="certification-summary-group" aria-labelledby="validity-summary-title">
+                <header>
+                  <div>
+                    <p className="eyebrow">Vigencia y seguimiento</p>
+                    <h2 id="validity-summary-title">Estado actual de las áreas aprobadas</h2>
+                  </div>
+                  <p>Las próximas a vencer forman parte de Vigentes; las vencidas conservan su antecedente aprobado.</p>
+                </header>
+                <div className="certification-metrics certification-metrics--validity">
+                  <Metric label="Vigentes" value={detail.metrics.valid} tone="positive"
+                    description="Incluye próximas a vencer y seguimientos aprobados sin vencimiento." />
+                  <Metric label="Próximas a vencer" value={detail.metrics.expiringSoon} tone="warning"
+                    description="Subconjunto vigente dentro del periodo preventivo." />
+                  <Metric label="Vencidas" value={detail.metrics.expired} tone="danger"
+                    description="Aprobadas cuya vigencia ya terminó." />
+                  <Metric label="Recertificaciones pendientes" value={detail.metrics.pendingRecertifications} tone="danger"
+                    description="Vencidas que requieren una nueva aprobación." />
+                </div>
+              </section>
+
+              <section className="certification-recommendations" aria-labelledby="management-recommendations-title">
+                <header>
+                  <div>
+                    <p className="eyebrow">Seguimiento ejecutivo</p>
+                    <h2 id="management-recommendations-title">Recomendaciones de gestión</h2>
+                  </div>
+                  <p>Consejos informativos generados a partir de la situación vigente del colaborador.</p>
+                </header>
+                <div className="certification-recommendation-list">
+                  {managementRecommendations.map((recommendation) => (
+                    <article key={recommendation.key} className={`certification-recommendation is-${recommendation.tone}`}>
+                      <span className="certification-recommendation-marker" aria-hidden="true" />
+                      <div>
+                        <h3>{recommendation.title}</h3>
+                        <p>{recommendation.description}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
             </section>
           )}
 
@@ -627,8 +800,26 @@ export function StudentCertificationsPage() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
-  return <div><span>{label}</span><strong>{value}</strong></div>
+function Metric({
+  label,
+  value,
+  description,
+  tone
+}: {
+  label: string
+  value: number
+  description: string
+  tone: 'neutral' | 'positive' | 'warning' | 'danger' | 'info'
+}) {
+  return (
+    <article className={`certification-metric-card is-${tone}`}>
+      <div className="certification-metric-heading">
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <p>{description}</p>
+    </article>
+  )
 }
 
 function CertificationSection({
