@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Icon } from './Icon'
 import { PAGE_SIZE_OPTIONS, type PageSize } from '../types/pagination'
 
 type PageToken = number | 'ellipsis-start' | 'ellipsis-end'
@@ -80,7 +81,7 @@ export function TablePagination({
           disabled={isLoading || first}
           aria-label="Ir a la primera página"
         >
-          <span aria-hidden="true">«</span>
+          <Icon name="firstPage" size={17} />
         </button>
         <button
           type="button"
@@ -89,7 +90,7 @@ export function TablePagination({
           disabled={isLoading || first}
           aria-label="Ir a la página anterior"
         >
-          <span aria-hidden="true">‹</span>
+          <Icon name="chevronLeft" size={17} />
         </button>
 
         <div className="ns-table-pagination__pages" aria-label="Páginas disponibles">
@@ -125,7 +126,7 @@ export function TablePagination({
           disabled={isLoading || last}
           aria-label="Ir a la página siguiente"
         >
-          <span aria-hidden="true">›</span>
+          <Icon name="chevronRight" size={17} />
         </button>
         <button
           type="button"
@@ -134,7 +135,7 @@ export function TablePagination({
           disabled={isLoading || last}
           aria-label="Ir a la última página"
         >
-          <span aria-hidden="true">»</span>
+          <Icon name="lastPage" size={17} />
         </button>
       </div>
 

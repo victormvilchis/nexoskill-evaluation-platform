@@ -97,7 +97,7 @@ export function CollectionDetailPage({ readOnly = false }: { readOnly?: boolean 
   if (loading) {
     return (
       <main className="content-page lc-page">
-        <BackButton fallback="/admin/collections" label="Volver a colecciones" />
+        <BackButton fallback="/admin/collections" />
         <div className="lc-loading-page">Cargando colección…</div>
       </main>
     )
@@ -106,7 +106,7 @@ export function CollectionDetailPage({ readOnly = false }: { readOnly?: boolean 
   if (!collection || error) {
     return (
       <main className="content-page lc-page">
-        <BackButton fallback="/admin/collections" label="Volver a colecciones" />
+        <BackButton fallback="/admin/collections" />
         <section className="lc-error-panel" role="alert">
           <div><Icon name="error" size={20} /></div>
           <div>
@@ -120,7 +120,7 @@ export function CollectionDetailPage({ readOnly = false }: { readOnly?: boolean 
 
   return (
     <main className="content-page lc-page lc-editor-page">
-      <BackButton fallback="/admin/collections" label="Volver a colecciones" />
+      <BackButton fallback="/admin/collections" />
       <div className="lc-page-header lc-page-header-compact">
         <div>
           <div className="lc-heading-status-row">

@@ -6,6 +6,7 @@ import { getStudentCatalogs, searchStudents } from '../features/students/api/stu
 import { ApiRequestError } from '../shared/api/apiClient'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
+import { SortIndicator } from '../shared/components/SortIndicator'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
 import { TableActionLink, TableActions } from '../shared/components/TableActions'
 import { TablePagination } from '../shared/components/TablePagination'
@@ -160,7 +161,51 @@ export function AdminStudentsPage() {
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="ns-data-panel" aria-busy={loading}>
-        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th aria-sort={activeSort === 'displayName' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'displayName' ? ' active' : ''}`} type="button" onClick={() => toggleSort('displayName')}>Colaborador <span aria-hidden="true">{activeSort === 'displayName' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}{showCertificationColumns && <th>Rol</th>}<th>Usuario corporativo</th><th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'admissionDate' ? ' active' : ''}`} type="button" onClick={() => toggleSort('admissionDate')}>Fecha de alta <span aria-hidden="true">{activeSort === 'admissionDate' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th><th>Estado</th>{showCertificationColumns && <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`} type="button" onClick={() => toggleSort('expiresAt')}>Vencimiento <span aria-hidden="true">{activeSort === 'expiresAt' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th>}<th className="ns-actions-column">Acciones</th></tr></thead><tbody>
+        <div className="ns-data-table-wrap">
+          <table className="ns-data-table">
+            <thead>
+              <tr>
+                <th aria-sort={activeSort === 'displayName' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                  <button
+                    className={`ns-sortable-column-button${activeSort === 'displayName' ? ' active' : ''}`}
+                    type="button"
+                    onClick={() => toggleSort('displayName')}
+                  >
+                    Colaborador
+                    <SortIndicator active={activeSort === 'displayName'} direction={direction} />
+                  </button>
+                </th>
+                {administrator && <th>Organización</th>}
+                {showStudentCode && <th>Código a nivel organización</th>}
+                {showCertificationColumns && <th>Rol</th>}
+                <th>Usuario corporativo</th>
+                <th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                  <button
+                    className={`ns-sortable-column-button${activeSort === 'admissionDate' ? ' active' : ''}`}
+                    type="button"
+                    onClick={() => toggleSort('admissionDate')}
+                  >
+                    Fecha de alta
+                    <SortIndicator active={activeSort === 'admissionDate'} direction={direction} />
+                  </button>
+                </th>
+                <th>Estado</th>
+                {showCertificationColumns && (
+                  <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+                    <button
+                      className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
+                      type="button"
+                      onClick={() => toggleSort('expiresAt')}
+                    >
+                      Vencimiento
+                      <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
+                    </button>
+                  </th>
+                )}
+                <th className="ns-actions-column">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
@@ -179,7 +224,9 @@ export function AdminStudentsPage() {
               {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/students/${student.publicId}/certifications`} />}
             </TableActions></td>
           </tr>)}
-        </tbody></table></div>
+            </tbody>
+          </table>
+        </div>
         <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={goToPage} onPageSizeChange={changePageSize} />
       </section>
     </main>

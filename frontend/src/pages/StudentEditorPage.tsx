@@ -10,6 +10,7 @@ import type { StudentExperiencePayload } from '../features/students/types/studen
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { FormActions } from '../shared/components/FormActions'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
@@ -379,7 +380,25 @@ export function StudentEditorPage({ mode }: Props) {
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
-        {!readOnly && organizationResolved && <div className="form-actions"><button className="primary-button" type="submit" disabled={saving || catalogLoading || Boolean(catalogError)}>{saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}</button></div>}
+        {!readOnly && organizationResolved && (
+          <FormActions sticky>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={saving}
+              onClick={() => navigate('/admin/students')}
+            >
+              Cancelar
+            </button>
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={saving || catalogLoading || Boolean(catalogError)}
+            >
+              {saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}
+            </button>
+          </FormActions>
+        )}
       </form>
       {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate('/admin/students', { replace: true }) }} />}
       <ConfirmDialog

@@ -12,6 +12,7 @@ import type {
   OrganizationType
 } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { BackButton } from '../shared/components/BackButton'
 import { Icon } from '../shared/components/Icon'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 
@@ -217,9 +218,7 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
 
   return (
     <main className="content-page org-editor-page">
-      <button className="ns-back-button" type="button" onClick={() => navigate('/admin/organizations')}>
-        ← Volver a organizaciones
-      </button>
+      <BackButton fallback="/admin/organizations" />
 
       <header className="ns-page-header org-editor-header">
         <div>

@@ -7,6 +7,7 @@ import {
   type OwnProfile
 } from '../features/profile/api/profileApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { FormActions } from '../shared/components/FormActions'
 import { useToast } from '../shared/components/ToastProvider'
 
 export function ProfilePage() {
@@ -136,9 +137,19 @@ export function ProfilePage() {
             />
           </div>
 
-          <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar perfil'}
-          </button>
+          <FormActions className="form-wide">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={submitting || !profile}
+              onClick={() => profile && synchronize(profile)}
+            >
+              Cancelar
+            </button>
+            <button className="primary-button" type="submit" disabled={submitting}>
+              {submitting ? 'Guardando…' : 'Guardar cambios'}
+            </button>
+          </FormActions>
         </form>
 
         <section className="management-section security-panel">

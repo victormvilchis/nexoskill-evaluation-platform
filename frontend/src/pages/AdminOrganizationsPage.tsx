@@ -107,8 +107,10 @@ export function AdminOrganizationsPage() {
 
     const next = new URLSearchParams(searchParams)
     next.delete('page')
-    normalizedQuery ? next.set('query', normalizedQuery) : next.delete('query')
-    status === 'ACTIVE' ? next.delete('status') : next.set('status', status)
+    if (normalizedQuery) next.set('query', normalizedQuery)
+    else next.delete('query')
+    if (status === 'ACTIVE') next.delete('status')
+    else next.set('status', status)
     setSearchParams(next, { replace: true })
   }, [debouncedQuery, searchParams, setSearchParams, status])
 

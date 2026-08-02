@@ -4,6 +4,7 @@ import { changePassword } from '../features/authentication/api/authApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BrandLogo } from '../shared/components/BrandLogo'
+import { FormActions } from '../shared/components/FormActions'
 import { useToast } from '../shared/components/ToastProvider'
 
 export function ChangePasswordPage() {
@@ -122,17 +123,19 @@ export function ChangePasswordPage() {
 
           {error && <div className="error-message" role="alert">{error}</div>}
 
-          <button className="primary-button" type="submit" disabled={submitting}>
-            {submitting ? 'Actualizando…' : 'Guardar nueva contraseña'}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={submitting}
-            onClick={() => void handleLogout()}
-          >
-            Cerrar sesión
-          </button>
+          <FormActions className="password-form-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleLogout()}
+            >
+              Cerrar sesión
+            </button>
+            <button className="primary-button" type="submit" disabled={submitting}>
+              {submitting ? 'Actualizando…' : 'Guardar nueva contraseña'}
+            </button>
+          </FormActions>
         </form>
       </section>
     </main>

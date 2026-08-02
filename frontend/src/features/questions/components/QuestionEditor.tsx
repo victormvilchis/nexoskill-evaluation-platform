@@ -101,7 +101,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
   const [catalogError, setCatalogError] = useState<string>()
   const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
   const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'JR')
-  const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
+  const [technologyPublicId] = useState(initial?.technology?.publicId ?? '')
   const [categoryPublicIds, setCategoryPublicIds] = useState<string[]>(
     initial?.categories.map((category) => category.publicId) ?? []
   )
@@ -446,13 +446,13 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
                     type="button"
                     disabled={index === 0}
                     onClick={() => moveOption(index, -1)}
-                  >↑</button>
+                  ><Icon name="arrowUp" size={15} /></button>
                   <button
                     aria-label={`Bajar opción ${index + 1}`}
                     type="button"
                     disabled={index === options.length - 1}
                     onClick={() => moveOption(index, 1)}
-                  >↓</button>
+                  ><Icon name="arrowDown" size={15} /></button>
                 </div>
 
                 {type !== 'MATCHING' && (

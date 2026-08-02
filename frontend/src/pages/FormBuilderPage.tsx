@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiRequestError, apiClient } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { FormActions } from '../shared/components/FormActions'
+import { Icon } from '../shared/components/Icon'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { FormDetail, FormMode, FormPayload } from '../shared/types/forms'
 
@@ -86,7 +88,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
 
   if (readOnly) {
     return <main className="content-page ns-form-builder">
-      <BackButton fallback="/admin/forms" label="Volver a formularios" />
+      <BackButton fallback="/admin/forms" />
       <header className="ns-page-header"><div><p className="eyebrow">Formularios</p><h1>Ver formulario</h1><p className="muted">Consulta la configuración sin modificarla.</p></div></header>
       {error && <div className="ns-inline-alert" role="alert"><strong>No fue posible abrir el formulario</strong><span>{error}</span></div>}
       {!error && <div className="ns-builder-layout">
@@ -116,12 +118,12 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   return <main className="content-page ns-form-builder">
-    <BackButton fallback="/admin/forms" label="Volver a formularios" />
+    <BackButton fallback="/admin/forms" />
     <header className="ns-page-header">
-      <div><p className="eyebrow">Constructor de formularios</p><h1>{editing ? 'Editar formulario' : 'Nuevo formulario'}</h1><p className="muted">Configura la experiencia, reglas de aprobación y disponibilidad.</p></div>
-      <div className="ns-header-actions">
-        <button className="secondary-button" type="button" onClick={() => navigate('/admin/forms')}>Cancelar</button>
-        <button className="primary-button" disabled={saving || readiness.length > 0} form="form-builder" type="submit">{saving ? 'Guardando…' : 'Guardar formulario'}</button>
+      <div>
+        <p className="eyebrow">Constructor de formularios</p>
+        <h1>{editing ? 'Editar formulario' : 'Nuevo formulario'}</h1>
+        <p className="muted">Configura la experiencia, reglas de aprobación y disponibilidad.</p>
       </div>
     </header>
     {error && <div className="ns-inline-alert" role="alert"><strong>Revisa el formulario</strong><span>{error}</span></div>}
@@ -138,8 +140,8 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
             </div>
           </section>
           <section className="ns-card">
-            <div className="ns-card-heading ns-card-heading-row"><div><div><span className="ns-step">2</span><h2>Contenido</h2></div><p>Organiza secciones, preguntas, colecciones y pools aleatorios.</p></div><button className="secondary-button" disabled={!editing} type="button">+ Agregar sección</button></div>
-            <div className="ns-builder-empty"><div className="ns-empty-icon">▤</div><h3>{editing ? 'Agrega la primera sección' : 'Guarda primero la configuración general'}</h3><p>{editing ? 'En la siguiente entrega podrás incorporar preguntas, colecciones y pools.' : 'Después podrás estructurar el contenido del formulario.'}</p></div>
+            <div className="ns-card-heading ns-card-heading-row"><div><div><span className="ns-step">2</span><h2>Contenido</h2></div><p>Organiza secciones, preguntas, colecciones y pools aleatorios.</p></div><button className="secondary-button" disabled={!editing} type="button"><Icon name="plus" size={16} /> Agregar sección</button></div>
+            <div className="ns-builder-empty"><div className="ns-empty-icon"><Icon name="clipboard" size={30} /></div><h3>{editing ? 'Agrega la primera sección' : 'Guarda primero la configuración general'}</h3><p>{editing ? 'En la siguiente entrega podrás incorporar preguntas, colecciones y pools.' : 'Después podrás estructurar el contenido del formulario.'}</p></div>
           </section>
         </div>
         <aside className="ns-builder-sidebar">
@@ -163,6 +165,14 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
           </section>
         </aside>
       </div>
+      <FormActions sticky>
+        <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/forms')}>
+          Cancelar
+        </button>
+        <button className="primary-button" disabled={saving || readiness.length > 0} type="submit">
+          {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear formulario'}
+        </button>
+      </FormActions>
     </form>
   </main>
 }

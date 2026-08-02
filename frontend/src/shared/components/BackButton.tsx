@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Icon } from './Icon'
 
 type BackButtonProps = {
   fallback: string
@@ -6,15 +7,23 @@ type BackButtonProps = {
   className?: string
 }
 
-export function BackButton({ fallback, label = 'Volver', className = '' }: BackButtonProps) {
+export function BackButton({ fallback, label = 'Regresar', className = '' }: BackButtonProps) {
   const navigate = useNavigate()
+
   function goBack() {
-    if (window.history.length > 1) navigate(-1)
+    const historyIndex = window.history.state?.idx
+    if (typeof historyIndex === 'number' && historyIndex > 0) navigate(-1)
     else navigate(fallback)
   }
+
   return (
-    <button className={`ns-back-button ${className}`.trim()} type="button" onClick={goBack}>
-      <span aria-hidden="true">←</span>
+    <button
+      aria-label={label}
+      className={`ns-back-button ${className}`.trim()}
+      type="button"
+      onClick={goBack}
+    >
+      <Icon name="chevronLeft" size={17} />
       <span>{label}</span>
     </button>
   )

@@ -455,7 +455,7 @@ export function CollectionBuilder({
                         type="button"
                         onClick={() => moveForm(index, -1)}
                       >
-                        ↑
+                        <Icon name="arrowUp" size={15} />
                       </button>
                       <button
                         aria-label={`Bajar ${level.title || 'formulario'}`}
@@ -463,7 +463,7 @@ export function CollectionBuilder({
                         type="button"
                         onClick={() => moveForm(index, 1)}
                       >
-                        ↓
+                        <Icon name="arrowDown" size={15} />
                       </button>
                       <button
                         aria-label={`Quitar ${level.title || 'formulario'}`}

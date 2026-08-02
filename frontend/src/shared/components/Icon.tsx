@@ -13,7 +13,15 @@ export type IconName =
   | 'lock'
   | 'logout'
   | 'chevronDown'
+  | 'chevronLeft'
   | 'chevronRight'
+  | 'firstPage'
+  | 'lastPage'
+  | 'sort'
+  | 'sortAsc'
+  | 'sortDesc'
+  | 'arrowUp'
+  | 'arrowDown'
   | 'plus'
   | 'edit'
   | 'copy'
@@ -48,7 +56,15 @@ const paths: Record<IconName, ReactNode> = {
   lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   logout: <><path d="M10 17l5-5-5-5M15 12H3" /><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" /></>,
   chevronDown: <><path d="m6 9 6 6 6-6" /></>,
+  chevronLeft: <><path d="m15 6-6 6 6 6" /></>,
   chevronRight: <><path d="m9 6 6 6-6 6" /></>,
+  firstPage: <><path d="M6 5v14M18 6l-6 6 6 6" /></>,
+  lastPage: <><path d="M18 5v14M6 6l6 6-6 6" /></>,
+  sort: <><path d="m8 9 4-4 4 4M16 15l-4 4-4-4" /></>,
+  sortAsc: <><path d="m8 11 4-4 4 4M12 7v10" /></>,
+  sortDesc: <><path d="m8 13 4 4 4-4M12 17V7" /></>,
+  arrowUp: <><path d="m6 10 6-6 6 6M12 4v16" /></>,
+  arrowDown: <><path d="m6 14 6 6 6-6M12 20V4" /></>,
   plus: <><path d="M12 5v14M5 12h14" /></>,
   edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4z" /></>,
   copy: <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>,

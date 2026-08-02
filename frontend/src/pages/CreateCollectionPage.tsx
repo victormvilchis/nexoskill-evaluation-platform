@@ -37,7 +37,7 @@ export function CreateCollectionPage() {
 
   return (
     <main className="content-page lc-page lc-editor-page">
-      <BackButton fallback="/admin/collections" label="Volver a colecciones" />
+      <BackButton fallback="/admin/collections" />
       <div className="lc-page-header lc-page-header-compact">
         <div>
           <p className="eyebrow">Colecciones</p>

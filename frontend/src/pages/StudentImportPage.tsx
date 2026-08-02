@@ -14,6 +14,8 @@ import type {
 } from '../features/students/types/studentImport'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { FormActions } from '../shared/components/FormActions'
 import { Icon } from '../shared/components/Icon'
 import { useToast } from '../shared/components/ToastProvider'
 
@@ -394,9 +396,9 @@ export function StudentImportPage() {
 
   return (
     <main className="content-page student-import-page">
+      <BackButton fallback={studentsPath} />
       <header className="page-heading compact">
         <div><p className="eyebrow">Colaboradores</p><h1>Importar colaboradores</h1><p>Valida, completa y resuelve cada registro antes de aplicar la carga.</p></div>
-        <BackButton fallback={studentsPath} label="Volver" />
       </header>
 
       {error && <div className="error-message" role="alert">{error}</div>}
@@ -424,7 +426,9 @@ export function StudentImportPage() {
         </div>
         {file && <div className="ns-selected-file"><div><strong>{file.name}</strong><span>{formatFileSize(file.size)}</span></div>
           <button type="button" className="ns-selected-file-remove" disabled={loading || applying}
-            onClick={(event) => { event.stopPropagation(); void changeFile(undefined) }} aria-label="Quitar archivo">×</button></div>}
+            onClick={(event) => { event.stopPropagation(); void changeFile(undefined) }} aria-label="Quitar archivo">
+            <Icon name="close" size={17} />
+          </button></div>}
         <div className="ns-import-analyze-actions"><p><strong>Vista previa obligatoria.</strong> Ningún cambio se guarda antes de confirmar.</p>
           <button type="button" className="primary-button ns-import-analyze-button"
             disabled={!file || loading || applying || (administrator && !selectedOrganization)} onClick={() => void analyze()}>
@@ -513,11 +517,41 @@ export function StudentImportPage() {
 
         {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{row.collaborator}</td><td>{row.email}</td><td><select value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(event) => setLowActions((current) => ({ ...current, [row.studentPublicId]: event.target.value as LowAction }))}><option value="KEEP">Mantener activo</option><option value="IGNORE">Ignorar</option><option value="DEACTIVATE">Desactivar</option></select></td></tr>)}</tbody></table></div></section>}
 
-        <div className="form-actions ns-import-final-actions"><button type="button" className="secondary-button" disabled={applying} onClick={() => void changeFile(undefined)}>Descartar</button><button type="button" className="primary-button" disabled={Boolean(blockingMessage) || applying} onClick={() => setConfirmOpen(true)}>Aplicar cambios seleccionados</button></div>
+        <FormActions className="ns-import-final-actions" sticky>
+          <button type="button" className="secondary-button" disabled={applying} onClick={() => void changeFile(undefined)}>
+            Descartar
+          </button>
+          <button type="button" className="primary-button" disabled={Boolean(blockingMessage) || applying} onClick={() => setConfirmOpen(true)}>
+            Aplicar cambios seleccionados
+          </button>
+        </FormActions>
         {blockingMessage && <div className="error-message" role="alert">{blockingMessage}</div>}
       </>}
 
-      {confirmOpen && preview && <div className="modal-backdrop" role="presentation"><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="student-import-confirm-title"><h2 id="student-import-confirm-title">Confirmar importación</h2><p>Se crearán <strong>{selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> colaboradores, se actualizarán <strong>{selectedChanges.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> y se desactivarán <strong>{selectedLows}</strong> posibles bajas.</p><p className="muted">Se omitirán {omittedRows.size + newRows.filter((row) => !row.selected).length} filas. Las advertencias no bloquean el proceso.</p><div className="modal-actions"><button type="button" className="secondary-button" disabled={applying} onClick={() => setConfirmOpen(false)}>Cancelar</button><button type="button" className="primary-button" disabled={applying || Boolean(blockingMessage)} onClick={() => void applyChanges()}>{applying ? 'Aplicando…' : 'Confirmar importación'}</button></div></section></div>}
+      <ConfirmDialog
+        open={confirmOpen && Boolean(preview)}
+        title="Confirmar importación"
+        description="Revisa el alcance de la operación antes de aplicar los cambios."
+        confirmLabel="Confirmar importación"
+        busy={applying}
+        confirmDisabled={Boolean(blockingMessage)}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void applyChanges()}
+      >
+        {preview && (
+          <div className="ns-import-confirm-summary">
+            <p>
+              Se crearán <strong>{selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> colaboradores,
+              se actualizarán <strong>{selectedChanges.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> y
+              se desactivarán <strong>{selectedLows}</strong> posibles bajas.
+            </p>
+            <p className="muted">
+              Se omitirán {omittedRows.size + newRows.filter((row) => !row.selected).length} filas.
+              Las advertencias no bloquean el proceso.
+            </p>
+          </div>
+        )}
+      </ConfirmDialog>
     </main>
   )
 }
