@@ -44,9 +44,9 @@ public class StudentDeletionService {
                     "Debes confirmar la eliminación del colaborador.",
                     Map.of("confirmed", "Confirma la eliminación lógica para continuar."));
         }
-        if (tenant == null || !tenant.hasOrganization() || tenant.globalScope() || tenant.globalAdministrator()) {
+        if (tenant == null || !tenant.hasOrganization() || tenant.globalScope()) {
             throw new BusinessException("STUDENT_DELETE_FORBIDDEN",
-                    "No existe un contexto organizacional autorizado para eliminar al colaborador.");
+                    "Selecciona una organización comercial para eliminar al colaborador.");
         }
         StudentJpaEntity student = students.findByOrganizationIdAndPublicIdForUpdate(tenant.organizationId(), publicId)
                 .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe."));

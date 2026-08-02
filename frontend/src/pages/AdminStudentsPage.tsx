@@ -37,7 +37,9 @@ function formatRole(profile?: string | null, technologicalProfile?: string | nul
 export function AdminStudentsPage() {
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
-  const certificationOperator = Boolean(user?.roles.some((role) => role === 'MANAGER' || role === 'SUPERVISOR'))
+  const certificationOperator = Boolean(user?.roles.some(
+    (role) => role === 'ADMINISTRATOR' || role === 'MANAGER' || role === 'SUPERVISOR'
+  ))
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [searchParams, setSearchParams] = useSearchParams()

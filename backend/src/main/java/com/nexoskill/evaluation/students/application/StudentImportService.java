@@ -1686,11 +1686,22 @@ public class StudentImportService {
     }
 
     static AuthenticatedUser certificationImportActor(AuthenticatedUser actor, TenantContext tenant) {
-        if (actor == null || tenant == null || actor.roles() == null
-                || actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)
-                || tenant.globalAdministrator() || tenant.globalScope()) {
+        if (actor == null || actor.roles() == null || tenant == null || !tenant.hasOrganization()
+                || tenant.globalScope()) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "GLOBAL no administra colaboradores comerciales.");
+                    "Selecciona una organización comercial para importar colaboradores.");
+        }
+        if (actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)) {
+            if (!tenant.globalAdministrator()) {
+                throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                        "El contexto seleccionado no corresponde al Administrador autenticado.");
+            }
+            return actor;
+        }
+        if (!actor.roles().stream().anyMatch(ORGANIZATION_OPERATOR_ROLES::contains)
+                || tenant.globalAdministrator()) {
+            throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
+                    "No tienes permisos para importar colaboradores en esta organización.");
         }
         return actor;
     }
@@ -1701,11 +1712,20 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
                     "No tienes permisos para importar colaboradores.");
         }
+        if (actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE) && tenant.globalAdministrator()) {
+            if (organizationPublicId == null || organizationPublicId.isBlank()) {
+                if (!tenant.globalScope() && tenant.hasOrganization()) return tenant;
+                throw new BusinessException("STUDENT_IMPORT_ORGANIZATION_REQUIRED",
+                        "Selecciona la organización a la que se cargarán los colaboradores.");
+            }
+            Organization organization = organizationByPublicId(organizationPublicId.trim());
+            return TenantContext.organization(organization.id(), organization.publicId(), organization.code(), true);
+        }
         boolean organizationOperator = actor.roles().stream().anyMatch(ORGANIZATION_OPERATOR_ROLES::contains);
         if (!organizationOperator || tenant.globalScope() || !tenant.hasOrganization()
-                || tenant.globalAdministrator() || actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)) {
+                || tenant.globalAdministrator()) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "Solo Gestores y Supervisores de la organización pueden importar colaboradores.");
+                    "Solo el Administrador, Gestores y Supervisores autorizados pueden importar colaboradores.");
         }
         if (organizationPublicId != null && !organizationPublicId.isBlank()
                 && !organizationPublicId.trim().equals(tenant.organizationPublicId())) {
@@ -1720,6 +1740,11 @@ public class StudentImportService {
         if (state == null || actor == null || !Objects.equals(state.actorId(), actor.internalId())) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
                     "La vista previa pertenece a otro usuario.");
+        }
+        if (actor.roles() != null && actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)
+                && tenant != null && tenant.globalAdministrator()) {
+            return TenantContext.organization(state.organization().id(), state.organization().publicId(),
+                    state.organization().code(), true);
         }
         TenantContext effective = resolveImportTenant(tenant, actor, null);
         if (!Objects.equals(state.organizationId(), effective.organizationId())) {

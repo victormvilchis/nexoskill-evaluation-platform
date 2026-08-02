@@ -73,7 +73,7 @@ class StudentFoundationServiceTest {
         TenantContext global = TenantContext.global(1L,
                 "00000000-0000-0000-0000-000000000001", "GLOBAL");
         BusinessException exception = assertThrows(BusinessException.class, () -> service.catalogs(global, null));
-        assertThat(exception.getCode()).isEqualTo("STUDENT_GLOBAL_FORBIDDEN");
+        assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_REQUIRED");
     }
 
     @Test

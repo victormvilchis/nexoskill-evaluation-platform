@@ -3,7 +3,7 @@ package com.nexoskill.evaluation.questionbank.application.service;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionCollectionPort;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
-import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
+import com.nexoskill.evaluation.shared.application.PaginationParameters;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

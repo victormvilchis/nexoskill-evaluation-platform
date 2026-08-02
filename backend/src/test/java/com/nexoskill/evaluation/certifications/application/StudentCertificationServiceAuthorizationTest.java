@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
@@ -29,10 +30,12 @@ class StudentCertificationServiceAuthorizationTest {
     private static final Instant NOW = Instant.parse("2026-07-29T20:00:00Z");
 
     @Test
-    void administratorCannotOperateStudentCertifications() {
+    void administratorCanResolveStudentScopeFromGlobalContext() {
         AuditLogPort audit = mock(AuditLogPort.class);
+        StudentRepository students = mock(StudentRepository.class);
+        when(students.findByPublicId("student-public")).thenReturn(java.util.Optional.empty());
         StudentCertificationService service = new StudentCertificationService(
-                mock(StudentRepository.class), mock(OrganizationRepository.class),
+                students, mock(OrganizationRepository.class),
                 mock(NamedParameterJdbcTemplate.class), audit, Clock.fixed(NOW, ZoneOffset.UTC));
         AuthenticatedUser administrator = new AuthenticatedUser(1L, "admin-public", "admin@nexoskill.local",
                 "Admin", "Global", "Admin Global", Set.of("ADMINISTRATOR"),
@@ -41,18 +44,10 @@ class StudentCertificationServiceAuthorizationTest {
         TenantContext tenant = TenantContext.global(1L, "global-public", "GLOBAL");
 
         assertThatThrownBy(() -> service.get(tenant, "student-public", administrator))
-                .isInstanceOfSatisfying(BusinessException.class, exception -> {
-                    assertThat(exception.getCode()).isEqualTo("CERTIFICATION_OPERATION_FORBIDDEN");
-                    assertThat(exception.getMessage()).isEqualTo(
-                            "La gestión operativa de certificaciones corresponde únicamente a Gestores y Supervisores de la organización.");
-                });
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
 
-        verify(audit).record(org.mockito.ArgumentMatchers.eq(1L),
-                org.mockito.ArgumentMatchers.eq("STUDENT_CERTIFICATION_ACCESS_DENIED"),
-                org.mockito.ArgumentMatchers.eq("STUDENT_CERTIFICATIONS"),
-                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.isNull(),
-                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.anyMap(),
-                org.mockito.ArgumentMatchers.eq(NOW));
+        verify(students).findByPublicId("student-public");
     }
 
     @Test

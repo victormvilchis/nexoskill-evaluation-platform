@@ -5,7 +5,7 @@ import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentMod
 import com.nexoskill.evaluation.globalcontent.application.port.out.GlobalContentResourcePort;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
-import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
+import com.nexoskill.evaluation.shared.application.PaginationParameters;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;

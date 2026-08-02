@@ -84,16 +84,20 @@ class StudentDeletionServiceTest {
     }
 
     @Test
-    void rejectsGlobalAdministratorContext() {
+    void allowsGlobalAdministratorInSelectedCommercialOrganization() {
         TenantContext globalAdministratorInOrganization = TenantContext.organization(
                 20L, "org-public", "ORG", true);
+        StudentJpaEntity student = student();
+        when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public"))
+                .thenReturn(Optional.of(student));
+        when(students.saveAndFlush(student)).thenReturn(student);
 
-        assertThatThrownBy(() -> service.deletePermanently(globalAdministratorInOrganization,
-                "student-public", true, new StudentService.Actor(1L, "127.0.0.1", "test")))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_DELETE_FORBIDDEN"));
+        StudentDeletionService.DeletionResult result = service.deletePermanently(globalAdministratorInOrganization,
+                "student-public", true, new StudentService.Actor(1L, "127.0.0.1", "test"));
 
-        verify(students, never()).findByOrganizationIdAndPublicIdForUpdate(any(), anyString());
+        assertThat(result.publicId()).isEqualTo("student-public");
+        assertThat(student.getStatus()).isEqualTo(StudentStatus.DELETED);
+        verify(students).findByOrganizationIdAndPublicIdForUpdate(20L, "student-public");
     }
 
     private StudentJpaEntity student() {

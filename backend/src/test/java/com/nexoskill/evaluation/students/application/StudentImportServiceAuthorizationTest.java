@@ -12,12 +12,11 @@ import org.junit.jupiter.api.Test;
 class StudentImportServiceAuthorizationTest {
 
     @Test
-    void rejectsGlobalAdministratorEvenWithSelectedCommercialOrganization() {
+    void allowsGlobalAdministratorWithSelectedCommercialOrganization() {
         AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
         TenantContext organization = TenantContext.organization(10L, "org-public", "ORG", true);
 
-        assertThrows(BusinessException.class,
-                () -> StudentImportService.certificationImportActor(administrator, organization));
+        assertSame(administrator, StudentImportService.certificationImportActor(administrator, organization));
     }
 
     @Test

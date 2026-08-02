@@ -1094,11 +1094,26 @@ public class StudentCertificationService {
     private Scope resolveStudentScope(TenantContext tenant, String studentPublicId, AuthenticatedUser actor,
             boolean requireCertifications) {
         requireOperationalRole(actor, tenant, studentPublicId);
-        if (tenant == null || !tenant.hasOrganization()) throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
+        if (tenant == null) throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
                 "No existe un contexto organizacional autorizado.");
-        StudentJpaEntity student = students.findByOrganizationIdAndPublicId(tenant.organizationId(), studentPublicId)
-                .filter(item -> item.getStatus() != StudentStatus.DELETED)
-                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
+        StudentJpaEntity student;
+        if (actor.roles().contains("ADMINISTRATOR") && tenant.globalAdministrator()) {
+            student = tenant.globalScope()
+                    ? students.findByPublicId(studentPublicId)
+                            .filter(item -> item.getStatus() != StudentStatus.DELETED)
+                            .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe."))
+                    : students.findByOrganizationIdAndPublicId(tenant.organizationId(), studentPublicId)
+                            .filter(item -> item.getStatus() != StudentStatus.DELETED)
+                            .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe."));
+        } else {
+            if (!tenant.hasOrganization() || tenant.globalScope()) {
+                throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
+                        "No existe un contexto organizacional autorizado.");
+            }
+            student = students.findByOrganizationIdAndPublicId(tenant.organizationId(), studentPublicId)
+                    .filter(item -> item.getStatus() != StudentStatus.DELETED)
+                    .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe."));
+        }
         OrganizationJpaEntity organization = organizations.findById(student.getOrganizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
         if (organization.getOrganizationType() != OrganizationType.CUSTOMER) {
@@ -1113,18 +1128,25 @@ public class StudentCertificationService {
 
     private Scope requireTenantOrganization(TenantContext tenant, AuthenticatedUser actor) {
         requireOperationalRole(actor, tenant, null);
-        if (tenant == null || !tenant.hasOrganization()) {
-            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización autorizada.");
+        if (tenant == null || !tenant.hasOrganization() || tenant.globalScope()) {
+            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización comercial autorizada.");
         }
         OrganizationJpaEntity organization = organizations.findById(tenant.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+        if (organization.getOrganizationType() != OrganizationType.CUSTOMER) {
+            throw new BusinessException("CERTIFICATION_ACCESS_FORBIDDEN",
+                    "GLOBAL no administra certificaciones de colaboradores comerciales.");
+        }
         if (!organization.isAppliesCertifications()) throw new BusinessException("CERTIFICATIONS_NOT_ENABLED",
                 "La organización seleccionada no tiene habilitada la gestión de certificaciones.");
         return new Scope(null, organization.getId(), organization);
     }
 
     private boolean hasOperationalRole(AuthenticatedUser actor) {
-        return actor != null && (actor.roles().contains("MANAGER") || actor.roles().contains("SUPERVISOR"));
+        return actor != null && actor.roles() != null
+                && (actor.roles().contains("ADMINISTRATOR")
+                    || actor.roles().contains("MANAGER")
+                    || actor.roles().contains("SUPERVISOR"));
     }
 
     private void requireOperationalRole(AuthenticatedUser actor, TenantContext tenant, String studentPublicId) {
@@ -1137,7 +1159,7 @@ public class StudentCertificationService {
                 "STUDENT_CERTIFICATIONS", "Intento de acceso no autorizado a la gestión operativa de certificaciones.",
                 null, null, data, clock.instant());
         throw new BusinessException("CERTIFICATION_OPERATION_FORBIDDEN",
-                "La gestión operativa de certificaciones corresponde únicamente a Gestores y Supervisores de la organización.");
+                "No tienes permisos para gestionar las certificaciones de este colaborador.");
     }
 
     private Policy policy(Long organizationId, CertificationType type) {
