@@ -27,6 +27,7 @@ type NewState = NewStudentPreview & {
 type ChangeState = ChangedStudentPreview & { selectedFields: Set<string> }
 
 type ConflictDecisions = Record<string, StudentImportConflictActionValue | ''>
+type ConflictTab = 'PENDING' | 'REUSED'
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
@@ -84,6 +85,7 @@ export function StudentImportPage() {
   const [changedRows, setChangedRows] = useState<ChangeState[]>([])
   const [lowActions, setLowActions] = useState<Record<string, LowAction>>({})
   const [conflictDecisions, setConflictDecisions] = useState<ConflictDecisions>({})
+  const [conflictTab, setConflictTab] = useState<ConflictTab>('PENDING')
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string>()
@@ -120,11 +122,19 @@ export function StudentImportPage() {
       .filter((conflict) => conflictDecisions[conflict.id] === 'OMIT_ROW')
       .map((conflict) => conflict.rowKey) ?? []
   ), [preview, conflictDecisions])
-  const unresolvedConflicts = useMemo(
-    () => preview?.conflicts.filter((conflict) => !conflictDecisions[conflict.id]).length ?? 0,
-    [preview, conflictDecisions]
+  const pendingConflicts = useMemo(
+    () => preview?.conflicts.filter((conflict) => !conflict.reusedDecision) ?? [],
+    [preview]
   )
-  const resolvedConflicts = (preview?.conflicts.length ?? 0) - unresolvedConflicts
+  const reusedConflicts = useMemo(
+    () => preview?.conflicts.filter((conflict) => conflict.reusedDecision) ?? [],
+    [preview]
+  )
+  const unresolvedConflicts = useMemo(
+    () => pendingConflicts.filter((conflict) => !conflictDecisions[conflict.id]).length,
+    [pendingConflicts, conflictDecisions]
+  )
+  const resolvedConflicts = reusedConflicts.length
 
   const newRowError = useMemo(() => {
     const normalizedEmails = new Map<string, number>()
@@ -173,6 +183,7 @@ export function StudentImportPage() {
     setChangedRows([])
     setLowActions({})
     setConflictDecisions({})
+    setConflictTab('PENDING')
     setResult(undefined)
     setError(undefined)
   }
@@ -209,6 +220,7 @@ export function StudentImportPage() {
         conflict.id,
         conflict.resolvedAction ?? ''
       ])))
+      setConflictTab(response.conflicts.some((conflict) => !conflict.reusedDecision) ? 'PENDING' : 'REUSED')
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
@@ -464,8 +476,18 @@ export function StudentImportPage() {
           </tbody></table></div></article>)}
         </section>}
 
-        {preview.conflicts.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Validación</p><h2>Conflictos</h2></div><span className="muted">{unresolvedConflicts} pendientes</span></div>
-          <div className="ns-import-conflict-list">{preview.conflicts.map((conflict) => {
+        {preview.conflicts.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Validación</p><h2>Conflictos</h2></div></div>
+          <div className="ns-import-conflict-tabs" role="tablist" aria-label="Clasificación de conflictos">
+            <button type="button" role="tab" aria-selected={conflictTab === 'PENDING'} className={conflictTab === 'PENDING' ? 'is-active' : undefined} onClick={() => setConflictTab('PENDING')}>
+              Conflictos pendientes <span>{pendingConflicts.length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={conflictTab === 'REUSED'} className={conflictTab === 'REUSED' ? 'is-active' : undefined} onClick={() => setConflictTab('REUSED')}>
+              Resueltos previamente <span>{reusedConflicts.length}</span>
+            </button>
+          </div>
+          {conflictTab === 'PENDING' && pendingConflicts.length === 0 && <div className="ns-import-conflict-empty"><strong>Conflictos pendientes: 0</strong><span>No hay decisiones pendientes para esta importación.</span></div>}
+          {conflictTab === 'REUSED' && reusedConflicts.length === 0 && <div className="ns-import-conflict-empty"><strong>Resueltos previamente: 0</strong><span>No se reutilizaron decisiones de importaciones anteriores.</span></div>}
+          <div className="ns-import-conflict-list">{(conflictTab === 'PENDING' ? pendingConflicts : reusedConflicts).map((conflict) => {
             const decision = conflictDecisions[conflict.id] ?? ''
             const selectedAction = conflict.actions.find((action) => action.value === decision)
             return <article className="ns-import-conflict-card" key={conflict.id}>
@@ -473,13 +495,13 @@ export function StudentImportPage() {
               <div className="ns-import-conflict-values"><div><strong>Excel</strong><span>{conflict.excelValue}</span></div><div><strong>Plataforma actual</strong><span>{conflict.currentValue}</span></div><div><strong>Cálculo de la plataforma</strong><span>{conflict.calculatedValue}</span></div></div>
               <p className="ns-import-conflict-reason">{conflict.reason}</p>
               {conflict.reusedDecision
-                ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label}</span></div>
+                ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label || 'Decisión anterior aplicada'}</span>{selectedAction?.description && <small>{selectedAction.description}</small>}</div>
                 : <label className="field"><span>Selecciona cómo proceder</span><select value={decision}
                   onChange={(event) => setConflictDecisions((current) => ({ ...current, [conflict.id]: event.target.value as StudentImportConflictActionValue }))}>
                   <option value="">Selecciona una decisión</option>
                   {conflict.actions.map((action) => <option key={action.value} value={action.value}>{action.label}</option>)}
                 </select></label>}
-              {decision && <p className="muted">{selectedAction?.description}</p>}
+              {!conflict.reusedDecision && decision && <p className="muted">{selectedAction?.description}</p>}
               {!conflict.reusedDecision && decision && preview.conflicts.filter((item) => item.groupKey === conflict.groupKey && !item.reusedDecision).length > 1 && <button type="button" className="secondary-button compact-button" onClick={() => applyEquivalentDecision(conflict.id)}>Aplicar esta decisión a casos equivalentes</button>}
             </article>
           })}</div>

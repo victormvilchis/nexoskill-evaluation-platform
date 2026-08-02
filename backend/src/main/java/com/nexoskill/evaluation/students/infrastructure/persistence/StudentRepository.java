@@ -38,6 +38,21 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     long countByOrganizationIdAndStatusNot(Long organizationId, StudentStatus status);
 
+    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(Long organizationId, StudentStatus status);
+
+    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(Long organizationId, StudentStatus status);
+
+    @Query("""
+        select count(s) from StudentJpaEntity s
+        where s.organizationId = :organizationId
+          and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
+          and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
+               or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+                   and s.expiresAt is not null and s.expiresAt < :today))
+        """)
+    long countExpiredByOrganizationId(@Param("organizationId") Long organizationId,
+            @Param("today") LocalDate today);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.normalizedEmail = :normalizedEmail")
     Optional<StudentJpaEntity> findForLogin(@Param("organizationId") Long organizationId,

@@ -16,7 +16,16 @@ public interface OrganizationRepository extends JpaRepository<OrganizationJpaEnt
     boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 
     @Query(value = """
-        select o as organization, count(s.id) as studentCount
+        select o as organization,
+               count(s.id) as studentCount,
+               sum(case when s.id is not null and s.admissionDate is not null then 1 else 0 end) as activeStudentCount,
+               sum(case when s.id is not null and s.admissionDate is null then 1 else 0 end) as inactiveStudentCount,
+               sum(case when s.id is not null
+                         and o.appliesCertifications = true
+                         and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
+                              or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+                                  and s.expiresAt is not null and s.expiresAt < :today))
+                        then 1 else 0 end) as expiredStudentCount
           from OrganizationJpaEntity o
           left join StudentJpaEntity s
             on s.organizationId = o.id
@@ -31,8 +40,10 @@ public interface OrganizationRepository extends JpaRepository<OrganizationJpaEnt
          where (:query is null or lower(o.name) like lower(concat('%', :query, '%'))
                 or lower(o.code) like lower(concat('%', :query, '%')))
            and (:status is null or o.status = :status)
+           and :today is not null
         """)
     Page<OrganizationSearchRow> search(@Param("query") String query,
                                       @Param("status") OrganizationStatus status,
+                                      @Param("today") java.time.LocalDate today,
                                       Pageable pageable);
 }

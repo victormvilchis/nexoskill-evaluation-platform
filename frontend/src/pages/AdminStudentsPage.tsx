@@ -31,6 +31,9 @@ function formatDate(value: string | null) {
   if (!value) return 'N/A'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`))
 }
+function formatRole(profile?: string | null, technologicalProfile?: string | null) {
+  return [profile, technologicalProfile].filter((value): value is string => Boolean(value?.trim())).join(' - ') || 'N/A'
+}
 export function AdminStudentsPage() {
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
@@ -44,6 +47,7 @@ export function AdminStudentsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tenantManualStudentCode, setTenantManualStudentCode] = useState(false)
+  const [tenantCertificationsEnabled, setTenantCertificationsEnabled] = useState(false)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const organization = searchParams.get('organization') ?? ''
@@ -60,8 +64,16 @@ export function AdminStudentsPage() {
     if (administrator) return
     const controller = new AbortController()
     getStudentCatalogs(undefined, controller.signal)
-      .then((response) => setTenantManualStudentCode(response.organization.manualStudentCode))
-      .catch(() => { if (!controller.signal.aborted) setTenantManualStudentCode(false) })
+      .then((response) => {
+        setTenantManualStudentCode(response.organization.manualStudentCode)
+        setTenantCertificationsEnabled(response.organization.appliesCertifications)
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setTenantManualStudentCode(false)
+          setTenantCertificationsEnabled(false)
+        }
+      })
     return () => controller.abort()
   }, [administrator])
   useEffect(() => {
@@ -117,7 +129,18 @@ export function AdminStudentsPage() {
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
   const selectedOrganization = organizations.find((item) => item.publicId === organization)
   const showStudentCode = administrator ? Boolean(organization && selectedOrganization?.manualStudentCode) : tenantManualStudentCode
-  const columnCount = 6 + (administrator ? 1 : 0) + (showStudentCode ? 1 : 0)
+  const showCertificationColumns = administrator
+    ? Boolean(organization && selectedOrganization?.appliesCertifications)
+    : tenantCertificationsEnabled
+  const columnCount = 5 + (showCertificationColumns ? 2 : 0) + (administrator ? 1 : 0) + (showStudentCode ? 1 : 0)
+  useEffect(() => {
+    if (showCertificationColumns || sort !== 'expiresAt') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('page')
+    next.set('sort', 'displayName')
+    next.set('direction', 'ASC')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, showCertificationColumns, sort])
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
     ? `/admin/students/import?organization=${encodeURIComponent(organization)}`
@@ -132,22 +155,23 @@ export function AdminStudentsPage() {
         <ResourceSelectField label="Ordenar" value={`${sort}:${direction}`} onChange={changeSort}>
           <option value="displayName:ASC">Nombre · A a Z</option><option value="displayName:DESC">Nombre · Z a A</option>
           <option value="admissionDate:ASC">Fecha de alta · antigua a reciente</option><option value="admissionDate:DESC">Fecha de alta · reciente a antigua</option>
-          <option value="expiresAt:ASC">Vencimiento · próximo a lejano</option><option value="expiresAt:DESC">Vencimiento · lejano a próximo</option>
+          {showCertificationColumns && <><option value="expiresAt:ASC">Vencimiento · próximo a lejano</option><option value="expiresAt:DESC">Vencimiento · lejano a próximo</option></>}
         </ResourceSelectField>
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="ns-data-panel" aria-busy={loading}>
-        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th><th>Fecha de alta</th><th>Estado</th><th>Vencimiento</th><th className="ns-actions-column">Acciones</th></tr></thead><tbody>
+        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}{showCertificationColumns && <th>Rol</th>}<th>Usuario corporativo</th><th>Fecha de alta</th><th>Estado</th>{showCertificationColumns && <th>Vencimiento</th>}<th className="ns-actions-column">Acciones</th></tr></thead><tbody>
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
             <td className="ns-primary-cell"><strong>{student.displayName}</strong><small>{student.email}</small></td>
             {administrator && <td>{student.organization ? <><strong>{student.organization.name}</strong><small>{student.organization.code}</small></> : '—'}</td>}
             {showStudentCode && <td>{student.studentCode || 'N/A'}</td>}
+            {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}
             <td>{student.corporateUser || 'N/A'}</td>
             <td>{formatDate(student.admissionDate)}</td>
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
-            <td>{formatDate(student.expiresAt)}</td>
+            {showCertificationColumns && <td>{formatDate(student.expiresAt)}</td>}
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/students/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/students/${student.publicId}/edit`} />}

@@ -227,7 +227,11 @@ export function AdminOrganizationsPage() {
                   </td>
                   <td><span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>{CONTENT_MODE_LABELS[item.contentMode]}</span></td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
-                  <td><strong className="org-student-count">{item.studentCount ?? 0}</strong></td>
+                  <td><div className="org-student-counts" aria-label={`Activos: ${item.activeStudentCount ?? 0}. Inactivos: ${item.inactiveStudentCount ?? 0}. Vencidos: ${item.expiredStudentCount ?? 0}.`}>
+                    <span><small>Activos</small><strong>{item.activeStudentCount ?? 0}</strong></span>
+                    <span><small>Inactivos</small><strong>{item.inactiveStudentCount ?? 0}</strong></span>
+                    <span><small>Vencidos</small><strong>{item.expiredStudentCount ?? 0}</strong></span>
+                  </div></td>
                   <td>{formatDate(item.expiresOn)}</td>
                   <td>
                     <TableActions>

@@ -219,19 +219,37 @@
 .org-data-table th:nth-child(1) { width: 24%; }
 .org-data-table th:nth-child(2) { width: 14%; }
 .org-data-table th:nth-child(3) { width: 10%; }
-.org-data-table th:nth-child(4) { width: 9%; }
+.org-data-table th:nth-child(4) { width: 21%; }
 .org-data-table th:nth-child(5) { width: 13%; }
-.org-data-table th:nth-child(6) { width: 18%; }
+.org-data-table th:nth-child(6) { width: 14%; }
 
-.org-student-count {
-  display: inline-flex;
-  min-width: 36px;
-  justify-content: center;
+.org-student-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(58px, 1fr));
+  gap: 6px;
+  min-width: 215px;
+}
+
+.org-student-counts span {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
   border: 1px solid #d9e3ef;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #f6f9fc;
-  padding: 5px 10px;
+  padding: 7px 8px;
   color: #243b53;
+}
+
+.org-student-counts small {
+  color: #627d98;
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.org-student-counts strong {
+  font-size: .98rem;
 }
 
 .org-management-page {

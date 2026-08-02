@@ -88,9 +88,11 @@ public class OrganizationService {
     public Page<OrganizationListItem> search(String query, OrganizationStatus status, int page, int size) {
         String normalized = query == null || query.isBlank() ? null : query.trim();
         Page<OrganizationSearchRow> result = organizationRepository.search(normalized, status,
+                LocalDate.now(clock),
                 PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
                         Sort.by("name").ascending()));
-        return result.map(row -> new OrganizationListItem(row.getOrganization(), row.getStudentCount()));
+        return result.map(row -> new OrganizationListItem(row.getOrganization(), row.getStudentCount(),
+                row.getActiveStudentCount(), row.getInactiveStudentCount(), row.getExpiredStudentCount()));
     }
 
     @Transactional(readOnly = true)
@@ -109,9 +111,23 @@ public class OrganizationService {
             throw error("GLOBAL_ORGANIZATION_LICENSE_INVALID",
                     "La organización global no utiliza políticas de licenciamiento.");
         }
-        long studentCount = studentRepository == null ? 0
-                : studentRepository.countByOrganizationIdAndStatusNot(organization.getId(), StudentStatus.DELETED);
-        return new OrganizationAggregate(organization, policy, studentCount);
+        long studentCount = 0;
+        long activeStudentCount = 0;
+        long inactiveStudentCount = 0;
+        long expiredStudentCount = 0;
+        if (studentRepository != null) {
+            studentCount = studentRepository.countByOrganizationIdAndStatusNot(
+                    organization.getId(), StudentStatus.DELETED);
+            activeStudentCount = studentRepository.countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(
+                    organization.getId(), StudentStatus.DELETED);
+            inactiveStudentCount = studentRepository.countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(
+                    organization.getId(), StudentStatus.DELETED);
+            expiredStudentCount = organization.isAppliesCertifications()
+                    ? studentRepository.countExpiredByOrganizationId(organization.getId(), LocalDate.now(clock))
+                    : 0;
+        }
+        return new OrganizationAggregate(organization, policy, studentCount, activeStudentCount,
+                inactiveStudentCount, expiredStudentCount);
     }
 
     @Transactional
@@ -165,7 +181,7 @@ public class OrganizationService {
             }
             auditOrganizationEvent("ORGANIZATION_CREATED", organization,
                     "Se creó la organización comercial.", null, actorId, now);
-            return new OrganizationAggregate(organization, license, 0);
+            return new OrganizationAggregate(organization, license, 0, 0, 0, 0);
         } catch (DataIntegrityViolationException exception) {
             throw translatePersistenceFailure(exception);
         }
@@ -513,14 +529,19 @@ public class OrganizationService {
 
     public record OrganizationAggregate(OrganizationJpaEntity organization,
                                         OrganizationLicensePolicyJpaEntity policy,
-                                        long studentCount) {
+                                        long studentCount,
+                                        long activeStudentCount,
+                                        long inactiveStudentCount,
+                                        long expiredStudentCount) {
         public OrganizationAggregate(OrganizationJpaEntity organization,
                                      OrganizationLicensePolicyJpaEntity policy) {
-            this(organization, policy, 0);
+            this(organization, policy, 0, 0, 0, 0);
         }
     }
 
-    public record OrganizationListItem(OrganizationJpaEntity organization, long studentCount) { }
+    public record OrganizationListItem(OrganizationJpaEntity organization, long studentCount,
+                                       long activeStudentCount, long inactiveStudentCount,
+                                       long expiredStudentCount) { }
 
     public record StatusHistoryItem(OrganizationStatus previousStatus, OrganizationStatus newStatus,
                                     String reason, Long changedBy, Instant changedAt) { }

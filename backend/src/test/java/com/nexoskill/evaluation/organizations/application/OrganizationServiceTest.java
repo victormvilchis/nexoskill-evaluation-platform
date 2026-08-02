@@ -3,6 +3,8 @@ package com.nexoskill.evaluation.organizations.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -10,22 +12,53 @@ import static org.mockito.Mockito.when;
 
 import com.nexoskill.evaluation.organizations.domain.model.ContentMode;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationLicensePolicyRepository;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
+import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationSearchRow;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 class OrganizationServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-07-26T16:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+
+    @Test
+    void shouldExposeActiveInactiveAndExpiredStudentCountsPerOrganization() {
+        OrganizationRepository organizations = mock(OrganizationRepository.class);
+        OrganizationLicensePolicyRepository policies = mock(OrganizationLicensePolicyRepository.class);
+        OrganizationSearchRow row = mock(OrganizationSearchRow.class);
+        OrganizationJpaEntity organization = mock(OrganizationJpaEntity.class);
+        when(row.getOrganization()).thenReturn(organization);
+        when(row.getStudentCount()).thenReturn(14L);
+        when(row.getActiveStudentCount()).thenReturn(10L);
+        when(row.getInactiveStudentCount()).thenReturn(4L);
+        when(row.getExpiredStudentCount()).thenReturn(3L);
+        when(organizations.search(isNull(), eq(OrganizationStatus.ACTIVE),
+                eq(LocalDate.of(2026, 7, 26)), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(row)));
+
+        OrganizationService service = new OrganizationService(organizations, policies, CLOCK);
+
+        OrganizationService.OrganizationListItem result = service.search(
+                null, OrganizationStatus.ACTIVE, 0, 10).getContent().getFirst();
+
+        assertThat(result.studentCount()).isEqualTo(14);
+        assertThat(result.activeStudentCount()).isEqualTo(10);
+        assertThat(result.inactiveStudentCount()).isEqualTo(4);
+        assertThat(result.expiredStudentCount()).isEqualTo(3);
+    }
 
     @Test
     void shouldPersistTheCompleteLicensePolicyWhenCreatingAnOrganization() {

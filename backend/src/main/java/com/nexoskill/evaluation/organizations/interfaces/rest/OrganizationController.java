@@ -139,7 +139,9 @@ public class OrganizationController {
         OrganizationJpaEntity entity = item.organization();
         return new OrganizationSummary(entity.getPublicId(), entity.getCode(), entity.getName(),
                 entity.getOrganizationType(), entity.getStatus(), entity.getContentMode(),
-                entity.isAppliesCertifications(), entity.isManualStudentCode(), item.studentCount(), entity.getExpiresOn(), entity.getUpdatedAt());
+                entity.isAppliesCertifications(), entity.isManualStudentCode(), item.studentCount(),
+                item.activeStudentCount(), item.inactiveStudentCount(), item.expiredStudentCount(),
+                entity.getExpiresOn(), entity.getUpdatedAt());
     }
 
     private OrganizationResponse response(OrganizationService.OrganizationAggregate aggregate) {
@@ -148,6 +150,7 @@ public class OrganizationController {
         return new OrganizationResponse(organization.getPublicId(), organization.getCode(), organization.getName(),
                 organization.getOrganizationType(), organization.getStatus(), organization.getContentMode(),
                 organization.isAppliesCertifications(), organization.isManualStudentCode(), aggregate.studentCount(),
+                aggregate.activeStudentCount(), aggregate.inactiveStudentCount(), aggregate.expiredStudentCount(),
                 organization.getValidFrom(), organization.getExpiresOn(),
                 policy == null ? null : policy.getContractedSeats(),
                 policy == null ? null : policy.getIncludedReplacements(),
@@ -205,11 +208,13 @@ public class OrganizationController {
     public record OrganizationSummary(String publicId, String code, String name, OrganizationType organizationType,
                                       OrganizationStatus status, ContentMode contentMode,
                                       boolean appliesCertifications, boolean manualStudentCode, long studentCount,
+                                      long activeStudentCount, long inactiveStudentCount, long expiredStudentCount,
                                       LocalDate expiresOn, Instant updatedAt) { }
 
     public record OrganizationResponse(String publicId, String code, String name, OrganizationType organizationType,
                                        OrganizationStatus status, ContentMode contentMode,
                                        boolean appliesCertifications, boolean manualStudentCode, long studentCount,
+                                       long activeStudentCount, long inactiveStudentCount, long expiredStudentCount,
                                        LocalDate validFrom, LocalDate expiresOn,
                                        Integer contractedSeats, Integer includedReplacements,
                                        Integer additionalReplacements, Integer standardReleaseHours,

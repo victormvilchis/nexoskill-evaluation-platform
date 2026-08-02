@@ -4,4 +4,7 @@ package com.nexoskill.evaluation.organizations.infrastructure.persistence;
 public interface OrganizationSearchRow {
     OrganizationJpaEntity getOrganization();
     long getStudentCount();
+    long getActiveStudentCount();
+    long getInactiveStudentCount();
+    long getExpiredStudentCount();
 }

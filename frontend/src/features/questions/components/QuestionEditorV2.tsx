@@ -85,6 +85,9 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
           appliesCertifications: false,
           manualStudentCode: false,
           studentCount: 0,
+          activeStudentCount: 0,
+          inactiveStudentCount: 0,
+          expiredStudentCount: 0,
           updatedAt: ''
         }))))
       })

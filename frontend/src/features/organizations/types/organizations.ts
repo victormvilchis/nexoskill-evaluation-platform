@@ -12,6 +12,9 @@ export interface OrganizationSummary {
   appliesCertifications: boolean
   manualStudentCode: boolean
   studentCount: number
+  activeStudentCount: number
+  inactiveStudentCount: number
+  expiredStudentCount: number
   expiresOn?: string
   updatedAt: string
 }
