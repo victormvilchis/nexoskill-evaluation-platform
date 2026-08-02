@@ -22,7 +22,11 @@ interface DateTimeFieldProps extends Omit<DateFieldProps, 'value' | 'onChange' |
   onChange: (value: string) => void
 }
 
-const MONTH_FORMAT = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' })
+type CalendarView = 'DAYS' | 'MONTHS' | 'YEARS'
+
+const MONTH_NAMES = Array.from({ length: 12 }, (_, month) => (
+  new Intl.DateTimeFormat('es-MX', { month: 'long' }).format(new Date(2024, month, 1))
+))
 const DATE_FORMAT = new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 
@@ -34,7 +38,10 @@ function parseIso(value?: string) {
   const day = parts[2]
   if (year === undefined || month === undefined || day === undefined) return undefined
   const parsed = new Date(year, month - 1, day)
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed
+  if (Number.isNaN(parsed.getTime()) || parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) {
+    return undefined
+  }
+  return parsed
 }
 
 function toIso(value: Date) {
@@ -58,6 +65,10 @@ function addMonths(value: Date, amount: number) {
   return new Date(value.getFullYear(), value.getMonth() + amount, 1)
 }
 
+function addYears(value: Date, amount: number) {
+  return new Date(value.getFullYear() + amount, value.getMonth(), 1)
+}
+
 function calendarDays(month: Date) {
   const first = monthStart(month)
   const mondayIndex = (first.getDay() + 6) % 7
@@ -69,6 +80,23 @@ function calendarDays(month: Date) {
 
 function isOutsideRange(value: string, min?: string, max?: string) {
   return Boolean((min && value < min) || (max && value > max))
+}
+
+function monthOutsideRange(year: number, month: number, min?: string, max?: string) {
+  const first = `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const last = `${String(year).padStart(4, '0')}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return Boolean((min && last < min) || (max && first > max))
+}
+
+function yearOutsideRange(year: number, min?: string, max?: string) {
+  const first = `${String(year).padStart(4, '0')}-01-01`
+  const last = `${String(year).padStart(4, '0')}-12-31`
+  return Boolean((min && last < min) || (max && first > max))
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
 export function DateField({
@@ -92,12 +120,23 @@ export function DateField({
   const selected = useMemo(() => parseIso(value), [value])
   const today = useMemo(() => new Date(), [])
   const [open, setOpen] = useState(false)
+  const [view, setView] = useState<CalendarView>('DAYS')
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(selected ?? today))
+  const [yearPageStart, setYearPageStart] = useState(() => Math.floor((selected ?? today).getFullYear() / 12) * 12)
   const [position, setPosition] = useState<CSSProperties>({})
 
   useEffect(() => {
-    if (selected) setVisibleMonth(monthStart(selected))
+    if (!selected) return
+    setVisibleMonth(monthStart(selected))
+    setYearPageStart(Math.floor(selected.getFullYear() / 12) * 12)
   }, [selected])
+
+  useEffect(() => {
+    if (!open) return
+    setView('DAYS')
+    setVisibleMonth(monthStart(selected ?? today))
+    setYearPageStart(Math.floor((selected ?? today).getFullYear() / 12) * 12)
+  }, [open, selected, today])
 
   useEffect(() => {
     if (!open) return
@@ -105,14 +144,20 @@ export function DateField({
       const trigger = triggerRef.current
       if (!trigger) return
       const rect = trigger.getBoundingClientRect()
-      const width = Math.min(340, window.innerWidth - 24)
-      const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))
-      const estimatedHeight = 388
-      const below = window.innerHeight - rect.bottom
-      const top = below >= estimatedHeight || rect.top < estimatedHeight
-        ? Math.min(rect.bottom + 8, window.innerHeight - estimatedHeight - 12)
-        : Math.max(12, rect.top - estimatedHeight - 8)
-      setPosition({ width, left, top })
+      const viewportPadding = 12
+      const width = Math.min(360, window.innerWidth - viewportPadding * 2)
+      const left = Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - width - viewportPadding))
+      const estimatedHeight = 430
+      const below = window.innerHeight - rect.bottom - viewportPadding
+      const above = rect.top - viewportPadding
+      const openAbove = below < 300 && above > below
+      const viewportHeight = Math.max(120, window.innerHeight - viewportPadding * 2)
+      const availableSpace = openAbove ? above - 8 : below - 8
+      const availableHeight = Math.min(estimatedHeight, viewportHeight, Math.max(120, availableSpace))
+      const top = openAbove
+        ? Math.max(viewportPadding, rect.top - availableHeight - 8)
+        : Math.max(viewportPadding, Math.min(rect.bottom + 8, window.innerHeight - viewportPadding - availableHeight))
+      setPosition({ width, left, top, maxHeight: availableHeight })
     }
     updatePosition()
     const handlePointer = (event: PointerEvent) => {
@@ -140,6 +185,7 @@ export function DateField({
   }, [open])
 
   const days = useMemo(() => calendarDays(visibleMonth), [visibleMonth])
+  const years = useMemo(() => Array.from({ length: 12 }, (_, index) => yearPageStart + index), [yearPageStart])
   const displayValue = selected ? DATE_FORMAT.format(selected) : 'Seleccionar fecha'
 
   function selectDate(date: Date) {
@@ -157,6 +203,29 @@ export function DateField({
     setVisibleMonth(monthStart(today))
     setOpen(false)
     triggerRef.current?.focus()
+  }
+
+  function selectMonth(month: number) {
+    setVisibleMonth((current) => new Date(current.getFullYear(), month, 1))
+    setView('DAYS')
+  }
+
+  function selectYear(year: number) {
+    setVisibleMonth((current) => new Date(year, current.getMonth(), 1))
+    setYearPageStart(Math.floor(year / 12) * 12)
+    setView('MONTHS')
+  }
+
+  function previousPeriod() {
+    if (view === 'DAYS') setVisibleMonth((current) => addMonths(current, -1))
+    else if (view === 'MONTHS') setVisibleMonth((current) => addYears(current, -1))
+    else setYearPageStart((current) => current - 12)
+  }
+
+  function nextPeriod() {
+    if (view === 'DAYS') setVisibleMonth((current) => addMonths(current, 1))
+    else if (view === 'MONTHS') setVisibleMonth((current) => addYears(current, 1))
+    else setYearPageStart((current) => current + 12)
   }
 
   return (
@@ -187,49 +256,104 @@ export function DateField({
           style={position}
         >
           <div className="vt-calendar-header">
-            <button type="button" className="vt-calendar-nav" aria-label="Mes anterior" onClick={() => setVisibleMonth((current) => addMonths(current, -1))}>
+            <button type="button" className="vt-calendar-nav" aria-label="Periodo anterior" onClick={previousPeriod}>
               <Icon name="chevronLeft" size={18} />
             </button>
-            <strong>{MONTH_FORMAT.format(visibleMonth)}</strong>
-            <button type="button" className="vt-calendar-nav" aria-label="Mes siguiente" onClick={() => setVisibleMonth((current) => addMonths(current, 1))}>
+            <div className="vt-calendar-period-controls">
+              {view === 'DAYS' && (
+                <>
+                  <button type="button" onClick={() => setView('MONTHS')}>{capitalize(MONTH_NAMES[visibleMonth.getMonth()] ?? '')}</button>
+                  <button type="button" onClick={() => { setYearPageStart(Math.floor(visibleMonth.getFullYear() / 12) * 12); setView('YEARS') }}>{visibleMonth.getFullYear()}</button>
+                </>
+              )}
+              {view === 'MONTHS' && (
+                <button type="button" onClick={() => { setYearPageStart(Math.floor(visibleMonth.getFullYear() / 12) * 12); setView('YEARS') }}>{visibleMonth.getFullYear()}</button>
+              )}
+              {view === 'YEARS' && <strong>{yearPageStart}–{yearPageStart + 11}</strong>}
+            </div>
+            <button type="button" className="vt-calendar-nav" aria-label="Periodo siguiente" onClick={nextPeriod}>
               <Icon name="chevronRight" size={18} />
             </button>
           </div>
-          <div className="vt-calendar-weekdays" aria-hidden="true">
-            {WEEKDAYS.map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}
-          </div>
-          <div className="vt-calendar-grid">
-            {days.map((day) => {
-              const iso = toIso(day)
-              const outsideMonth = day.getMonth() !== visibleMonth.getMonth()
-              const unavailable = isOutsideRange(iso, min, max)
-              return (
+
+          {view === 'DAYS' && (
+            <>
+              <div className="vt-calendar-weekdays" aria-hidden="true">
+                {WEEKDAYS.map((weekday, index) => <span key={`${weekday}-${index}`}>{weekday}</span>)}
+              </div>
+              <div className="vt-calendar-grid">
+                {days.map((day) => {
+                  const iso = toIso(day)
+                  const outsideMonth = day.getMonth() !== visibleMonth.getMonth()
+                  const unavailable = isOutsideRange(iso, min, max)
+                  return (
+                    <button
+                      key={iso}
+                      type="button"
+                      className={[
+                        'vt-calendar-day',
+                        outsideMonth ? 'outside-month' : '',
+                        sameDay(day, today) ? 'today' : '',
+                        selected && sameDay(day, selected) ? 'selected' : ''
+                      ].filter(Boolean).join(' ')}
+                      aria-label={DATE_FORMAT.format(day)}
+                      aria-pressed={Boolean(selected && sameDay(day, selected))}
+                      disabled={unavailable}
+                      onClick={() => selectDate(day)}
+                    >
+                      {day.getDate()}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {view === 'MONTHS' && (
+            <div className="vt-calendar-choice-grid vt-calendar-month-grid" role="grid" aria-label={`Meses de ${visibleMonth.getFullYear()}`}>
+              {MONTH_NAMES.map((monthName, month) => {
+                const selectedMonth = selected?.getFullYear() === visibleMonth.getFullYear() && selected.getMonth() === month
+                return (
+                  <button
+                    key={monthName}
+                    type="button"
+                    className={`vt-calendar-choice${selectedMonth ? ' selected' : ''}`}
+                    disabled={monthOutsideRange(visibleMonth.getFullYear(), month, min, max)}
+                    onClick={() => selectMonth(month)}
+                  >
+                    {capitalize(monthName.slice(0, 3))}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {view === 'YEARS' && (
+            <div className="vt-calendar-choice-grid vt-calendar-year-grid" role="grid" aria-label="Seleccionar año">
+              {years.map((year) => (
                 <button
-                  key={iso}
+                  key={year}
                   type="button"
-                  className={[
-                    'vt-calendar-day',
-                    outsideMonth ? 'outside-month' : '',
-                    sameDay(day, today) ? 'today' : '',
-                    selected && sameDay(day, selected) ? 'selected' : ''
-                  ].filter(Boolean).join(' ')}
-                  aria-label={DATE_FORMAT.format(day)}
-                  aria-pressed={Boolean(selected && sameDay(day, selected))}
-                  disabled={unavailable}
-                  onClick={() => selectDate(day)}
+                  className={`vt-calendar-choice${selected?.getFullYear() === year ? ' selected' : ''}${today.getFullYear() === year ? ' today' : ''}`}
+                  disabled={yearOutsideRange(year, min, max)}
+                  onClick={() => selectYear(year)}
                 >
-                  {day.getDate()}
+                  {year}
                 </button>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
           <div className="vt-calendar-actions">
             {allowClear && (
               <button type="button" className="secondary-button compact-button" disabled={!value} onClick={() => { onChange(''); setOpen(false); triggerRef.current?.focus() }}>
                 Limpiar
               </button>
             )}
-            <button type="button" className="secondary-button compact-button" disabled={isOutsideRange(toIso(today), min, max)} onClick={selectToday}>
+            <button type="button" className="secondary-button compact-button" onClick={() => { setVisibleMonth(monthStart(today)); setYearPageStart(Math.floor(today.getFullYear() / 12) * 12); setView('DAYS') }}>
+              Ir a hoy
+            </button>
+            <button type="button" className="primary-button compact-button" disabled={isOutsideRange(toIso(today), min, max)} onClick={selectToday}>
               Hoy
             </button>
           </div>

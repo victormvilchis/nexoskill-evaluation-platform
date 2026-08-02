@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Icon } from './Icon'
+import { SelectField } from './SelectField'
 import { PAGE_SIZE_OPTIONS, type PageSize } from '../types/pagination'
 
 type PageToken = number | 'ellipsis-start' | 'ellipsis-end'
@@ -140,16 +141,13 @@ export function TablePagination({
       </div>
 
       <label className="ns-table-pagination__size">
-        <select
-          value={pageSize}
-          onChange={(event) => onPageSizeChange(Number(event.target.value) as PageSize)}
+        <SelectField
+          value={String(pageSize)}
+          onChange={(nextValue) => onPageSizeChange(Number(nextValue) as PageSize)}
           disabled={isLoading}
-          aria-label="Registros por página"
-        >
-          {PAGE_SIZE_OPTIONS.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
+          ariaLabel="Registros por página"
+          options={PAGE_SIZE_OPTIONS.map((option) => ({ value: String(option), label: option }))}
+        />
         <span>por página</span>
       </label>
     </nav>

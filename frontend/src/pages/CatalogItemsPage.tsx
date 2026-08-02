@@ -24,6 +24,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
+import { SelectField } from '../shared/components/SelectField'
 import { TableActionButton, TableActions } from '../shared/components/TableActions'
 import { TablePagination } from '../shared/components/TablePagination'
 import { useClientPagination } from '../shared/hooks/useClientPagination'
@@ -329,20 +330,13 @@ export function CatalogItemsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page catalog-items-page">
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Catálogos</p>
-          <h1>{summary?.name ?? 'Catálogo'}</h1>
-          <p className="muted">{summary?.description}</p>
+      {!mode && canManage && (
+        <div className="ns-list-action-bar" aria-label={`Acciones de ${summary?.name ?? 'catálogo'}`}>
+          <button className="primary-button ns-create-button" type="button" onClick={openCreate}>
+            <Icon name="plus" size={15} /> Nuevo registro
+          </button>
         </div>
-        {!mode && canManage && (
-          <div className="catalog-header-actions">
-            <button className="primary-button" type="button" onClick={openCreate}>
-              <Icon name="plus" size={16} /> Nuevo registro
-            </button>
-          </div>
-        )}
-      </header>
+      )}
 
       <FilterToolbar
         resultLabel={`${filtered.length} ${filtered.length === 1 ? 'registro' : 'registros'}`}
@@ -460,25 +454,31 @@ export function CatalogItemsPage() {
                   {globalAdministrator && (
                     <label className="ns-dialog-field">
                       <span>Organización propietaria</span>
-                      <select disabled={mode === 'edit'} value={form.organizationPublicId ?? ''} onChange={(event) => setForm((value) => ({ ...value, organizationPublicId: event.target.value || undefined }))}>
-                        <option value="">GLOBAL</option>
-                        {organizations.filter((organization) => organization.organizationType === 'CUSTOMER' && organization.status === 'ACTIVE').map((organization) => (
-                          <option key={organization.publicId} value={organization.publicId}>{organization.name}</option>
-                        ))}
-                      </select>
+                      <SelectField disabled={mode === 'edit'} value={form.organizationPublicId ?? ''}
+                        onChange={(nextValue) => setForm((value) => ({ ...value, organizationPublicId: nextValue || undefined }))}
+                        ariaLabel="Organización propietaria"
+                        options={[
+                          { value: '', label: 'GLOBAL' },
+                          ...organizations
+                            .filter((organization) => organization.organizationType === 'CUSTOMER' && organization.status === 'ACTIVE')
+                            .map((organization) => ({ value: organization.publicId, label: organization.name }))
+                        ]} />
                     </label>
                   )}
                   {type === 'PROFESSIONAL_PROFILES' && (
                     <label className="ns-dialog-field">
                       <span>Perfil tecnológico sugerido</span>
-                      <select value={form.suggestedTechnologicalProfile ?? ''} onChange={(event) => setForm((value) => ({ ...value, suggestedTechnologicalProfile: event.target.value || undefined }))}>
-                        <option value="">Sin sugerencia</option>
-                        {technologicalProfiles
-                          .filter((profile) => profile.scope === 'GLOBAL'
-                            || (!globalAdministrator)
-                            || Boolean(form.organizationPublicId && profile.organizationPublicId === form.organizationPublicId))
-                          .map((profile) => <option key={`${profile.scope}-${profile.organizationPublicId ?? 'GLOBAL'}-${profile.code}`} value={profile.code}>{profile.name}</option>)}
-                      </select>
+                      <SelectField value={form.suggestedTechnologicalProfile ?? ''}
+                        onChange={(nextValue) => setForm((value) => ({ ...value, suggestedTechnologicalProfile: nextValue || undefined }))}
+                        ariaLabel="Perfil tecnológico sugerido"
+                        options={[
+                          { value: '', label: 'Sin sugerencia' },
+                          ...technologicalProfiles
+                            .filter((profile) => profile.scope === 'GLOBAL'
+                              || (!globalAdministrator)
+                              || Boolean(form.organizationPublicId && profile.organizationPublicId === form.organizationPublicId))
+                            .map((profile) => ({ value: profile.code, label: profile.name }))
+                        ]} />
                     </label>
                   )}
                   <label className="ns-dialog-field catalog-description-field">

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { changePassword } from '../features/authentication/api/authApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
@@ -9,13 +9,18 @@ import { useToast } from '../shared/components/ToastProvider'
 
 export function ChangePasswordPage() {
   const navigate = useNavigate()
-  const { user, logout, refresh } = useAuth()
+  const location = useLocation()
+  const { user, refresh } = useAuth()
   const toast = useToast()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const routeState = location.state as { from?: unknown } | null
+  const returnTo = typeof routeState?.from === 'string' && routeState.from.startsWith('/')
+    ? routeState.from
+    : '/dashboard'
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,10 +52,6 @@ export function ChangePasswordPage() {
     }
   }
 
-  async function handleLogout() {
-    await logout()
-    navigate('/login', { replace: true })
-  }
 
   return (
     <main className="password-page">
@@ -128,9 +129,9 @@ export function ChangePasswordPage() {
               className="secondary-button"
               type="button"
               disabled={submitting}
-              onClick={() => void handleLogout()}
+              onClick={() => navigate(returnTo, { replace: true })}
             >
-              Cerrar sesión
+              Volver
             </button>
             <button className="primary-button" type="submit" disabled={submitting}>
               {submitting ? 'Actualizando…' : 'Guardar nueva contraseña'}

@@ -3,6 +3,7 @@ import { getAllOrganizations } from '../../organizations/api/organizationApi'
 import type { OrganizationSummary } from '../../organizations/types/organizations'
 import type { ContentScope, QuestionDetail, QuestionPayload } from '../../../shared/types/questions'
 import { ApiRequestError } from '../../../shared/api/apiClient'
+import { SelectField } from '../../../shared/components/SelectField'
 import { QuestionEditor } from './QuestionEditor'
 import type { QuestionAvailabilityMode } from '../api/questionAvailabilityApi'
 
@@ -126,19 +127,20 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
           {targetScope === 'ORGANIZATION' && (
             <label className="ns-field">
               <span>Organización propietaria</span>
-              <select
+              <SelectField
                 value={ownerOrganizationPublicId}
-                onChange={(event) => setOwnerOrganizationPublicId(event.target.value)}
+                onChange={setOwnerOrganizationPublicId}
                 disabled={loadingOrganizations}
                 required
-              >
-                <option value="">Selecciona una organización</option>
-                {organizations.map((organization) => (
-                  <option value={organization.publicId} key={organization.publicId}>
-                    {organization.name} · {organization.code}
-                  </option>
-                ))}
-              </select>
+                ariaLabel="Organización propietaria"
+                options={[
+                  { value: '', label: 'Selecciona una organización' },
+                  ...organizations.map((organization) => ({
+                    value: organization.publicId,
+                    label: `${organization.name} · ${organization.code}`
+                  }))
+                ]}
+              />
             </label>
           )}
         </section>

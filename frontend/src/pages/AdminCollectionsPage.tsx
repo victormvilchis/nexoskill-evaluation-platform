@@ -87,10 +87,7 @@ export function AdminCollectionsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page">
-      <header className="ns-page-header">
-        <div><p className="eyebrow">Aprendizaje</p><h1>Colecciones</h1><p className="muted">Organiza formularios en niveles progresivos.</p></div>
-        {canManage && <Link className="primary-button button-link" to="/admin/collections/new"><Icon name="plus" size={17} /> Nueva colección</Link>}
-      </header>
+      {canManage && <div className="ns-list-action-bar" aria-label="Acciones de colecciones"><Link className="primary-button button-link ns-create-button" to="/admin/collections/new"><Icon name="plus" size={15} /> Nueva colección</Link></div>}
 
       <FilterToolbar hasActiveFilters={activeFilters} onClear={() => { setQuery(''); setStatus('ACTIVE'); updateUrl({ query: undefined, status: undefined, page: undefined }) }}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, código o descripción" />

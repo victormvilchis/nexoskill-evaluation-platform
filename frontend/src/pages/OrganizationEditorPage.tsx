@@ -15,6 +15,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { DateField } from '../shared/components/DateField'
 import { Icon } from '../shared/components/Icon'
+import { SelectField } from '../shared/components/SelectField'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 
 const CONTENT_MODE_HELP: Record<ContentMode, string> = {
@@ -249,7 +250,7 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                 <div><span className="ns-step">1</span><h2>Información general</h2></div>
                 <p>La fecha de inicio se genera automáticamente al crear la organización.</p>
               </div>
-              <div className="org-form-grid">
+              <div className="org-form-grid org-general-grid">
                 <label className="ns-field org-field-wide-tablet">
                   <span>Nombre <b>*</b></span>
                   <input aria-invalid={Boolean(fieldErrors.name)} maxLength={200} value={model.name}
@@ -267,64 +268,36 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                   <span>Tipo</span>
                   <input disabled value={global ? 'GLOBAL' : 'Organización comercial'} />
                 </label>
-                <label className="ns-field">
-                  <span>Modalidad de contenido <b>*</b></span>
-                  <select value={model.contentMode}
-                    onChange={(event) => set('contentMode', event.target.value as ContentMode)}>
-                    <option value="GLOBAL_CATALOG">Catálogo global completo</option>
-                    <option value="CLEAN">Organización en limpio</option>
-                    <option value="CUSTOM">Configuración personalizada</option>
-                  </select>
-                  <small className="org-field-help">{CONTENT_MODE_HELP[model.contentMode]}</small>
-                </label>
                 {editing && (
                   <label className="ns-field">
                     <span>Vigencia desde</span>
                     <DateField value={validFrom ?? ''} onChange={() => undefined} disabled ariaLabel="Vigencia desde" />
                   </label>
                 )}
-                {!global && (
-                  <label className="ns-field org-certification-toggle">
-                    <span>Gestión de certificaciones</span>
-                    <span className="org-check-row">
-                      <input
-                        type="checkbox"
-                        checked={model.appliesCertifications}
-                        onChange={(event) => set('appliesCertifications', event.target.checked)}
-                      />
-                      Aplica certificaciones
-                    </span>
-                    <small className="org-field-help">
-                      Habilita el seguimiento independiente de certificaciones para Gestores y Supervisores.
-                    </small>
+                <div className="org-content-validity-row">
+                  <label className="ns-field org-content-mode-field">
+                    <span>Modalidad de contenido <b>*</b></span>
+                    <SelectField value={model.contentMode}
+                      onChange={(nextValue) => set('contentMode', nextValue as ContentMode)}
+                      ariaLabel="Modalidad de contenido"
+                      options={[
+                        { value: 'GLOBAL_CATALOG', label: 'Catálogo global completo' },
+                        { value: 'CLEAN', label: 'Organización en limpio' },
+                        { value: 'CUSTOM', label: 'Configuración personalizada' }
+                      ]} />
+                    <small className="org-field-help">{CONTENT_MODE_HELP[model.contentMode]}</small>
                   </label>
-                )}
-                {!global && (
-                  <label className="ns-field org-certification-toggle">
-                    <span>Código de colaborador</span>
-                    <span className="org-check-row">
-                      <input
-                        type="checkbox"
-                        checked={model.manualStudentCode}
-                        onChange={(event) => set('manualStudentCode', event.target.checked)}
-                      />
-                      Código de colaborador manual
-                    </span>
-                    <small className="org-field-help">
-                      Al habilitarlo, el Código a nivel organización deberá capturarse para cada colaborador.
-                    </small>
-                  </label>
-                )}
-                {!global && (
-                  <label className="ns-field">
-                    <span>Fecha de vencimiento</span>
-                    <DateField value={model.expiresOn ?? ''} min={validFrom ?? localDateValue(new Date())}
-                      onChange={(value) => set('expiresOn', value || undefined)}
-                      ariaInvalid={Boolean(fieldErrors.expiresOn)} ariaLabel="Seleccionar fecha de vencimiento" />
-                    <small className="org-field-help">Déjalo vacío para vigencia indefinida.</small>
-                    <FieldError message={fieldErrors.expiresOn} />
-                  </label>
-                )}
+                  {!global && (
+                    <label className="ns-field org-expiration-field">
+                      <span>Fecha de vencimiento</span>
+                      <DateField value={model.expiresOn ?? ''} min={validFrom ?? localDateValue(new Date())}
+                        onChange={(value) => set('expiresOn', value || undefined)}
+                        ariaInvalid={Boolean(fieldErrors.expiresOn)} ariaLabel="Seleccionar fecha de vencimiento" />
+                      <small className="org-field-help">Déjalo vacío para vigencia indefinida.</small>
+                      <FieldError message={fieldErrors.expiresOn} />
+                    </label>
+                  )}
+                </div>
               </div>
             </section>
 
@@ -342,6 +315,33 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                   <label className="ns-field"><span>Bloqueo antifraude (días) <b>*</b></span><input min="0" step="1" type="number" value={model.exhaustedReleaseDays ?? 7} onChange={(event) => set('exhaustedReleaseDays', Number(event.target.value))} /><FieldError message={fieldErrors.exhaustedReleaseDays} /></label>
                   <label className="ns-field"><span>Inicio de ciclo <b>*</b></span><DateField value={model.cycleStartsOn ?? ''} onChange={(value) => set('cycleStartsOn', value)} required ariaInvalid={Boolean(fieldErrors.cycleStartsOn)} ariaLabel="Seleccionar inicio de ciclo" /><FieldError message={fieldErrors.cycleStartsOn} /></label>
                   <label className="ns-field"><span>Fin de ciclo <b>*</b></span><DateField min={model.cycleStartsOn} value={model.cycleEndsOn ?? ''} onChange={(value) => set('cycleEndsOn', value)} required ariaInvalid={Boolean(fieldErrors.cycleEndsOn)} ariaLabel="Seleccionar fin de ciclo" /><FieldError message={fieldErrors.cycleEndsOn} /></label>
+                </div>
+              </section>
+            )}
+
+            {!global && (
+              <section className="ns-card org-options-card">
+                <div className="ns-card-heading">
+                  <div><span className="ns-step">3</span><h2>Configuración de colaboradores</h2></div>
+                  <p>Define las capacidades operativas que aplicarán dentro de la organización.</p>
+                </div>
+                <div className="org-options-grid">
+                  <label className="org-option-field">
+                    <span className="org-option-check">
+                      <input type="checkbox" checked={model.appliesCertifications}
+                        onChange={(event) => set('appliesCertifications', event.target.checked)} />
+                      <strong>Aplica certificaciones</strong>
+                    </span>
+                    <small>Habilita el seguimiento independiente de certificaciones para Gestores y Supervisores.</small>
+                  </label>
+                  <label className="org-option-field">
+                    <span className="org-option-check">
+                      <input type="checkbox" checked={model.manualStudentCode}
+                        onChange={(event) => set('manualStudentCode', event.target.checked)} />
+                      <strong>Código de colaborador manual</strong>
+                    </span>
+                    <small>Al habilitarlo, el Código a nivel organización deberá capturarse para cada colaborador.</small>
+                  </label>
                 </div>
               </section>
             )}

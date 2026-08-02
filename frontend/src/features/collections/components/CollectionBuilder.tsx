@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
+import { SelectField } from '../../../shared/components/SelectField'
 import { useDebouncedValue } from '../../../shared/hooks/useDebouncedValue'
 import type {
   CollectionDetail,
@@ -332,13 +333,18 @@ export function CollectionBuilder({
 
               <label className="lc-select-field">
                 <span className="sr-only">Filtrar por estado</span>
-                <select value={status} onChange={(event) => setStatus(event.target.value)}>
-                  <option value="ALL">Todos los estados</option>
-                  <option value="ACTIVE">Activos</option>
-                  <option value="DRAFT">Borradores</option>
-                  <option value="DISABLED">Deshabilitados</option>
-                  <option value="CLOSED">Cerrados</option>
-                </select>
+                <SelectField
+                  value={status}
+                  onChange={setStatus}
+                  ariaLabel="Filtrar por estado"
+                  options={[
+                    { value: 'ALL', label: 'Todos los estados' },
+                    { value: 'ACTIVE', label: 'Activos' },
+                    { value: 'DRAFT', label: 'Borradores' },
+                    { value: 'DISABLED', label: 'Deshabilitados' },
+                    { value: 'CLOSED', label: 'Cerrados' }
+                  ]}
+                />
               </label>
             </div>
 

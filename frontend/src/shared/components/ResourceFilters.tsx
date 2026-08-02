@@ -1,5 +1,6 @@
-import type { ChangeEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Icon } from './Icon'
+import { SelectField } from './SelectField'
 
 interface ResourceSearchFieldProps {
   value: string
@@ -61,23 +62,18 @@ export function ResourceSelectField({
   disabled = false,
   ariaLabel
 }: ResourceSelectFieldProps) {
-  function handleChange(event: ChangeEvent<HTMLSelectElement>) {
-    onChange(event.target.value)
-  }
-
   return (
     <label className="ns-resource-select">
       <span>{label}</span>
       <div className="ns-resource-select-control">
-        <select
-          aria-label={ariaLabel ?? label}
+        <SelectField
+          ariaLabel={ariaLabel ?? label}
           disabled={disabled}
           value={value}
-          onChange={handleChange}
+          onChange={onChange}
         >
           {children}
-        </select>
-        <Icon name="chevronDown" size={15} />
+        </SelectField>
       </div>
     </label>
   )

@@ -1,3 +1,4 @@
+import { SelectField } from '../../../shared/components/SelectField'
 import type { ExperienceLevel, StudentExperienceItem, StudentExperiencePayload } from '../types/studentImport'
 
 interface Props {
@@ -48,11 +49,11 @@ export function StudentExperienceFields({ value, onChange, readOnly, disabled }:
             <input className="student-experience-input" aria-label={`${title} ${index + 1}`}
               value={item.name} disabled={disabled} placeholder="Nombre de tecnología, lenguaje o herramienta"
               onChange={(event) => updateItem(key, index, 'name', event.target.value)} />
-            <select className="student-experience-select" aria-label={`Nivel de ${item.name || title}`}
+            <SelectField className="student-experience-select" ariaLabel={`Nivel de ${item.name || title}`}
               value={item.level ?? ''} disabled={disabled}
-              onChange={(event) => updateItem(key, index, 'level', event.target.value)}>
-              {LEVELS.map((level) => <option key={level || 'NONE'} value={level}>{level || 'Sin nivel'}</option>)}
-            </select>
+              onChange={(nextValue) => updateItem(key, index, 'level', nextValue)}
+              options={LEVELS.map((level) => ({ value: level, label: level || 'Sin nivel' }))}
+            />
             <button type="button" className="danger-button compact-button student-experience-remove"
               disabled={disabled}
               onClick={() => setList(key, items.filter((_, itemIndex) => itemIndex !== index))}>Quitar</button>

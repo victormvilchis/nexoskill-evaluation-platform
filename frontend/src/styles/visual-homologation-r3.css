@@ -1,0 +1,527 @@
+/* Valtieris Talent Platform — visual homologation R3.
+   Custom selects, calendar navigation, compact list actions and aligned forms. */
+
+/* Shared custom select. */
+.vt-select-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.vt-select-validation-proxy {
+  position: absolute;
+  z-index: -1;
+  width: 1px;
+  height: 1px;
+  inset: auto auto 0 0;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vt-select-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--vt-control-height, 44px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--vt-control-border, #c8d5e5);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 12px 0 13px;
+  color: #17253a;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 1px 2px rgba(17, 42, 78, 0.025);
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+
+.vt-select-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vt-select-trigger svg {
+  flex: 0 0 auto;
+  color: #52657d;
+  transition: transform .16s ease;
+}
+
+.vt-select-trigger[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.vt-select-trigger:hover:not(:disabled) {
+  border-color: var(--vt-control-border-hover, #8fa9c8);
+}
+
+.vt-select-trigger:focus-visible,
+.vt-select-trigger[aria-expanded='true'] {
+  border-color: var(--vt-control-focus, #2458e8);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(36, 88, 232, .13);
+}
+
+.vt-select-trigger[aria-invalid='true'] {
+  border-color: #d94b45;
+  box-shadow: 0 0 0 2px rgba(217, 75, 69, .09);
+}
+
+.vt-select-trigger:disabled {
+  cursor: not-allowed;
+  border-color: #d7e0ea;
+  background: #f1f4f8;
+  color: #68778b;
+  opacity: 1;
+}
+
+.vt-select-placeholder {
+  color: #8795a8;
+  font-weight: 500;
+}
+
+.vt-select-value {
+  color: #17253a;
+  font-weight: 600;
+}
+
+.vt-select-popover {
+  position: fixed;
+  z-index: 6500;
+  display: grid;
+  gap: 4px;
+  max-width: calc(100vw - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #d1dce9;
+  border-radius: 13px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 20px 58px rgba(9, 27, 54, .23);
+}
+
+.vt-select-option {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  padding: 9px 10px;
+  color: #263850;
+  font: inherit;
+  font-size: .88rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.vt-select-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.vt-select-option svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.vt-select-option:hover:not(:disabled),
+.vt-select-option.active:not(:disabled) {
+  border-color: #c6d6ea;
+  background: #f1f6fd;
+  color: #153f7f;
+}
+
+.vt-select-option.selected {
+  border-color: #a9c4eb;
+  background: #eaf2ff;
+  color: #174ea6;
+  font-weight: 750;
+}
+
+.vt-select-option:focus-visible {
+  outline: 0;
+  border-color: #7ea5da;
+  box-shadow: inset 0 0 0 1px #7ea5da;
+}
+
+.vt-select-option:disabled {
+  cursor: not-allowed;
+  color: #a0adbd;
+  opacity: .7;
+}
+
+.vt-select-empty {
+  margin: 0;
+  padding: 13px;
+  color: var(--muted);
+  font-size: .84rem;
+  text-align: center;
+}
+
+.ns-resource-select-control {
+  height: auto;
+  min-height: 42px;
+}
+
+.ns-resource-select-control .vt-select-field,
+.ns-resource-select-control .vt-select-trigger,
+.ns-table-pagination__size .vt-select-field {
+  width: 100%;
+}
+
+.ns-resource-select-control .vt-select-trigger {
+  min-height: 42px;
+  height: 42px;
+}
+
+.ns-resource-select-control > svg {
+  display: none;
+}
+
+.ns-table-pagination__size .vt-select-field {
+  width: 74px;
+  flex: 0 0 74px;
+}
+
+.ns-table-pagination__size .vt-select-trigger {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: .8rem;
+}
+
+.student-experience-select.vt-select-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 122px;
+  min-height: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  padding: 0;
+  color: inherit;
+  box-shadow: none !important;
+}
+
+.ns-data-table td .vt-select-field {
+  min-width: 150px;
+}
+
+/* Calendar month and year navigation. */
+.vt-calendar-popover {
+  overflow-y: auto;
+}
+
+.vt-calendar-period-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.vt-calendar-period-controls button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 6px 8px;
+  color: #273b56;
+  font: inherit;
+  font-size: .94rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.vt-calendar-period-controls button:hover,
+.vt-calendar-period-controls button:focus-visible {
+  border-color: #c4d3e5;
+  outline: 0;
+  background: #f1f6fd;
+  color: var(--primary);
+}
+
+.vt-calendar-period-controls strong {
+  text-align: center;
+  font-size: .94rem;
+}
+
+.vt-calendar-choice-grid {
+  display: grid;
+  min-height: 266px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.vt-calendar-choice {
+  min-height: 54px;
+  border: 1px solid #d8e1ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #263850;
+  font: inherit;
+  font-weight: 700;
+}
+
+.vt-calendar-choice:hover:not(:disabled),
+.vt-calendar-choice:focus-visible {
+  border-color: #9eb8d8;
+  outline: 0;
+  background: #f1f6fd;
+  color: var(--primary);
+}
+
+.vt-calendar-choice.today {
+  box-shadow: inset 0 0 0 1px #91acd0;
+}
+
+.vt-calendar-choice.selected {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(36, 88, 232, .2);
+}
+
+.vt-calendar-choice:disabled {
+  cursor: not-allowed;
+  background: #f6f8fb;
+  color: #bdc7d3;
+}
+
+.vt-calendar-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.vt-calendar-actions .secondary-button:first-child {
+  margin-right: auto;
+}
+
+/* Organization create/edit layout. */
+.org-general-grid {
+  align-items: start;
+}
+
+.org-content-validity-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1.65fr) minmax(230px, .75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.org-content-mode-field,
+.org-expiration-field {
+  min-width: 0;
+}
+
+.org-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.org-option-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #f9fbfe;
+  padding: 14px 15px;
+}
+
+.org-option-check {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 9px;
+}
+
+.org-option-check strong {
+  color: #26364c;
+  font-size: .9rem;
+}
+
+.org-option-field small {
+  min-height: 36px;
+  margin-left: 28px;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+/* Internal user validity alignment. */
+.internal-user-validity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(210px, .65fr);
+  align-items: start;
+  gap: .85rem;
+}
+
+.internal-user-expiration-check {
+  display: grid;
+  grid-template-rows: minmax(var(--vt-field-label-height), auto) minmax(var(--vt-control-height), auto) minmax(var(--vt-field-message-height), auto);
+  align-content: start;
+  align-self: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.internal-user-expiration-label {
+  display: flex;
+  min-height: var(--vt-field-label-height);
+  align-items: flex-end;
+  color: #26364c;
+  font-size: .84rem;
+  font-weight: 750;
+}
+
+.internal-user-expiration-check > .checkbox-row {
+  display: flex;
+  min-height: var(--vt-control-height);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d5dfeb;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0 12px;
+  color: #26364c;
+  font-size: .86rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.internal-user-expiration-check > small {
+  min-height: var(--vt-field-message-height);
+  margin: 0;
+  color: var(--muted);
+  font-size: .76rem;
+  line-height: 1.4;
+}
+
+/* List pages use breadcrumb as the page title. */
+.ns-list-action-bar {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.ns-create-button,
+.ns-create-button-secondary,
+.ns-list-action-bar .primary-button,
+.ns-list-action-bar .secondary-button {
+  display: inline-flex;
+  min-height: 36px !important;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 9px !important;
+  padding: 0 12px !important;
+  font-size: .82rem;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ns-create-button-secondary,
+.ns-list-action-bar .ns-excel-import-button {
+  border: 1px solid #b9c9dc;
+  background: #fff;
+  color: #27415f;
+}
+
+.ns-list-action-bar .ns-excel-import-icon-wrap {
+  width: 22px;
+  height: 22px;
+}
+
+.ns-list-action-bar .ns-excel-import-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Password action footer. */
+.password-form-actions {
+  align-items: center;
+}
+
+.password-form-actions > button {
+  min-height: 42px;
+}
+
+@media (max-width: 920px) {
+  .org-content-validity-row,
+  .internal-user-validity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .org-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .vt-select-popover,
+  .vt-calendar-popover {
+    max-width: calc(100vw - 16px);
+  }
+
+  .ns-list-action-bar {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ns-student-header-actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .vt-calendar-choice-grid {
+    min-height: 246px;
+  }
+
+  .vt-calendar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vt-calendar-actions .secondary-button:first-child {
+    grid-column: 1 / -1;
+    margin-right: 0;
+  }
+
+  .ns-list-action-bar > * {
+    width: 100%;
+  }
+
+  .password-form-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .password-form-actions > button {
+    width: 100%;
+  }
+
+  .org-option-field small {
+    margin-left: 0;
+  }
+}

@@ -17,6 +17,7 @@ import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FormActions } from '../shared/components/FormActions'
 import { Icon } from '../shared/components/Icon'
+import { SelectField } from '../shared/components/SelectField'
 import { useToast } from '../shared/components/ToastProvider'
 
 type LowAction = 'KEEP' | 'DEACTIVATE' | 'IGNORE'
@@ -404,11 +405,13 @@ export function StudentImportPage() {
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="editor-card ns-import-source-card">
-        {administrator && <label className="field"><span>Organización destino</span><select value={selectedOrganization}
-          disabled={organizationsLoading || loading || applying} onChange={(event) => void changeOrganization(event.target.value)}>
-          <option value="">{organizationsLoading ? 'Cargando organizaciones…' : 'Selecciona una organización'}</option>
-          {organizations.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}
-        </select></label>}
+        {administrator && <label className="field"><span>Organización destino</span><SelectField value={selectedOrganization}
+          disabled={organizationsLoading || loading || applying} onChange={(nextValue) => void changeOrganization(nextValue)}
+          ariaLabel="Organización destino"
+          options={[
+            { value: '', label: organizationsLoading ? 'Cargando organizaciones…' : 'Selecciona una organización' },
+            ...organizations.map((organization) => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))
+          ]} /></label>}
         <input ref={inputRef} type="file" accept=".xlsx" hidden onChange={(event) => void changeFile(event.target.files?.[0])} />
         <div className={`ns-import-dropzone${dragging ? ' is-dragging' : ''}${file ? ' has-file' : ''}`}
           role="button" tabIndex={0} aria-label="Seleccionar o arrastrar archivo Excel"
@@ -500,11 +503,10 @@ export function StudentImportPage() {
               <p className="ns-import-conflict-reason">{conflict.reason}</p>
               {conflict.reusedDecision
                 ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label || 'Decisión anterior aplicada'}</span>{selectedAction?.description && <small>{selectedAction.description}</small>}</div>
-                : <label className="field"><span>Selecciona cómo proceder</span><select value={decision}
-                  onChange={(event) => setConflictDecisions((current) => ({ ...current, [conflict.id]: event.target.value as StudentImportConflictActionValue }))}>
-                  <option value="">Selecciona una decisión</option>
-                  {conflict.actions.map((action) => <option key={action.value} value={action.value}>{action.label}</option>)}
-                </select></label>}
+                : <label className="field"><span>Selecciona cómo proceder</span><SelectField value={decision}
+                  onChange={(nextValue) => setConflictDecisions((current) => ({ ...current, [conflict.id]: nextValue as StudentImportConflictActionValue }))}
+                  ariaLabel="Selecciona cómo proceder"
+                  options={[{ value: '', label: 'Selecciona una decisión' }, ...conflict.actions.map((action) => ({ value: action.value, label: action.label }))]} /></label>}
               {!conflict.reusedDecision && decision && <p className="muted">{selectedAction?.description}</p>}
               {!conflict.reusedDecision && decision && preview.conflicts.filter((item) => item.groupKey === conflict.groupKey && !item.reusedDecision).length > 1 && <button type="button" className="secondary-button compact-button" onClick={() => applyEquivalentDecision(conflict.id)}>Aplicar esta decisión a casos equivalentes</button>}
             </article>
@@ -515,7 +517,7 @@ export function StudentImportPage() {
 
         {visibleErrors.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Corrección requerida</p><h2>Filas con error</h2></div></div><p className="muted">El error afecta únicamente al colaborador indicado y no detiene los demás registros válidos.</p><ul className="ns-import-issues">{visibleErrors.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>Fila {issue.row}: </strong>{issue.message}</li>)}</ul></section>}
 
-        {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{row.collaborator}</td><td>{row.email}</td><td><select value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(event) => setLowActions((current) => ({ ...current, [row.studentPublicId]: event.target.value as LowAction }))}><option value="KEEP">Mantener activo</option><option value="IGNORE">Ignorar</option><option value="DEACTIVATE">Desactivar</option></select></td></tr>)}</tbody></table></div></section>}
+        {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{row.collaborator}</td><td>{row.email}</td><td><SelectField value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(nextValue) => setLowActions((current) => ({ ...current, [row.studentPublicId]: nextValue as LowAction }))} ariaLabel={`Acción para ${row.collaborator}`} options={[{ value: 'KEEP', label: 'Mantener activo' }, { value: 'IGNORE', label: 'Ignorar' }, { value: 'DEACTIVATE', label: 'Desactivar' }]} /></td></tr>)}</tbody></table></div></section>}
 
         <FormActions className="ns-import-final-actions" sticky>
           <button type="button" className="secondary-button" disabled={applying} onClick={() => void changeFile(undefined)}>

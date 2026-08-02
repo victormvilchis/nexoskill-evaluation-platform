@@ -4,6 +4,7 @@ import { ApiRequestError, apiClient } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { FormActions } from '../shared/components/FormActions'
 import { Icon } from '../shared/components/Icon'
+import { SelectField } from '../shared/components/SelectField'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { FormDetail, FormMode, FormPayload } from '../shared/types/forms'
 
@@ -135,7 +136,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
             <div className="ns-form-grid">
               <label className="ns-field ns-field-wide"><span>Título <b>*</b></span><input required minLength={3} value={model.title} onChange={e => set('title', e.target.value)} placeholder="Ej. Certificación APX — Nivel 1" /><small>Usa un nombre claro para administradores y participantes.</small></label>
               <label className="ns-field ns-field-wide"><span>Descripción</span><textarea rows={4} value={model.description} onChange={e => set('description', e.target.value)} placeholder="Describe el objetivo y alcance del formulario." /></label>
-              <label className="ns-field"><span>Modalidad</span><select value={model.modeCode} onChange={e => set('modeCode', e.target.value as FormMode)}><option value="ASSESSMENT">Evaluación</option><option value="PRACTICE">Práctica</option></select><small>{model.modeCode === 'PRACTICE' ? 'Permite aprender y recibir retroalimentación.' : 'Califica el desempeño al finalizar.'}</small></label>
+              <label className="ns-field"><span>Modalidad</span><SelectField value={model.modeCode} onChange={(nextValue) => set('modeCode', nextValue as FormMode)} ariaLabel="Modalidad" options={[{ value: 'ASSESSMENT', label: 'Evaluación' }, { value: 'PRACTICE', label: 'Práctica' }]} /><small>{model.modeCode === 'PRACTICE' ? 'Permite aprender y recibir retroalimentación.' : 'Califica el desempeño al finalizar.'}</small></label>
               <label className="ns-field"><span>Puntaje mínimo</span><div className="ns-input-suffix"><input type="number" min="0" max="100" value={model.passingScore} onChange={e => set('passingScore', Number(e.target.value))} /><span>%</span></div><small>Porcentaje requerido para aprobar.</small></label>
             </div>
           </section>

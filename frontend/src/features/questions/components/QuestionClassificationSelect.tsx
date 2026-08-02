@@ -1,3 +1,5 @@
+import { SelectField } from '../../../shared/components/SelectField'
+
 interface QuestionClassificationOption {
   value: string
   label: string
@@ -27,17 +29,15 @@ export function QuestionClassificationSelect({
   return (
     <div className="form-field question-classification-select">
       <label htmlFor={id}>{label}</label>
-      <select
+      <SelectField
         id={id}
         required={required}
         disabled={disabled}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+        onChange={onChange}
+        ariaLabel={label}
+        options={options}
+      />
       <small>{help}</small>
     </div>
   )

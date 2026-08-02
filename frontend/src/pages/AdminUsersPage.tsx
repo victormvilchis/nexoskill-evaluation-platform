@@ -141,18 +141,13 @@ export function AdminUsersPage() {
 
   return (
     <main className="content-page resource-page ns-list-page internal-users-page">
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración</p>
-          <h1>Usuarios</h1>
-          <p className="muted">Administra exclusivamente cuentas internas de Administrador, Gestor y Supervisor.</p>
-        </div>
-        {permissions.has('USER_CREATE') && (
-          <Link className="primary-button button-link" to="/admin/users/new">
-            <Icon name="plus" size={16} /> Crear usuario
+      {permissions.has('USER_CREATE') && (
+        <div className="ns-list-action-bar" aria-label="Acciones de usuarios">
+          <Link className="primary-button button-link ns-create-button" to="/admin/users/new">
+            <Icon name="plus" size={15} /> Crear usuario
           </Link>
-        )}
-      </header>
+        </div>
+      )}
 
       <FilterToolbar
         hasActiveFilters={Boolean(query || status !== 'ACTIVE')}

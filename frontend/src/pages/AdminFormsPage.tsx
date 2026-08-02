@@ -84,7 +84,7 @@ export function AdminFormsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page">
-      <header className="ns-page-header"><div><p className="eyebrow">Evaluaciones</p><h1>Formularios</h1><p className="muted">Diseña evaluaciones y prácticas reutilizando preguntas.</p></div>{canCreate && <Link className="primary-button button-link" to="/admin/forms/new"><Icon name="plus" size={16} /> Nuevo formulario</Link>}</header>
+      {canCreate && <div className="ns-list-action-bar" aria-label="Acciones de formularios"><Link className="primary-button button-link ns-create-button" to="/admin/forms/new"><Icon name="plus" size={15} /> Nuevo formulario</Link></div>}
 
       <FilterToolbar hasActiveFilters={hasFilters} onClear={() => { setQuery(''); setStatus('ACTIVE'); setMode(''); updateUrl({ query: undefined, status: undefined, mode: undefined, page: undefined }) }}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre o código" />

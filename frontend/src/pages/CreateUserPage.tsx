@@ -4,6 +4,7 @@ import { createUser, getRoles } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { DateTimeField } from '../shared/components/DateField'
+import { SelectField } from '../shared/components/SelectField'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { InternalRoleCode, RoleOption } from '../shared/types/users'
@@ -164,17 +165,37 @@ export function CreateUserPage() {
         <section className="form-section form-wide">
           <div className="form-section-heading"><span className="form-section-number">2</span><div><h2>Rol y organización</h2><p>Solo existen Administrador, Gestor y Supervisor.</p></div></div>
           <div className="internal-user-role-grid">
-            <label className="form-field"><span>Rol</span><select value={roleCode} onChange={(event) => setRoleCode(event.target.value as InternalRoleCode)}>{roles.map((role) => <option key={role.code} value={role.code}>{role.name}</option>)}</select></label>
-            <label className="form-field"><span>Organización</span><select value={organizationPublicId} disabled={roleCode === 'ADMINISTRATOR'} required onChange={(event) => setOrganizationPublicId(event.target.value)}><option value="">Seleccionar organización</option>{roleCode === 'ADMINISTRATOR' ? (globalOrganization && <option value={globalOrganization.publicId}>GLOBAL · Contexto del sistema</option>) : customerOrganizations.map((organization) => <option key={organization.publicId} value={organization.publicId}>{organization.name} · {organization.code}</option>)}</select><small>{roleCode === 'ADMINISTRATOR' ? 'Los Administradores pertenecen obligatoriamente a GLOBAL.' : 'Solo se muestran organizaciones comerciales activas y vigentes.'}</small>{fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}</label>
+            <label className="form-field">
+              <span>Rol</span>
+              <SelectField value={roleCode} onChange={(nextValue) => setRoleCode(nextValue as InternalRoleCode)} ariaLabel="Rol"
+                options={roles.map((role) => ({ value: role.code, label: role.name }))} />
+            </label>
+            <label className="form-field">
+              <span>Organización</span>
+              <SelectField value={organizationPublicId} disabled={roleCode === 'ADMINISTRATOR'} required
+                onChange={setOrganizationPublicId} ariaLabel="Organización"
+                options={[
+                  { value: '', label: 'Seleccionar organización' },
+                  ...(roleCode === 'ADMINISTRATOR'
+                    ? globalOrganization ? [{ value: globalOrganization.publicId, label: 'GLOBAL · Contexto del sistema' }] : []
+                    : customerOrganizations.map((organization) => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` })))
+                ]} />
+              <small>{roleCode === 'ADMINISTRATOR' ? 'Los Administradores pertenecen obligatoriamente a GLOBAL.' : 'Solo se muestran organizaciones comerciales activas y vigentes.'}</small>
+              {fieldErrors.organizationPublicId && <small className="field-error">{fieldErrors.organizationPublicId}</small>}
+            </label>
           </div>
         </section>
 
         <section className="form-section form-wide">
           <div className="form-section-heading"><span className="form-section-number">3</span><div><h2>Vigencia</h2><p>Define el periodo de acceso del usuario.</p></div></div>
-          <div className="form-grid-three">
+          <div className="internal-user-validity-grid">
             <label className="form-field"><span>Inicio de vigencia</span><DateTimeField value={startsAt} onChange={setStartsAt} required ariaInvalid={Boolean(fieldErrors.startsAt)} ariaLabel="Seleccionar inicio de vigencia" />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
             <label className="form-field"><span>Vencimiento</span><DateTimeField value={expiresAt} onChange={setExpiresAt} disabled={withoutExpiration} required={!withoutExpiration} ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
-            <label className="checkbox-row internal-user-expiration-check"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</label>
+            <label className="internal-user-expiration-check">
+              <span className="internal-user-expiration-label">Vigencia indefinida</span>
+              <span className="checkbox-row"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</span>
+              <small>Deshabilita la fecha y hora de vencimiento sin modificar el inicio de vigencia.</small>
+            </label>
           </div>
         </section>
 

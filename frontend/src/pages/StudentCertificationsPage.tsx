@@ -11,6 +11,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { DateField } from '../shared/components/DateField'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
+import { SelectField } from '../shared/components/SelectField'
 import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
 import type {
@@ -447,9 +448,10 @@ export function StudentCertificationsPage() {
     && (cycle.expirationDate || cycle.validityStatus === 'EXPIRED' || cycle.validityStatus === 'EXPIRING_SOON')),
   [applicableTypes, cycles])
 
-  const attemptCycles = useMemo(() => cycles.filter((cycle) => cycle.active !== false
+  const attemptCycles = useMemo(() => cycles.filter((cycle): cycle is EditableCycle & { publicId: string } => cycle.active !== false
     && applicableTypes.includes(cycle.type)
-    && Boolean(cycle.publicId)
+    && typeof cycle.publicId === 'string'
+    && cycle.publicId.length > 0
     && supportsAttempts(cycle.type)), [applicableTypes, cycles])
   const managementRecommendations = useMemo(() => buildManagementRecommendations(
     detail?.applicability,
@@ -738,9 +740,9 @@ export function StudentCertificationsPage() {
               {attemptCycles.length === 0 ? <p className="muted">Todavía no existen ciclos que admitan intentos.</p> : (
                 <>
                   <label className="ns-field certification-attempt-cycle-select"><span>Ciclo</span>
-                    <select value={selectedAttemptCycle} onChange={(event) => { setSelectedAttemptCycle(event.target.value); setAttemptsPage(0) }}>
-                      {attemptCycles.map((cycle) => <option key={cycle.publicId} value={cycle.publicId}>{TYPE_LABELS[cycle.type]} · {cycle.technologyName ?? cycle.processType ?? 'Ciclo'}</option>)}
-                    </select>
+                    <SelectField value={selectedAttemptCycle} onChange={(nextValue) => { setSelectedAttemptCycle(nextValue); setAttemptsPage(0) }}
+                      ariaLabel="Ciclo de certificación"
+                      options={attemptCycles.map((cycle) => ({ value: cycle.publicId, label: `${TYPE_LABELS[cycle.type]} · ${cycle.technologyName ?? cycle.processType ?? 'Ciclo'}` }))} />
                   </label>
                   <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Intento</th><th>Programada</th><th>Aplicación</th><th>Examen</th><th>Promedio</th><th>Resultado</th><th>Acciones</th></tr></thead><tbody>
                     {attemptsLoading && <tr><td colSpan={7} className="ns-table-empty">Cargando intentos…</td></tr>}
@@ -886,30 +888,29 @@ function CertificationSection({
                 {technological && (
                   <>
                     <label className="ns-field"><span>Tecnología <b>*</b></span>
-                      <select value={cycle.technologyPublicId ?? ''}
-                        onChange={(event) => onUpdate(cycle.key, { technologyPublicId: event.target.value || null })}
-                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.technologyPublicId`])}>
-                        <option value="">Seleccionar tecnología</option>
-                        {catalogs.technologies.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}
-                      </select>
+                      <SelectField value={cycle.technologyPublicId ?? ''}
+                        onChange={(nextValue) => onUpdate(cycle.key, { technologyPublicId: nextValue || null })}
+                        ariaInvalid={Boolean(fieldErrors[`${cycle.key}.technologyPublicId`])}
+                        ariaLabel="Tecnología"
+                        options={[{ value: '', label: 'Seleccionar tecnología' }, ...catalogs.technologies.map((item) => ({ value: item.publicId, label: item.name }))]} />
                       {fieldErrors[`${cycle.key}.technologyPublicId`] && <small className="field-error">{fieldErrors[`${cycle.key}.technologyPublicId`]}</small>}
                     </label>
                     <label className="ns-field"><span>Nivel de certificación <b>*</b></span>
-                      <select value={cycle.certificationLevel ?? ''}
-                        onChange={(event) => onUpdate(cycle.key, { certificationLevel: event.target.value as CertificationLevel })}
-                        aria-invalid={Boolean(fieldErrors[`${cycle.key}.certificationLevel`])}>
-                        {catalogs.levels.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select>
+                      <SelectField value={cycle.certificationLevel ?? ''}
+                        onChange={(nextValue) => onUpdate(cycle.key, { certificationLevel: nextValue as CertificationLevel })}
+                        ariaInvalid={Boolean(fieldErrors[`${cycle.key}.certificationLevel`])}
+                        ariaLabel="Nivel de certificación"
+                        options={catalogs.levels.map((option) => ({ value: option.value, label: option.label }))} />
                       {fieldErrors[`${cycle.key}.certificationLevel`] && <small className="field-error">{fieldErrors[`${cycle.key}.certificationLevel`]}</small>}
                     </label>
                   </>
                 )}
                 <label className="ns-field"><span>Tipo de proceso</span><input disabled value={cycle.processType === 'RECERTIFICATION' ? 'Recertificación' : cycle.processType === 'CERTIFICATION' ? 'Certificación' : 'Se calculará al guardar'} /></label>
                 <label className="ns-field"><span>Estado de seguimiento</span>
-                  <select value={cycle.trackingStatus}
-                    onChange={(event) => onUpdate(cycle.key, { trackingStatus: event.target.value as CertificationTrackingStatus })}>
-                    {catalogs.trackingStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
+                  <SelectField value={cycle.trackingStatus}
+                    onChange={(nextValue) => onUpdate(cycle.key, { trackingStatus: nextValue as CertificationTrackingStatus })}
+                    ariaLabel="Estado de seguimiento"
+                    options={catalogs.trackingStatuses.map((option) => ({ value: option.value, label: option.label }))} />
                 </label>
                 {hasExpiration(type) && (
                   <>
@@ -927,10 +928,10 @@ function CertificationSection({
                 )}
                 {type !== 'ONE' && type !== 'AGILE' && type !== 'JIRA' && (
                   <label className="ns-field"><span>Aprobación</span>
-                    <select value={cycle.approved === null || cycle.approved === undefined ? '' : cycle.approved ? 'true' : 'false'}
-                      onChange={(event) => onUpdate(cycle.key, { approved: event.target.value === '' ? null : event.target.value === 'true' })}>
-                      <option value="">Pendiente</option><option value="true">Aprobada</option><option value="false">No aprobada</option>
-                    </select>
+                    <SelectField value={cycle.approved === null || cycle.approved === undefined ? '' : cycle.approved ? 'true' : 'false'}
+                      onChange={(nextValue) => onUpdate(cycle.key, { approved: nextValue === '' ? null : nextValue === 'true' })}
+                      ariaLabel="Aprobación"
+                      options={[{ value: '', label: 'Pendiente' }, { value: 'true', label: 'Aprobada' }, { value: 'false', label: 'No aprobada' }]} />
                   </label>
                 )}
                 {hasExpiration(type) && (
@@ -974,17 +975,17 @@ function CertificationSection({
                         ariaInvalid={Boolean(fieldErrors[`${cycle.key}.attempt.applicationDate`])} ariaLabel="Seleccionar fecha de aplicación del intento" />
                         {fieldErrors[`${cycle.key}.attempt.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.attempt.applicationDate`]}</small>}
                       </label>
-                      <label className="ns-field"><span>Estado del examen</span><select value={attempt.examStatus}
-                        onChange={(event) => onUpdateAttempt(cycle.key, { examStatus: event.target.value as CertificationExamStatus })}>
-                        {catalogs.examStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                      </select></label>
+                      <label className="ns-field"><span>Estado del examen</span><SelectField value={attempt.examStatus}
+                        onChange={(nextValue) => onUpdateAttempt(cycle.key, { examStatus: nextValue as CertificationExamStatus })}
+                        ariaLabel="Estado del examen"
+                        options={catalogs.examStatuses.map((option) => ({ value: option.value, label: option.label }))} /></label>
                       <label className="ns-field"><span>Promedio</span><input type="number" min="0" max="100" step="0.01" value={attempt.score ?? ''}
                         onChange={(event) => onUpdateAttempt(cycle.key, { score: event.target.value === '' ? null : Number(event.target.value) })}
                         aria-invalid={Boolean(fieldErrors[`${cycle.key}.attempt.score`])} />
                         {fieldErrors[`${cycle.key}.attempt.score`] && <small className="field-error">{fieldErrors[`${cycle.key}.attempt.score`]}</small>}
                       </label>
                       <label className="ns-field"><span>Resultado</span><input maxLength={1000} value={attempt.result ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { result: event.target.value })} /></label>
-                      <label className="ns-field"><span>Aprobado</span><select value={attempt.approved === null || attempt.approved === undefined ? '' : attempt.approved ? 'true' : 'false'} onChange={(event) => onUpdateAttempt(cycle.key, { approved: event.target.value === '' ? null : event.target.value === 'true' })}><option value="">Pendiente</option><option value="true">Sí</option><option value="false">No</option></select></label>
+                      <label className="ns-field"><span>Aprobado</span><SelectField value={attempt.approved === null || attempt.approved === undefined ? '' : attempt.approved ? 'true' : 'false'} onChange={(nextValue) => onUpdateAttempt(cycle.key, { approved: nextValue === '' ? null : nextValue === 'true' })} ariaLabel="Aprobado" options={[{ value: '', label: 'Pendiente' }, { value: 'true', label: 'Sí' }, { value: 'false', label: 'No' }]} /></label>
                       <label className="ns-field certification-wide"><span>Observaciones</span><textarea maxLength={1000} value={attempt.observations ?? ''} onChange={(event) => onUpdateAttempt(cycle.key, { observations: event.target.value })} /></label>
                     </div>
                   )}

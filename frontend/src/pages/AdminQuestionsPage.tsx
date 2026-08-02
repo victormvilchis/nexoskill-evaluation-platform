@@ -22,6 +22,7 @@ import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
+import { SelectField } from '../shared/components/SelectField'
 import { TableActionButton, TableActionLink, TableActions } from '../shared/components/TableActions'
 import { TablePagination } from '../shared/components/TablePagination'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
@@ -77,7 +78,6 @@ export function AdminQuestionsPage() {
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const supervisor = Boolean(user?.roles.includes('SUPERVISOR'))
-  const canWriteQuestions = permissions.has('QUESTION_CREATE') || permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')
   const query = searchParams.get('q') ?? ''
   const scope = globalAdministrator ? (searchParams.get('scope') ?? '') as ContentScope | '' : ''
   const organizationPublicId = globalAdministrator ? searchParams.get('organization') ?? '' : ''
@@ -386,22 +386,13 @@ export function AdminQuestionsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page question-bank-page">
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Banco de Preguntas</p>
-          <h1>{globalAdministrator ? 'Banco de Preguntas Global' : 'Banco de Preguntas'}</h1>
-          <p className="muted">{globalAdministrator
-            ? 'Consulta el contenido global y organizacional con filtros compactos y contexto explícito.'
-            : canWriteQuestions
-              ? 'Consulta y administra únicamente las preguntas de tu organización.'
-              : 'Consulta las preguntas disponibles para tu organización.'}</p>
-        </div>
-        {permissions.has('QUESTION_CREATE') && (
-          <Link className="primary-button button-link" to="/admin/questions/new">
-            <Icon name="plus" size={16} /> Nueva pregunta
+      {permissions.has('QUESTION_CREATE') && (
+        <div className="ns-list-action-bar" aria-label="Acciones del banco de preguntas">
+          <Link className="primary-button button-link ns-create-button" to="/admin/questions/new">
+            <Icon name="plus" size={15} /> Crear pregunta
           </Link>
-        )}
-      </header>
+        </div>
+      )}
 
       <FilterToolbar hasActiveFilters={hasFilters} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={(value) => updateFilter('q', value)} placeholder="Buscar por texto de la pregunta" />
@@ -579,13 +570,16 @@ export function AdminQuestionsPage() {
             {duplicateState.targetScope === 'ORGANIZATION' && (
               <label className="ns-field">
                 <span>Organización propietaria</span>
-                <select value={duplicateState.organizationPublicId} disabled={duplicateState.busy}
-                  onChange={(event) => setDuplicateState((current) => current ? { ...current, organizationPublicId: event.target.value, error: undefined } : current)}>
-                  <option value="">Selecciona una organización</option>
-                  {organizations.filter((organization) => organization.status === 'ACTIVE' && organization.organizationType === 'CUSTOMER').map((organization) => (
-                    <option value={organization.publicId} key={organization.publicId}>{organization.name} · {organization.code}</option>
-                  ))}
-                </select>
+                <SelectField value={duplicateState.organizationPublicId} disabled={duplicateState.busy}
+                  ariaLabel="Organización propietaria"
+                  onChange={(nextValue) => setDuplicateState((current) => current ? { ...current, organizationPublicId: nextValue, error: undefined } : current)}
+                  options={[
+                    { value: '', label: 'Selecciona una organización' },
+                    ...organizations
+                      .filter((organization) => organization.status === 'ACTIVE' && organization.organizationType === 'CUSTOMER')
+                      .map((organization) => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))
+                  ]}
+                />
               </label>
             )}
             {duplicateState.error && <p className="error-message" role="alert">{duplicateState.error}</p>}
