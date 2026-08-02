@@ -126,7 +126,7 @@ public class AdminStudentController {
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
                         Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
                         Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
-                        Boolean.TRUE.equals(body.appliesAgile())), actor(actor, request));
+                        Boolean.TRUE.equals(body.appliesAgile()), Boolean.TRUE.equals(body.appliesJira())), actor(actor, request));
         StudentFoundationService.StudentView created = creation.student();
         return ResponseEntity.created(URI.create("/api/v1/admin/students/" + created.publicId()))
                 .body(credentialsResponse(credentialStudent(created), created.organization().code(),
@@ -148,7 +148,7 @@ public class AdminStudentController {
                         body.technologicalProfilePublicId(), Boolean.TRUE.equals(body.appliesTechnologicalCertification()),
                         Boolean.TRUE.equals(body.appliesDevelopmentSecurity()),
                         Boolean.TRUE.equals(body.appliesNormativeTesting()), Boolean.TRUE.equals(body.appliesOne()),
-                        Boolean.TRUE.equals(body.appliesAgile()), body.version()), actor(actor, request));
+                        Boolean.TRUE.equals(body.appliesAgile()), Boolean.TRUE.equals(body.appliesJira()), body.version()), actor(actor, request));
     }
 
     @GetMapping("/{publicId}/administration")
@@ -296,7 +296,7 @@ public class AdminStudentController {
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
             LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
             Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
-            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile) {}
+            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile, Boolean appliesJira) {}
 
     public record UpdateRequest(
             @NotBlank(message = "El correo electrónico es obligatorio.")
@@ -311,7 +311,7 @@ public class AdminStudentController {
             @NotNull(message = "La fecha de vencimiento es obligatoria.") LocalDate expiresAt,
             LocalDate admissionDate, String professionalProfilePublicId, String technologicalProfilePublicId,
             Boolean appliesTechnologicalCertification, Boolean appliesDevelopmentSecurity,
-            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile,
+            Boolean appliesNormativeTesting, Boolean appliesOne, Boolean appliesAgile, Boolean appliesJira,
             @NotNull(message = "La versión del estudiante es obligatoria.") Long version) {}
 
     public record StudentCredentialResponse(StudentCredentialStudentResponse student,

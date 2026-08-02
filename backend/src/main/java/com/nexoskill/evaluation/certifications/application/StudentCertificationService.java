@@ -182,6 +182,193 @@ public class StudentCertificationService {
         return cycle(scope, cyclePublicId);
     }
 
+    @Transactional
+    public StudentCertificationDetail importSnapshot(TenantContext tenant, String studentPublicId,
+            ImportSnapshotCommand command, AuthenticatedUser actor) {
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        if (command == null || command.type() == null) {
+            throw new BusinessException("CERTIFICATION_IMPORT_REQUIRED",
+                    "La información de certificación importada es obligatoria.");
+        }
+        Applicability flags = applicability(scope.student().getId());
+        boolean applies = switch (command.type()) {
+            case TECHNOLOGICAL -> flags.technological();
+            case DEVELOPMENT_SECURITY -> flags.developmentSecurity();
+            case NORMATIVE_TESTING -> flags.normativeTesting();
+            case ONE -> flags.one();
+            case AGILE -> flags.agile();
+            case JIRA -> flags.jira();
+        };
+        if (!applies) return detail(scope);
+
+        Long technologyId = resolveTechnology(scope.organizationId(), command.type(), command.technologyPublicId());
+        if (command.type() == CertificationType.TECHNOLOGICAL && command.certificationLevel() == null) {
+            throw new BusinessException("CERTIFICATION_LEVEL_REQUIRED", "Selecciona el nivel JR, STD o SR.");
+        }
+        if (nonExpiring(command.type()) && (command.applicationDate() != null
+                || command.lastApprovedApplicationDate() != null || command.expirationDate() != null
+                || command.score() != null || command.importedFailureCount() != null)) {
+            throw new BusinessException("CERTIFICATION_IMPORT_NON_EXPIRING_FIELDS",
+                    "ONE, Agile y Jira solo administran aplicabilidad y estatus.");
+        }
+
+        ImportCycleRow existing = importCycle(scope, command.type());
+        if (existing != null && Objects.equals(existing.fingerprint(), command.fingerprint())) {
+            return detail(scope);
+        }
+        Long previous = existing == null
+                ? previousApprovedCycleId(scope, command.type(), technologyId, command.certificationLevel())
+                : null;
+        LocalDate lastApprovedApplicationDate = nonExpiring(command.type()) ? null
+                : command.lastApprovedApplicationDate() != null
+                    ? command.lastApprovedApplicationDate()
+                    : existing == null ? null : existing.lastApprovedApplicationDate();
+        Boolean everApproved = nonExpiring(command.type()) ? command.approved()
+                : lastApprovedApplicationDate != null ? Boolean.TRUE : command.approved();
+        CertificationProcessType process = nonExpiring(command.type())
+                ? CertificationProcessType.CERTIFICATION
+                : (lastApprovedApplicationDate != null || previous != null
+                    ? CertificationProcessType.RECERTIFICATION : CertificationProcessType.CERTIFICATION);
+        LocalDate deadline = nonExpiring(command.type()) ? null : command.initialDeadlineDate();
+        LocalDate expiration = nonExpiring(command.type()) ? null : command.expirationDate();
+        CertificationValidityStatus validity = nonExpiring(command.type())
+                ? CertificationValidityStatus.NOT_OBTAINED
+                : command.validityStatus() == null ? CertificationValidityStatus.NOT_OBTAINED : command.validityStatus();
+        CertificationExamStatus exam = nonExpiring(command.type()) || command.examStatus() == null
+                ? CertificationExamStatus.NOT_SCHEDULED : command.examStatus();
+        CertificationTrackingStatus tracking = command.trackingStatus() == null
+                ? CertificationTrackingStatus.PENDING : command.trackingStatus();
+
+        if (command.type() == CertificationType.TECHNOLOGICAL && command.primary()) {
+            MapSqlParameterSource primaryParams = new MapSqlParameterSource("actorId", actor.internalId())
+                    .addValue("studentId", scope.student().getId());
+            if (existing != null) primaryParams.addValue("cycleId", existing.id());
+            jdbc.update(existing == null ? """
+                UPDATE STUDENT_CERTIFICATION_CYCLE
+                   SET IS_PRIMARY = 0, UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP
+                 WHERE STUDENT_ID = :studentId AND CERTIFICATION_TYPE = 'TECHNOLOGICAL'
+                """ : """
+                UPDATE STUDENT_CERTIFICATION_CYCLE
+                   SET IS_PRIMARY = 0, UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP
+                 WHERE STUDENT_ID = :studentId AND CERTIFICATION_TYPE = 'TECHNOLOGICAL'
+                   AND STUDENT_CERTIFICATION_CYCLE_ID <> :cycleId
+                """, primaryParams);
+        }
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("publicId", existing == null ? UUID.randomUUID().toString() : existing.publicId())
+                .addValue("studentId", scope.student().getId())
+                .addValue("organizationId", scope.organizationId())
+                .addValue("type", command.type().name())
+                .addValue("technologyId", technologyId)
+                .addValue("level", command.certificationLevel() == null ? null : command.certificationLevel().name())
+                .addValue("primary", command.type() == CertificationType.TECHNOLOGICAL && command.primary() ? 1 : 0)
+                .addValue("processType", process.name())
+                .addValue("trackingStatus", tracking.name())
+                .addValue("approved", everApproved == null ? null : everApproved ? 1 : 0)
+                .addValue("validityStatus", validity.name())
+                .addValue("previousId", previous)
+                .addValue("examStatus", exam.name())
+                .addValue("score", command.score())
+                .addValue("failureCount", command.importedFailureCount())
+                .addValue("fingerprint", command.fingerprint())
+                .addValue("actorId", actor.internalId());
+        addDateParameter(params, "deadlineDate", deadline);
+        addDateParameter(params, "applicationDate", command.applicationDate());
+        addDateParameter(params, "lastApprovedApplicationDate", lastApprovedApplicationDate);
+        addDateParameter(params, "expirationDate", expiration);
+
+        Long cycleId;
+        if (existing == null) {
+            jdbc.update("""
+                INSERT INTO STUDENT_CERTIFICATION_CYCLE (
+                    PUBLIC_ID, STUDENT_ID, ORGANIZATION_ID, CERTIFICATION_TYPE, TECHNOLOGY_ID,
+                    CERTIFICATION_LEVEL, IS_PRIMARY, PROCESS_TYPE, TRACKING_STATUS, DEADLINE_DATE,
+                    APPLICATION_DATE, LAST_APPROVED_APPLICATION_DATE, APPROVED, EXPIRATION_DATE, VALIDITY_STATUS,
+                    PREVIOUS_APPROVED_CYCLE_ID, ACTIVE, LATEST_EXAM_STATUS, LATEST_SCORE,
+                    IMPORTED_FAILURE_COUNT, RESULT_SOURCE, LAST_IMPORT_FINGERPRINT, LAST_IMPORTED_AT,
+                    LAST_IMPORTED_BY, CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT, VERSION_NO
+                ) VALUES (
+                    :publicId, :studentId, :organizationId, :type, :technologyId,
+                    :level, :primary, :processType, :trackingStatus, :deadlineDate,
+                    :applicationDate, :lastApprovedApplicationDate, :approved, :expirationDate, :validityStatus,
+                    :previousId, 1, :examStatus, :score, :failureCount, 'IMPORT', :fingerprint,
+                    SYSTIMESTAMP, :actorId, :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0
+                )
+                """, params);
+            cycleId = jdbc.queryForObject("SELECT STUDENT_CERTIFICATION_CYCLE_ID FROM STUDENT_CERTIFICATION_CYCLE WHERE PUBLIC_ID = :publicId",
+                    params, Long.class);
+            history(scope, cycleId, null, "IMPORT_SNAPSHOT_CREATED", null, importSummary(command, process),
+                    "Carga masiva confirmada", actor.internalId());
+        } else {
+            params.addValue("cycleId", existing.id());
+            int updated = jdbc.update("""
+                UPDATE STUDENT_CERTIFICATION_CYCLE
+                   SET TECHNOLOGY_ID = :technologyId, CERTIFICATION_LEVEL = :level, IS_PRIMARY = :primary,
+                       PROCESS_TYPE = :processType, TRACKING_STATUS = :trackingStatus,
+                       DEADLINE_DATE = :deadlineDate, APPLICATION_DATE = :applicationDate,
+                       LAST_APPROVED_APPLICATION_DATE = :lastApprovedApplicationDate, APPROVED = :approved,
+                       EXPIRATION_DATE = :expirationDate, VALIDITY_STATUS = :validityStatus,
+                       PREVIOUS_APPROVED_CYCLE_ID = :previousId, ACTIVE = 1,
+                       LATEST_EXAM_STATUS = :examStatus, LATEST_SCORE = :score,
+                       IMPORTED_FAILURE_COUNT = :failureCount, RESULT_SOURCE = 'IMPORT',
+                       LAST_IMPORT_FINGERPRINT = :fingerprint, LAST_IMPORTED_AT = SYSTIMESTAMP,
+                       LAST_IMPORTED_BY = :actorId, UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP,
+                       VERSION_NO = VERSION_NO + 1
+                 WHERE STUDENT_CERTIFICATION_CYCLE_ID = :cycleId
+                """, params);
+            if (updated != 1) throw new BusinessException("CERTIFICATION_IMPORT_CONFLICT",
+                    "El ciclo cambió durante la importación. Vuelve a generar la vista previa.");
+            cycleId = existing.id();
+            history(scope, cycleId, null, "IMPORT_SNAPSHOT_UPDATED", existing.toString(),
+                    importSummary(command, process), "Carga masiva confirmada", actor.internalId());
+        }
+        return detail(scope);
+    }
+
+    private ImportCycleRow importCycle(Scope scope, CertificationType type) {
+        List<ImportCycleRow> rows = jdbc.query("""
+            SELECT STUDENT_CERTIFICATION_CYCLE_ID, PUBLIC_ID, LAST_IMPORT_FINGERPRINT,
+                   LAST_APPROVED_APPLICATION_DATE
+              FROM STUDENT_CERTIFICATION_CYCLE
+             WHERE STUDENT_ID = :studentId AND ORGANIZATION_ID = :organizationId
+               AND CERTIFICATION_TYPE = :type
+             ORDER BY ACTIVE DESC, IS_PRIMARY DESC, UPDATED_AT DESC, STUDENT_CERTIFICATION_CYCLE_ID DESC
+             FETCH FIRST 1 ROWS ONLY
+            """, Map.of("studentId", scope.student().getId(), "organizationId", scope.organizationId(),
+                    "type", type.name()),
+                (rs, rowNum) -> new ImportCycleRow(rs.getLong(1), rs.getString(2), rs.getString(3),
+                        localDate(rs, "LAST_APPROVED_APPLICATION_DATE")));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private Long previousApprovedCycleId(Scope scope, CertificationType type, Long technologyId,
+            CertificationLevel level) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT STUDENT_CERTIFICATION_CYCLE_ID
+              FROM STUDENT_CERTIFICATION_CYCLE
+             WHERE STUDENT_ID = :studentId AND ORGANIZATION_ID = :organizationId
+               AND CERTIFICATION_TYPE = :type AND APPROVED = 1
+            """);
+        MapSqlParameterSource params = new MapSqlParameterSource("studentId", scope.student().getId())
+                .addValue("organizationId", scope.organizationId()).addValue("type", type.name());
+        if (type == CertificationType.TECHNOLOGICAL) {
+            sql.append(" AND TECHNOLOGY_ID = :technologyId AND CERTIFICATION_LEVEL = :level ");
+            params.addValue("technologyId", technologyId)
+                    .addValue("level", level == null ? null : level.name());
+        }
+        sql.append(" ORDER BY APPLICATION_DATE DESC NULLS LAST, STUDENT_CERTIFICATION_CYCLE_ID DESC FETCH FIRST 1 ROWS ONLY");
+        List<Long> rows = jdbc.query(sql.toString(), params, (rs, rowNum) -> rs.getLong(1));
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private String importSummary(ImportSnapshotCommand command, CertificationProcessType process) {
+        return "type=" + command.type() + ";process=" + process + ";application=" + command.applicationDate()
+                + ";lastApproved=" + command.lastApprovedApplicationDate()
+                + ";approved=" + command.approved() + ";expiration=" + command.expirationDate()
+                + ";failures=" + command.importedFailureCount() + ";source=IMPORT";
+    }
+
     @Transactional(readOnly = true)
     public PageResult<AttemptView> attempts(TenantContext tenant, String studentPublicId, String cyclePublicId,
             int page, int size, AuthenticatedUser actor) {
@@ -349,6 +536,7 @@ public class StudentCertificationService {
             case "NORMATIVE_TESTING" -> "Normativa y Testing";
             case "ONE" -> "ONE";
             case "AGILE" -> "Agile";
+            case "JIRA" -> "Jira";
             case "CERTIFICATION" -> "Certificación";
             case "RECERTIFICATION" -> "Recertificación";
             case "NOT_SCHEDULED" -> "Sin programar";
@@ -394,10 +582,10 @@ public class StudentCertificationService {
 
     private Applicability applicability(Long studentId) {
         return jdbc.queryForObject("""
-            SELECT APPLIES_TECH_CERT, APPLIES_DEV_SECURITY, APPLIES_NORMATIVE_TESTING, APPLIES_ONE, APPLIES_AGILE
+            SELECT APPLIES_TECH_CERT, APPLIES_DEV_SECURITY, APPLIES_NORMATIVE_TESTING, APPLIES_ONE, APPLIES_AGILE, APPLIES_JIRA
               FROM STUDENT WHERE STUDENT_ID = :studentId
             """, Map.of("studentId", studentId), (rs, rowNum) -> new Applicability(rs.getBoolean(1),
-                rs.getBoolean(2), rs.getBoolean(3), rs.getBoolean(4), rs.getBoolean(5)));
+                rs.getBoolean(2), rs.getBoolean(3), rs.getBoolean(4), rs.getBoolean(5), rs.getBoolean(6)));
     }
 
     private List<CycleView> cycles(Scope scope) {
@@ -405,12 +593,13 @@ public class StudentCertificationService {
             SELECT c.PUBLIC_ID, c.CERTIFICATION_TYPE, t.PUBLIC_ID TECHNOLOGY_PUBLIC_ID,
                    t.TECHNOLOGY_NAME, c.CERTIFICATION_LEVEL, c.IS_PRIMARY, c.PROCESS_TYPE,
                    c.TRACKING_STATUS, c.DEADLINE_DATE, c.SCHEDULED_DATE, c.APPLICATION_DATE,
-                   c.APPROVED, c.EXPIRATION_DATE, c.VALIDITY_STATUS,
+                   c.LAST_APPROVED_APPLICATION_DATE, c.APPROVED, c.EXPIRATION_DATE, c.VALIDITY_STATUS,
                    previous.PUBLIC_ID PREVIOUS_PUBLIC_ID, c.ACTIONS_TO_TAKE, c.SOFTTEK_MANAGEMENT,
-                   c.OBSERVATIONS, c.ACTIVE, c.VERSION_NO,
-                   (SELECT MAX(a.SCORE) KEEP (DENSE_RANK LAST ORDER BY a.ATTEMPT_NUMBER)
+                   c.OBSERVATIONS, c.ACTIVE, c.VERSION_NO, c.LATEST_EXAM_STATUS,
+                   c.IMPORTED_FAILURE_COUNT, c.RESULT_SOURCE,
+                   COALESCE(c.LATEST_SCORE, (SELECT MAX(a.SCORE) KEEP (DENSE_RANK LAST ORDER BY a.ATTEMPT_NUMBER)
                       FROM STUDENT_CERTIFICATION_CYCLE_ATTEMPT a
-                     WHERE a.STUDENT_CERTIFICATION_CYCLE_ID = c.STUDENT_CERTIFICATION_CYCLE_ID) LATEST_SCORE,
+                     WHERE a.STUDENT_CERTIFICATION_CYCLE_ID = c.STUDENT_CERTIFICATION_CYCLE_ID)) LATEST_SCORE,
                    (SELECT COUNT(*) FROM STUDENT_CERTIFICATION_CYCLE_ATTEMPT a
                      WHERE a.STUDENT_CERTIFICATION_CYCLE_ID = c.STUDENT_CERTIFICATION_CYCLE_ID) ATTEMPT_COUNT
               FROM STUDENT_CERTIFICATION_CYCLE c
@@ -436,26 +625,32 @@ public class StudentCertificationService {
                 rs.getBoolean("IS_PRIMARY"), CertificationProcessType.valueOf(rs.getString("PROCESS_TYPE")),
                 CertificationTrackingStatus.valueOf(rs.getString("TRACKING_STATUS")),
                 localDate(rs, "DEADLINE_DATE"), localDate(rs, "SCHEDULED_DATE"),
-                localDate(rs, "APPLICATION_DATE"), nullableBoolean(rs, "APPROVED"),
-                localDate(rs, "EXPIRATION_DATE"), CertificationValidityStatus.valueOf(rs.getString("VALIDITY_STATUS")),
+                localDate(rs, "APPLICATION_DATE"), localDate(rs, "LAST_APPROVED_APPLICATION_DATE"),
+                nullableBoolean(rs, "APPROVED"), localDate(rs, "EXPIRATION_DATE"),
+                CertificationValidityStatus.valueOf(rs.getString("VALIDITY_STATUS")),
                 rs.getString("PREVIOUS_PUBLIC_ID"), rs.getString("ACTIONS_TO_TAKE"),
                 rs.getString("SOFTTEK_MANAGEMENT"), rs.getString("OBSERVATIONS"), rs.getBoolean("ACTIVE"),
-                latest, rs.getInt("ATTEMPT_COUNT"), rs.getLong("VERSION_NO"));
+                latest, CertificationExamStatus.valueOf(rs.getString("LATEST_EXAM_STATUS")),
+                rs.getInt("ATTEMPT_COUNT"), nullableInteger(rs, "IMPORTED_FAILURE_COUNT"),
+                rs.getString("RESULT_SOURCE"), rs.getLong("VERSION_NO"));
     }
 
     private Metrics metrics(Applicability applicability, List<CycleView> cycles) {
         int applicable = (applicability.technological() ? 1 : 0) + (applicability.developmentSecurity() ? 1 : 0)
                 + (applicability.normativeTesting() ? 1 : 0) + (applicability.one() ? 1 : 0)
-                + (applicability.agile() ? 1 : 0);
+                + (applicability.agile() ? 1 : 0) + (applicability.jira() ? 1 : 0);
         return new Metrics(applicable,
                 (int) cycles.stream().filter(c -> c.active() && (c.trackingStatus() == CertificationTrackingStatus.PENDING
                         || c.trackingStatus() == CertificationTrackingStatus.NOT_SCHEDULED)).count(),
                 (int) cycles.stream().filter(c -> c.active() && c.trackingStatus() == CertificationTrackingStatus.SCHEDULED).count(),
-                (int) cycles.stream().filter(c -> Boolean.TRUE.equals(c.approved())).count(),
-                (int) cycles.stream().filter(c -> Boolean.FALSE.equals(c.approved())).count(),
-                (int) cycles.stream().filter(c -> c.validityStatus() == CertificationValidityStatus.VALID).count(),
-                (int) cycles.stream().filter(c -> c.validityStatus() == CertificationValidityStatus.EXPIRING_SOON).count(),
-                (int) cycles.stream().filter(c -> c.validityStatus() == CertificationValidityStatus.EXPIRED).count(),
+                (int) cycles.stream().filter(c -> c.active() && Boolean.TRUE.equals(c.approved())).count(),
+                (int) cycles.stream().filter(c -> c.active() && Boolean.FALSE.equals(c.approved())).count(),
+                (int) cycles.stream().filter(c -> c.active()
+                        && c.validityStatus() == CertificationValidityStatus.VALID).count(),
+                (int) cycles.stream().filter(c -> c.active()
+                        && c.validityStatus() == CertificationValidityStatus.EXPIRING_SOON).count(),
+                (int) cycles.stream().filter(c -> c.active()
+                        && c.validityStatus() == CertificationValidityStatus.EXPIRED).count(),
                 (int) cycles.stream().filter(c -> c.processType() == CertificationProcessType.RECERTIFICATION
                         && c.active() && !Boolean.TRUE.equals(c.approved())).count());
     }
@@ -464,9 +659,13 @@ public class StudentCertificationService {
         validateCycle(scope, command, null);
         CertificationProcessType process = processType(scope, command);
         Long previous = previousApprovedCycleId(scope, command);
-        LocalDate deadline = deadline(scope, command.type());
-        Result result = calculateResult(command.type(), command.applicationDate(), command.approved(),
-                command.trackingStatus(), scope.organizationId());
+        LocalDate lastApprovedApplicationDate = Boolean.TRUE.equals(command.approved())
+                ? command.applicationDate() : null;
+        Boolean everApproved = lastApprovedApplicationDate != null ? Boolean.TRUE : command.approved();
+        LocalDate deadline = process == CertificationProcessType.RECERTIFICATION
+                || lastApprovedApplicationDate != null ? null : deadline(scope, command.type());
+        Result result = calculateManualResult(command.type(), command.applicationDate(),
+                lastApprovedApplicationDate, command.approved(), command.trackingStatus(), scope.organizationId());
         Long technologyId = resolveTechnology(scope.organizationId(), command.type(), command.technologyPublicId());
         if (command.type() == CertificationType.TECHNOLOGICAL && command.primary()) {
             jdbc.update("""
@@ -477,21 +676,23 @@ public class StudentCertificationService {
         }
         String publicId = UUID.randomUUID().toString();
         MapSqlParameterSource params = cycleParams(scope, publicId, command, technologyId, process, previous,
-                deadline, result, actorId);
+                deadline, result, lastApprovedApplicationDate, everApproved, actorId);
         try {
             jdbc.update("""
                 INSERT INTO STUDENT_CERTIFICATION_CYCLE (
                     PUBLIC_ID, STUDENT_ID, ORGANIZATION_ID, CERTIFICATION_TYPE, TECHNOLOGY_ID,
                     CERTIFICATION_LEVEL, IS_PRIMARY, PROCESS_TYPE, TRACKING_STATUS, DEADLINE_DATE,
-                    SCHEDULED_DATE, APPLICATION_DATE, APPROVED, EXPIRATION_DATE, VALIDITY_STATUS,
-                    PREVIOUS_APPROVED_CYCLE_ID, ACTIONS_TO_TAKE, SOFTTEK_MANAGEMENT, OBSERVATIONS,
-                    ACTIVE, CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT, VERSION_NO
+                    SCHEDULED_DATE, APPLICATION_DATE, LAST_APPROVED_APPLICATION_DATE, APPROVED,
+                    EXPIRATION_DATE, VALIDITY_STATUS, PREVIOUS_APPROVED_CYCLE_ID, ACTIONS_TO_TAKE,
+                    SOFTTEK_MANAGEMENT, OBSERVATIONS, ACTIVE, LATEST_EXAM_STATUS, RESULT_SOURCE,
+                    CREATED_BY, UPDATED_BY, CREATED_AT, UPDATED_AT, VERSION_NO
                 ) VALUES (
                     :publicId, :studentId, :organizationId, :type, :technologyId,
                     :level, :primary, :processType, :trackingStatus, :deadlineDate,
-                    :scheduledDate, :applicationDate, :approved, :expirationDate, :validityStatus,
-                    :previousId, :actionsToTake, :softtekManagement, :observations,
-                    :active, :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0
+                    :scheduledDate, :applicationDate, :lastApprovedApplicationDate, :approved,
+                    :expirationDate, :validityStatus, :previousId, :actionsToTake,
+                    :softtekManagement, :observations, :active, :latestExamStatus, 'MANUAL',
+                    :actorId, :actorId, SYSTIMESTAMP, SYSTIMESTAMP, 0
                 )
                 """, params);
         } catch (DataIntegrityViolationException exception) {
@@ -514,8 +715,11 @@ public class StudentCertificationService {
                     "El ciclo fue modificado por otra sesión. Actualiza la página.");
         }
         Long technologyId = resolveTechnology(scope.organizationId(), command.type(), command.technologyPublicId());
-        Result result = calculateResult(command.type(), command.applicationDate(), command.approved(),
-                command.trackingStatus(), scope.organizationId());
+        LocalDate lastApprovedApplicationDate = Boolean.TRUE.equals(command.approved())
+                ? command.applicationDate() : existing.lastApprovedApplicationDate();
+        Boolean everApproved = lastApprovedApplicationDate != null ? Boolean.TRUE : command.approved();
+        Result result = calculateManualResult(command.type(), command.applicationDate(),
+                lastApprovedApplicationDate, command.approved(), command.trackingStatus(), scope.organizationId());
         if (command.type() == CertificationType.TECHNOLOGICAL && command.primary()) {
             jdbc.update("""
                 UPDATE STUDENT_CERTIFICATION_CYCLE
@@ -526,7 +730,8 @@ public class StudentCertificationService {
                     "cycleId", existing.id()));
         }
         MapSqlParameterSource params = cycleParams(scope, publicId, command, technologyId, existing.processType(),
-                existing.previousApprovedId(), existing.deadlineDate(), result, actorId)
+                existing.previousApprovedId(), existing.deadlineDate(), result,
+                lastApprovedApplicationDate, everApproved, actorId)
                 .addValue("id", existing.id()).addValue("version", existing.version());
         int updated;
         try {
@@ -535,8 +740,10 @@ public class StudentCertificationService {
                SET TECHNOLOGY_ID = :technologyId, CERTIFICATION_LEVEL = :level,
                    IS_PRIMARY = :primary, TRACKING_STATUS = :trackingStatus,
                    SCHEDULED_DATE = :scheduledDate, APPLICATION_DATE = :applicationDate,
+                   LAST_APPROVED_APPLICATION_DATE = :lastApprovedApplicationDate,
                    APPROVED = :approved, EXPIRATION_DATE = :expirationDate,
-                   VALIDITY_STATUS = :validityStatus, ACTIONS_TO_TAKE = :actionsToTake,
+                   VALIDITY_STATUS = :validityStatus, LATEST_EXAM_STATUS = :latestExamStatus,
+                   RESULT_SOURCE = 'MANUAL', ACTIONS_TO_TAKE = :actionsToTake,
                    SOFTTEK_MANAGEMENT = :softtekManagement, OBSERVATIONS = :observations,
                    ACTIVE = :active, UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP,
                    VERSION_NO = VERSION_NO + 1
@@ -553,7 +760,8 @@ public class StudentCertificationService {
     }
 
     private MapSqlParameterSource cycleParams(Scope scope, String publicId, CycleCommand command, Long technologyId,
-            CertificationProcessType process, Long previous, LocalDate deadline, Result result, Long actorId) {
+            CertificationProcessType process, Long previous, LocalDate deadline, Result result,
+            LocalDate lastApprovedApplicationDate, Boolean everApproved, Long actorId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("publicId", publicId).addValue("studentId", scope.student().getId())
                 .addValue("organizationId", scope.organizationId()).addValue("type", command.type().name())
@@ -562,8 +770,9 @@ public class StudentCertificationService {
                 .addValue("primary", command.type() == CertificationType.TECHNOLOGICAL && command.primary() ? 1 : 0)
                 .addValue("processType", process.name())
                 .addValue("trackingStatus", result.trackingStatus().name())
-                .addValue("approved", command.approved() == null ? null : command.approved() ? 1 : 0)
+                .addValue("approved", everApproved == null ? null : everApproved ? 1 : 0)
                 .addValue("validityStatus", result.validityStatus().name()).addValue("previousId", previous)
+                .addValue("latestExamStatus", manualExamStatus(command.type(), command).name())
                 .addValue("actionsToTake", clean(command.actionsToTake(), 1000))
                 .addValue("softtekManagement", clean(command.softtekManagement(), 1000))
                 .addValue("observations", clean(command.observations(), 1000))
@@ -571,6 +780,7 @@ public class StudentCertificationService {
         addDateParameter(params, "deadlineDate", deadline);
         addDateParameter(params, "scheduledDate", command.scheduledDate());
         addDateParameter(params, "applicationDate", command.applicationDate());
+        addDateParameter(params, "lastApprovedApplicationDate", lastApprovedApplicationDate);
         addDateParameter(params, "expirationDate", result.expirationDate());
         return params;
     }
@@ -588,6 +798,7 @@ public class StudentCertificationService {
             case NORMATIVE_TESTING -> flags.normativeTesting();
             case ONE -> flags.one();
             case AGILE -> flags.agile();
+            case JIRA -> flags.jira();
         };
         if (!applies) throw new BusinessException("CERTIFICATION_AREA_NOT_APPLICABLE",
                 "Activa primero el seguimiento correspondiente para este estudiante.");
@@ -611,10 +822,11 @@ public class StudentCertificationService {
     static boolean requiresApplicationDate(CertificationType type, Boolean approved) {
         return Boolean.TRUE.equals(approved)
                 && type != CertificationType.ONE
-                && type != CertificationType.AGILE;
+                && type != CertificationType.AGILE
+                && type != CertificationType.JIRA;
     }
     private CertificationProcessType processType(Scope scope, CycleCommand command) {
-        if (command.type() == CertificationType.ONE || command.type() == CertificationType.AGILE) {
+        if (nonExpiring(command.type())) {
             return CertificationProcessType.CERTIFICATION;
         }
         return previousApprovedCycleId(scope, command) == null
@@ -641,6 +853,7 @@ public class StudentCertificationService {
     }
 
     private LocalDate deadline(Scope scope, CertificationType type) {
+        if (nonExpiring(type)) return null;
         LocalDate admission = scope.student().getAdmissionDate();
         if (admission == null) throw new BusinessException("CERTIFICATION_ADMISSION_DATE_REQUIRED",
                 "La fecha de alta es obligatoria para calcular las fechas límite.");
@@ -649,13 +862,44 @@ public class StudentCertificationService {
         return CertificationLifecycleCalculator.deadline(admission, policy.deadlineMonths(), policy.deadlineDays());
     }
 
+    private Result calculateManualResult(CertificationType type, LocalDate applicationDate,
+            LocalDate lastApprovedApplicationDate, Boolean latestApproved,
+            CertificationTrackingStatus requestedStatus, Long organizationId) {
+        CertificationTrackingStatus tracking = requestedStatus == null
+                ? CertificationTrackingStatus.PENDING : requestedStatus;
+        if (Boolean.TRUE.equals(latestApproved)) tracking = CertificationTrackingStatus.APPROVED;
+        else if (Boolean.FALSE.equals(latestApproved) && applicationDate != null) {
+            tracking = CertificationTrackingStatus.NOT_APPROVED;
+        } else if (applicationDate != null && tracking == CertificationTrackingStatus.PENDING) {
+            tracking = CertificationTrackingStatus.APPLIED;
+        }
+        if (nonExpiring(type) || lastApprovedApplicationDate == null) {
+            return new Result(null, CertificationValidityStatus.NOT_OBTAINED, tracking);
+        }
+        Policy policy = policy(organizationId, type);
+        int years = policy.validityYears() == null ? 2 : policy.validityYears();
+        LocalDate expiration = CertificationLifecycleCalculator.expiration(lastApprovedApplicationDate, years);
+        return new Result(expiration, validity(expiration), tracking);
+    }
+
+    static CertificationExamStatus manualExamStatus(CertificationType type, CycleCommand command) {
+        if (nonExpiring(type)) return CertificationExamStatus.NOT_SCHEDULED;
+        if (Boolean.TRUE.equals(command.approved())) return CertificationExamStatus.PASSED;
+        if (Boolean.FALSE.equals(command.approved()) && command.applicationDate() != null) {
+            return CertificationExamStatus.FAILED;
+        }
+        if (command.applicationDate() != null) return CertificationExamStatus.COMPLETED;
+        if (command.scheduledDate() != null) return CertificationExamStatus.SCHEDULED;
+        return CertificationExamStatus.NOT_SCHEDULED;
+    }
+
     private Result calculateResult(CertificationType type, LocalDate applicationDate, Boolean approved,
             CertificationTrackingStatus requestedStatus, Long organizationId) {
         CertificationTrackingStatus tracking = requestedStatus == null
                 ? CertificationTrackingStatus.PENDING : requestedStatus;
         if (Boolean.TRUE.equals(approved)) tracking = CertificationTrackingStatus.APPROVED;
         else if (Boolean.FALSE.equals(approved) && applicationDate != null) tracking = CertificationTrackingStatus.NOT_APPROVED;
-        if (type == CertificationType.ONE || type == CertificationType.AGILE) {
+        if (nonExpiring(type)) {
             return new Result(null, CertificationValidityStatus.NOT_OBTAINED, tracking);
         }
         if (!Boolean.TRUE.equals(approved)) {
@@ -671,6 +915,10 @@ public class StudentCertificationService {
         return CertificationLifecycleCalculator.validity(expiration, LocalDate.now(clock), 90);
     }
 
+    private static boolean nonExpiring(CertificationType type) {
+        return type == CertificationType.ONE || type == CertificationType.AGILE || type == CertificationType.JIRA;
+    }
+
     private Long resolveTechnology(Long organizationId, CertificationType type, String publicId) {
         if (type != CertificationType.TECHNOLOGICAL) return null;
         List<Long> rows = jdbc.query("""
@@ -684,9 +932,9 @@ public class StudentCertificationService {
     }
 
     private void validateAttemptsSupported(CycleRow cycle) {
-        if (cycle.type() == CertificationType.ONE || cycle.type() == CertificationType.AGILE) {
+        if (nonExpiring(cycle.type())) {
             throw new BusinessException("CERTIFICATION_ATTEMPTS_NOT_SUPPORTED",
-                    "ONE y Agile no administran intentos ni examen.");
+                    "ONE, Agile y Jira no administran intentos ni examen.");
         }
     }
 
@@ -717,10 +965,25 @@ public class StudentCertificationService {
     }
     private void applyAttemptResult(Scope scope, CycleRow cycle, AttemptCommand command, Long actorId) {
         if (command.applicationDate() == null && command.approved() == null) return;
-        Result result = calculateResult(cycle.type(), command.applicationDate(), command.approved(),
-                command.approved() == null ? cycle.trackingStatus()
-                        : command.approved() ? CertificationTrackingStatus.APPROVED : CertificationTrackingStatus.NOT_APPROVED,
-                scope.organizationId());
+        LocalDate lastApproved = Boolean.TRUE.equals(command.approved())
+                ? command.applicationDate() : cycle.lastApprovedApplicationDate();
+        Boolean everApproved = lastApproved != null ? Boolean.TRUE : command.approved();
+        CertificationTrackingStatus latestTracking = command.approved() == null
+                ? cycle.trackingStatus()
+                : command.approved() ? CertificationTrackingStatus.APPROVED
+                : CertificationTrackingStatus.NOT_APPROVED;
+        Result result;
+        if (nonExpiring(cycle.type())) {
+            result = new Result(null, CertificationValidityStatus.NOT_OBTAINED, latestTracking);
+        } else if (lastApproved != null) {
+            Policy policy = policy(scope.organizationId(), cycle.type());
+            int years = policy.validityYears() == null ? 2 : policy.validityYears();
+            LocalDate expiration = CertificationLifecycleCalculator.expiration(lastApproved, years);
+            result = new Result(expiration, validity(expiration), latestTracking);
+        } else {
+            result = calculateResult(cycle.type(), command.applicationDate(), command.approved(),
+                    latestTracking, scope.organizationId());
+        }
         LocalDate nextScheduled = null;
         if (Boolean.FALSE.equals(command.approved()) && command.applicationDate() != null) {
             Policy policy = policy(scope.organizationId(), cycle.type());
@@ -730,26 +993,36 @@ public class StudentCertificationService {
         jdbc.update("""
             UPDATE STUDENT_CERTIFICATION_CYCLE
                SET APPLICATION_DATE = COALESCE(:applicationDate, APPLICATION_DATE),
+                   LAST_APPROVED_APPLICATION_DATE = :lastApprovedApplicationDate,
                    APPROVED = :approved, TRACKING_STATUS = :trackingStatus,
                    EXPIRATION_DATE = :expirationDate, VALIDITY_STATUS = :validityStatus,
+                   LATEST_EXAM_STATUS = :latestExamStatus, LATEST_SCORE = :latestScore,
+                   RESULT_SOURCE = 'MANUAL',
                    SCHEDULED_DATE = COALESCE(:nextScheduled, SCHEDULED_DATE),
                    UPDATED_BY = :actorId, UPDATED_AT = SYSTIMESTAMP, VERSION_NO = VERSION_NO + 1
              WHERE STUDENT_CERTIFICATION_CYCLE_ID = :cycleId
-            """, attemptResultParams(command, result, nextScheduled, actorId, cycle.id()));
+            """, attemptResultParams(command, result, lastApproved, everApproved,
+                    nextScheduled, actorId, cycle.id()));
     }
+
     private MapSqlParameterSource attemptResultParams(AttemptCommand command, Result result,
+            LocalDate lastApprovedApplicationDate, Boolean everApproved,
             LocalDate nextScheduled, Long actorId, Long cycleId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("approved", command.approved() == null ? null : command.approved() ? 1 : 0)
+                .addValue("approved", everApproved == null ? null : everApproved ? 1 : 0)
                 .addValue("trackingStatus", result.trackingStatus().name())
                 .addValue("validityStatus", result.validityStatus().name())
                 .addValue("actorId", actorId)
-                .addValue("cycleId", cycleId);
+                .addValue("cycleId", cycleId)
+                .addValue("latestExamStatus", command.examStatus() == null ? "NOT_SCHEDULED" : command.examStatus().name())
+                .addValue("latestScore", command.score());
         addDateParameter(params, "applicationDate", command.applicationDate());
+        addDateParameter(params, "lastApprovedApplicationDate", lastApprovedApplicationDate);
         addDateParameter(params, "expirationDate", result.expirationDate());
         addDateParameter(params, "nextScheduled", nextScheduled);
         return params;
     }
+
     private AttemptView queryAttempt(CycleRow cycle, String attemptPublicId) {
         List<AttemptView> rows = jdbc.query("""
             SELECT PUBLIC_ID, ATTEMPT_NUMBER, SCHEDULED_DATE, APPLICATION_DATE, EXAM_STATUS,
@@ -773,7 +1046,8 @@ public class StudentCertificationService {
     private CycleRow requireCycle(Scope scope, String publicId) {
         List<CycleRow> rows = jdbc.query("""
             SELECT STUDENT_CERTIFICATION_CYCLE_ID, PUBLIC_ID, CERTIFICATION_TYPE, PROCESS_TYPE,
-                   TRACKING_STATUS, DEADLINE_DATE, PREVIOUS_APPROVED_CYCLE_ID, ACTIVE, VERSION_NO
+                   TRACKING_STATUS, DEADLINE_DATE, LAST_APPROVED_APPLICATION_DATE,
+                   PREVIOUS_APPROVED_CYCLE_ID, ACTIVE, VERSION_NO
               FROM STUDENT_CERTIFICATION_CYCLE
              WHERE PUBLIC_ID = :publicId AND STUDENT_ID = :studentId AND ORGANIZATION_ID = :organizationId
             """, Map.of("publicId", publicId, "studentId", scope.student().getId(),
@@ -781,6 +1055,7 @@ public class StudentCertificationService {
                     rs.getString(2), CertificationType.valueOf(rs.getString(3)),
                     CertificationProcessType.valueOf(rs.getString(4)),
                     CertificationTrackingStatus.valueOf(rs.getString(5)), localDate(rs, "DEADLINE_DATE"),
+                    localDate(rs, "LAST_APPROVED_APPLICATION_DATE"),
                     nullableLong(rs, "PREVIOUS_APPROVED_CYCLE_ID"), rs.getBoolean("ACTIVE"), rs.getLong("VERSION_NO")));
         if (rows.isEmpty()) throw new BusinessException("CERTIFICATION_CYCLE_NOT_FOUND", "El ciclo no existe.");
         return rows.getFirst();
@@ -847,10 +1122,11 @@ public class StudentCertificationService {
         if (!rows.isEmpty()) return rows.getFirst();
         return switch (type) {
             case TECHNOLOGICAL -> new Policy(1, 0, 0, 15, 2);
-            case DEVELOPMENT_SECURITY -> new Policy(3, 0, 1, 15, 2);
-            case NORMATIVE_TESTING -> new Policy(2, 0, 1, 0, 2);
-            case AGILE -> new Policy(3, 0, 1, 15, null);
+            case DEVELOPMENT_SECURITY -> new Policy(3, 0, 1, 15, 1);
+            case NORMATIVE_TESTING -> new Policy(2, 0, 1, 0, 1);
+            case AGILE -> new Policy(null, null, null, null, null);
             case ONE -> new Policy(null, null, null, null, null);
+            case JIRA -> new Policy(null, null, null, null, null);
         };
     }
 
@@ -916,7 +1192,10 @@ public class StudentCertificationService {
             Integer retryDays, Integer validityYears) {}
     private record Result(LocalDate expirationDate, CertificationValidityStatus validityStatus,
             CertificationTrackingStatus trackingStatus) {}
+    private record ImportCycleRow(Long id, String publicId, String fingerprint,
+            LocalDate lastApprovedApplicationDate) {}
     private record CycleRow(Long id, String publicId, CertificationType type, CertificationProcessType processType,
-            CertificationTrackingStatus trackingStatus, LocalDate deadlineDate, Long previousApprovedId,
+            CertificationTrackingStatus trackingStatus, LocalDate deadlineDate,
+            LocalDate lastApprovedApplicationDate, Long previousApprovedId,
             boolean active, Long version) {}
 }

@@ -38,11 +38,15 @@ type EditableCycle = CertificationCyclePayload & {
   processType?: CertificationProcessType
   deadlineDate?: string | null
   expirationDate?: string | null
+  lastApprovedApplicationDate?: string | null
   validityStatus?: CertificationValidityStatus
   technologyName?: string | null
   previousApprovedCyclePublicId?: string | null
   attemptCount?: number
   latestScore?: number | null
+  latestExamStatus?: CertificationExamStatus
+  importedFailureCount?: number | null
+  resultSource?: 'IMPORT' | 'MANUAL' | null
 }
 
 const TYPE_LABELS: Record<CertificationType, string> = {
@@ -50,19 +54,8 @@ const TYPE_LABELS: Record<CertificationType, string> = {
   DEVELOPMENT_SECURITY: 'Desarrollo Seguro',
   NORMATIVE_TESTING: 'Normativa y Testing',
   ONE: 'ONE',
-  AGILE: 'Agile'
-}
-
-const TRACKING_LABELS: Record<CertificationTrackingStatus, string> = {
-  PENDING: 'Pendiente',
-  NOT_SCHEDULED: 'Sin programar',
-  SCHEDULED: 'Programada',
-  IN_PROGRESS: 'En proceso',
-  APPLIED: 'Aplicada',
-  APPROVED: 'Aprobada',
-  NOT_APPROVED: 'No aprobada',
-  EXPIRED: 'Vencida',
-  CANCELLED: 'Cancelada'
+  AGILE: 'Agile',
+  JIRA: 'Jira'
 }
 
 const STUDENT_STATUS_LABELS: Record<string, string> = {
@@ -95,7 +88,8 @@ const FLAG_OPTIONS: Array<{ key: keyof CertificationApplicability; type: Certifi
   { key: 'developmentSecurity', type: 'DEVELOPMENT_SECURITY', label: 'Desarrollo Seguro' },
   { key: 'normativeTesting', type: 'NORMATIVE_TESTING', label: 'Normativa y Testing' },
   { key: 'one', type: 'ONE', label: 'ONE' },
-  { key: 'agile', type: 'AGILE', label: 'Agile' }
+  { key: 'agile', type: 'AGILE', label: 'Agile' },
+  { key: 'jira', type: 'JIRA', label: 'Jira' }
 ]
 
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -105,6 +99,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'NORMATIVE_TESTING', label: 'Normativa y Testing' },
   { id: 'ONE', label: 'ONE' },
   { id: 'AGILE', label: 'Agile' },
+  { id: 'JIRA', label: 'Jira' },
   { id: 'ATTEMPTS', label: 'Intentos' },
   { id: 'EXPIRATIONS', label: 'Vencimientos' },
   { id: 'HISTORY', label: 'Historial' }
@@ -134,6 +129,7 @@ function cycleFromView(cycle: CertificationCycleView): EditableCycle {
     deadlineDate: cycle.deadlineDate,
     scheduledDate: cycle.scheduledDate,
     applicationDate: cycle.applicationDate,
+    lastApprovedApplicationDate: cycle.lastApprovedApplicationDate,
     approved: cycle.approved,
     expirationDate: cycle.expirationDate,
     validityStatus: cycle.validityStatus,
@@ -143,7 +139,10 @@ function cycleFromView(cycle: CertificationCycleView): EditableCycle {
     observations: cycle.observations,
     active: cycle.active,
     latestScore: cycle.latestScore,
+    latestExamStatus: cycle.latestExamStatus,
     attemptCount: cycle.attemptCount,
+    importedFailureCount: cycle.importedFailureCount,
+    resultSource: cycle.resultSource,
     version: cycle.version
   }
 }
@@ -167,9 +166,13 @@ function newCycle(type: CertificationType, primary = false): EditableCycle {
     processType: undefined,
     deadlineDate: null,
     expirationDate: null,
+    lastApprovedApplicationDate: null,
     validityStatus: 'NOT_OBTAINED',
     attemptCount: 0,
-    latestScore: null
+    latestScore: null,
+    latestExamStatus: 'NOT_SCHEDULED',
+    importedFailureCount: null,
+    resultSource: null
   }
 }
 
@@ -205,7 +208,8 @@ export function StudentCertificationsPage() {
     developmentSecurity: false,
     normativeTesting: false,
     one: false,
-    agile: false
+    agile: false,
+    jira: false
   })
   const [cycles, setCycles] = useState<EditableCycle[]>([])
   const [attemptDrafts, setAttemptDrafts] = useState<Record<string, CertificationAttemptPayload | undefined>>({})
@@ -404,7 +408,7 @@ export function StudentCertificationsPage() {
         if (!cycle.technologyPublicId) next[`${cycle.key}.technologyPublicId`] = 'Selecciona una tecnología.'
         if (!cycle.certificationLevel) next[`${cycle.key}.certificationLevel`] = 'Selecciona JR, STD o SR.'
       }
-      if (cycle.approved === true && !cycle.applicationDate) {
+      if (hasExpiration(cycle.type) && cycle.approved === true && !cycle.applicationDate) {
         next[`${cycle.key}.applicationDate`] = 'La fecha de aplicación es obligatoria para aprobar.'
       }
       const attempt = attemptDrafts[cycle.key]
@@ -535,7 +539,7 @@ export function StudentCertificationsPage() {
               </div>
               <div className="ns-card certification-summary-note">
                 <h2>Seguimientos sin vencimiento</h2>
-                <p>ONE y Agile conservan estado, fechas operativas, observaciones e historial, pero no generan vencimiento ni recertificación.</p>
+                <p>ONE, Agile y Jira conservan aplicabilidad, estatus, observaciones e historial; no generan intentos, fechas límite ni vencimientos.</p>
               </div>
             </section>
           )}
@@ -579,11 +583,11 @@ export function StudentCertificationsPage() {
           {activeTab === 'EXPIRATIONS' && (
             <section className="ns-card certification-panel">
               <div className="ns-card-heading"><div><h2>Vencimientos</h2><p className="muted">Solo incluye Tecnológica, Desarrollo Seguro y Normativa y Testing.</p></div></div>
-              <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Área</th><th>Tecnología / nivel</th><th>Aplicación</th><th>Vencimiento</th><th>Vigencia</th></tr></thead><tbody>
+              <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Área</th><th>Tecnología / nivel</th><th>Última aprobación</th><th>Vencimiento</th><th>Vigencia</th></tr></thead><tbody>
                 {expirationCycles.length === 0 && <tr><td colSpan={5} className="ns-table-empty">No existen certificaciones aprobadas con vencimiento.</td></tr>}
                 {expirationCycles.map((cycle) => <tr key={cycle.key}><td>{TYPE_LABELS[cycle.type]}</td>
                   <td>{cycle.type === 'TECHNOLOGICAL' ? `${cycle.technologyName ?? 'Tecnología'} · ${cycle.certificationLevel ?? 'Sin nivel'}` : '—'}</td>
-                  <td>{formatDate(cycle.applicationDate)}</td><td>{formatDate(cycle.expirationDate)}</td>
+                  <td>{formatDate(cycle.lastApprovedApplicationDate)}</td><td>{formatDate(cycle.expirationDate)}</td>
                   <td>{cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'}</td></tr>)}
               </tbody></table></div>
             </section>
@@ -709,14 +713,21 @@ function CertificationSection({
                     {catalogs.trackingStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
-                <label className="ns-field"><span>Fecha límite de aplicación</span><input disabled type="date" value={cycle.deadlineDate ?? ''} /></label>
-                <label className="ns-field"><span>Fecha programada</span><input type="date" value={cycle.scheduledDate ?? ''} onChange={(event) => onUpdate(cycle.key, { scheduledDate: event.target.value || null })} /></label>
-                <label className="ns-field"><span>Fecha de aplicación</span><input type="date" value={cycle.applicationDate ?? ''}
-                  onChange={(event) => onUpdate(cycle.key, { applicationDate: event.target.value || null })}
-                  aria-invalid={Boolean(fieldErrors[`${cycle.key}.applicationDate`])} />
-                  {fieldErrors[`${cycle.key}.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.applicationDate`]}</small>}
-                </label>
-                {type !== 'ONE' && type !== 'AGILE' && (
+                {hasExpiration(type) && (
+                  <>
+                    <label className="ns-field"><span>{cycle.processType === 'RECERTIFICATION' ? 'Fecha límite inicial (histórica)' : 'Fecha límite inicial'}</span><input disabled type="date" value={cycle.deadlineDate ?? ''} /></label>
+                    <label className="ns-field"><span>Fecha programada</span><input type="date" value={cycle.scheduledDate ?? ''} onChange={(event) => onUpdate(cycle.key, { scheduledDate: event.target.value || null })} /></label>
+                    <label className="ns-field"><span>Última fecha de presentación</span><input type="date" value={cycle.applicationDate ?? ''}
+                      onChange={(event) => onUpdate(cycle.key, { applicationDate: event.target.value || null })}
+                      aria-invalid={Boolean(fieldErrors[`${cycle.key}.applicationDate`])} />
+                      {fieldErrors[`${cycle.key}.applicationDate`] && <small className="field-error">{fieldErrors[`${cycle.key}.applicationDate`]}</small>}
+                    </label>
+                    <label className="ns-field"><span>Última aplicación aprobada</span>
+                      <input disabled type="date" value={cycle.lastApprovedApplicationDate ?? ''} />
+                    </label>
+                  </>
+                )}
+                {type !== 'ONE' && type !== 'AGILE' && type !== 'JIRA' && (
                   <label className="ns-field"><span>Aprobación</span>
                     <select value={cycle.approved === null || cycle.approved === undefined ? '' : cycle.approved ? 'true' : 'false'}
                       onChange={(event) => onUpdate(cycle.key, { approved: event.target.value === '' ? null : event.target.value === 'true' })}>
@@ -728,6 +739,18 @@ function CertificationSection({
                   <>
                     <label className="ns-field"><span>Fecha de vencimiento</span><input disabled type="date" value={cycle.expirationDate ?? ''} /></label>
                     <label className="ns-field"><span>Estado de vigencia</span><input disabled value={cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'} /></label>
+                    <label className="ns-field"><span>Último resultado de examen</span>
+                      <input disabled value={cycle.latestExamStatus ? EXAM_LABELS[cycle.latestExamStatus] : 'Sin información'} />
+                    </label>
+                    <label className="ns-field"><span>Promedio más reciente</span>
+                      <input disabled value={cycle.latestScore ?? 'Sin información'} />
+                    </label>
+                    <label className="ns-field"><span>Reprobaciones administrativas del Excel</span>
+                      <input disabled value={cycle.importedFailureCount ?? 'Sin información'} />
+                    </label>
+                    <label className="ns-field"><span>Origen del resultado</span>
+                      <input disabled value={cycle.resultSource === 'IMPORT' ? 'Importación Excel' : cycle.resultSource === 'MANUAL' ? 'Captura manual' : 'Sin información'} />
+                    </label>
                   </>
                 )}
                 {type === 'DEVELOPMENT_SECURITY' && (

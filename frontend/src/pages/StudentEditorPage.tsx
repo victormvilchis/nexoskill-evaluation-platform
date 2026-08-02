@@ -22,13 +22,15 @@ type CertificationFlags = {
   appliesNormativeTesting: boolean
   appliesOne: boolean
   appliesAgile: boolean
+  appliesJira: boolean
 }
 const EMPTY_FLAGS: CertificationFlags = {
   appliesTechnologicalCertification: false,
   appliesDevelopmentSecurity: false,
   appliesNormativeTesting: false,
   appliesOne: false,
-  appliesAgile: false
+  appliesAgile: false,
+  appliesJira: false
 }
 const EMPTY_EXPERIENCE: StudentExperiencePayload = {
   currentTechnologies: [],
@@ -40,7 +42,8 @@ const FLAG_OPTIONS: Array<{ key: keyof CertificationFlags; label: string }> = [
   { key: 'appliesDevelopmentSecurity', label: 'Aplica Desarrollo Seguro' },
   { key: 'appliesNormativeTesting', label: 'Aplica Normativa y Testing' },
   { key: 'appliesOne', label: 'Aplica ONE' },
-  { key: 'appliesAgile', label: 'Aplica Agile' }
+  { key: 'appliesAgile', label: 'Aplica Agile' },
+  { key: 'appliesJira', label: 'Aplica Jira' }
 ]
 function todayInput() {
   const today = new Date()
@@ -154,7 +157,8 @@ export function StudentEditorPage({ mode }: Props) {
           appliesDevelopmentSecurity: detail.appliesDevelopmentSecurity,
           appliesNormativeTesting: detail.appliesNormativeTesting,
           appliesOne: detail.appliesOne,
-          appliesAgile: detail.appliesAgile
+          appliesAgile: detail.appliesAgile,
+          appliesJira: detail.appliesJira
         })
         if (detail.organization?.appliesCertifications && mode === 'edit') {
           setCatalogLoading(true)

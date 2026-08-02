@@ -5,5 +5,6 @@ public enum CertificationType {
     TECHNOLOGICAL,
     ONE,
     NORMATIVE_TESTING,
-    AGILE
+    AGILE,
+    JIRA
 }

@@ -27,7 +27,7 @@ public final class CertificationModels {
             String organizationName, String status, LocalDate validFrom, LocalDate expiresAt,
             LocalDate admissionDate, CatalogItem professionalProfile, CatalogItem technologicalProfile) {}
     public record Applicability(boolean technological, boolean developmentSecurity,
-            boolean normativeTesting, boolean one, boolean agile) {}
+            boolean normativeTesting, boolean one, boolean agile, boolean jira) {}
     public record Metrics(int applicableAreas, int pending, int scheduled, int approved, int notApproved,
             int valid, int expiringSoon, int expired, int pendingRecertifications) {}
 
@@ -35,10 +35,11 @@ public final class CertificationModels {
             String technologyName, CertificationLevel certificationLevel, boolean primary,
             CertificationProcessType processType, CertificationTrackingStatus trackingStatus,
             LocalDate deadlineDate, LocalDate scheduledDate, LocalDate applicationDate,
-            Boolean approved, LocalDate expirationDate, CertificationValidityStatus validityStatus,
+            LocalDate lastApprovedApplicationDate, Boolean approved, LocalDate expirationDate,
+            CertificationValidityStatus validityStatus,
             String previousApprovedCyclePublicId, String actionsToTake, String softtekManagement,
-            String observations, boolean active, BigDecimal latestScore, Integer attemptCount,
-            Long version) {}
+            String observations, boolean active, BigDecimal latestScore, CertificationExamStatus latestExamStatus,
+            Integer attemptCount, Integer importedFailureCount, String resultSource, Long version) {}
     public record AttemptView(String publicId, String cyclePublicId, int attemptNumber,
             LocalDate scheduledDate, LocalDate applicationDate, CertificationExamStatus examStatus,
             BigDecimal score, Boolean approved, String result, String observations,
@@ -52,6 +53,13 @@ public final class CertificationModels {
             Applicability applicability, Metrics metrics, List<CycleView> cycles) {}
 
     public record SaveCommand(List<CycleCommand> cycles) {}
+
+    public record ImportSnapshotCommand(CertificationType type, String technologyPublicId,
+            CertificationLevel certificationLevel, boolean primary, CertificationTrackingStatus trackingStatus,
+            LocalDate initialDeadlineDate, LocalDate applicationDate, LocalDate lastApprovedApplicationDate,
+            Boolean approved, LocalDate expirationDate, CertificationValidityStatus validityStatus,
+            CertificationExamStatus examStatus, BigDecimal score, Integer importedFailureCount,
+            String certificationStatus, String fingerprint) {}
     public record CycleCommand(String publicId, CertificationType type, String technologyPublicId,
             CertificationLevel certificationLevel, boolean primary, CertificationTrackingStatus trackingStatus,
             LocalDate scheduledDate, LocalDate applicationDate, Boolean approved,

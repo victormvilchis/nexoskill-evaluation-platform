@@ -4,6 +4,7 @@ export type CertificationType =
   | 'ONE'
   | 'NORMATIVE_TESTING'
   | 'AGILE'
+  | 'JIRA'
 
 export type CertificationLevel = 'JR' | 'STD' | 'SR'
 export type CertificationProcessType = 'CERTIFICATION' | 'RECERTIFICATION'
@@ -76,6 +77,7 @@ export interface CertificationApplicability {
   normativeTesting: boolean
   one: boolean
   agile: boolean
+  jira: boolean
 }
 
 export interface CertificationMetrics {
@@ -102,6 +104,7 @@ export interface CertificationCycleView {
   deadlineDate: string | null
   scheduledDate: string | null
   applicationDate: string | null
+  lastApprovedApplicationDate: string | null
   approved: boolean | null
   expirationDate: string | null
   validityStatus: CertificationValidityStatus
@@ -111,7 +114,10 @@ export interface CertificationCycleView {
   observations: string | null
   active: boolean
   latestScore: number | null
+  latestExamStatus: CertificationExamStatus
   attemptCount: number
+  importedFailureCount: number | null
+  resultSource: 'IMPORT' | 'MANUAL' | null
   version: number
 }
 

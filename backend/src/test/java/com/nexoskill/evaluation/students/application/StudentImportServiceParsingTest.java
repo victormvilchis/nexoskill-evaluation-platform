@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
@@ -25,26 +26,27 @@ class StudentImportServiceParsingTest {
     }
 
     @Test
-    void treatsNoAplicaAsEmptyTrackingStatus() {
+    void treatsNoAplicaAsEmptyTrackingStatusButPreservesActualTrackingEvidence() {
         assertFalse(StudentImportService.hasMeaningfulImportStatus("No aplica"));
         assertFalse(StudentImportService.hasMeaningfulImportStatus("N/A"));
         assertFalse(StudentImportService.hasMeaningfulImportStatus(""));
         assertTrue(StudentImportService.hasMeaningfulImportStatus("Vigente"));
         assertTrue(StudentImportService.hasMeaningfulImportStatus("Aprobado"));
-    }
-    @Test
-    void ignoresEmptyTrackingWhenCertificationDoesNotApply() {
+
         assertFalse(StudentImportService.hasImportTrackingData(
                 "No aplica", null, null, null, null));
-        assertFalse(StudentImportService.hasImportTrackingData(
+        assertTrue(StudentImportService.hasImportTrackingData(
                 "No aplica", "No aplica", null, null, 0));
         assertTrue(StudentImportService.hasImportTrackingData(
                 null, "Aprobado", null, null, null));
         assertTrue(StudentImportService.hasImportTrackingData(
                 null, null, LocalDate.of(2026, 7, 1), null, null));
+        assertTrue(StudentImportService.hasImportTrackingData(
+                null, null, null, new BigDecimal("7.7"), null));
     }
+
     @Test
-    void keepsTheExcelDeadlineWhenItDiffersFromTheCalculatedDate() {
+    void keepsTheExplicitNormativeDeadlineAndFallsBackToTheCalculatedDate() {
         LocalDate imported = LocalDate.of(2025, 12, 15);
         LocalDate calculated = LocalDate.of(2008, 2, 18);
 
@@ -66,12 +68,15 @@ class StudentImportServiceParsingTest {
         assertEquals(LocalDate.of(2004, 12, 20), StudentImportService.parseImportDateValue("2004-12-20"));
         assertNull(StudentImportService.parseImportDateValue("fecha pendiente"));
     }
+
     @Test
-    void validatesApplicationDatesBeforeApplyingTheImport() {
+    void validatesApplicationDatesOnlyForExamManagedCertifications() {
         assertFalse(StudentImportService.requiresImportApplicationDate(
                 "ONE", true, true, "Aprobada"));
         assertFalse(StudentImportService.requiresImportApplicationDate(
                 "AGILE", true, true, "Aprobada"));
+        assertFalse(StudentImportService.requiresImportApplicationDate(
+                "JIRA", true, true, "Aprobada"));
         assertTrue(StudentImportService.requiresImportApplicationDate(
                 "DEVELOPMENT_SECURITY", true, true, "Vigente — Regular"));
         assertTrue(StudentImportService.requiresImportApplicationDate(
@@ -83,14 +88,37 @@ class StudentImportServiceParsingTest {
         assertFalse(StudentImportService.requiresImportApplicationDate(
                 "TECHNOLOGICAL", true, null, "Pendiente"));
     }
+
     @Test
-    void resolvesMissingAttemptsIdempotently() {
-        assertEquals(1, StudentImportService.resolveInferredAttempt(null, false));
-        assertEquals(1, StudentImportService.resolveInferredAttempt(0, false));
-        assertEquals(1, StudentImportService.resolveInferredAttempt(1, true));
-        assertEquals(2, StudentImportService.resolveInferredAttempt(1, false));
-        assertEquals(3, StudentImportService.resolveInferredAttempt(2, false));
-        assertEquals(2, StudentImportService.resolveInferredAttempt(2, true));
+    void calculatesExpirationFromTheLastApprovedApplicationAndNeverFromAdmission() {
+        assertEquals(LocalDate.of(2027, 11, 26), StudentImportService.expirationForImport(
+                "TECHNOLOGICAL", LocalDate.of(2025, 11, 26)));
+        assertEquals(LocalDate.of(2027, 5, 18), StudentImportService.expirationForImport(
+                "DEVELOPMENT_SECURITY", LocalDate.of(2026, 5, 18)));
+        assertEquals(LocalDate.of(2027, 5, 18), StudentImportService.expirationForImport(
+                "NORMATIVE_TESTING", LocalDate.of(2026, 5, 18)));
+        assertNull(StudentImportService.expirationForImport("ONE", LocalDate.of(2026, 5, 18)));
+        assertNull(StudentImportService.expirationForImport("AGILE", LocalDate.of(2026, 5, 18)));
+        assertNull(StudentImportService.expirationForImport("JIRA", LocalDate.of(2026, 5, 18)));
+    }
+
+    @Test
+    void identifiesRecertificationOnlyWhenThereIsAnApprovedReferenceDate() {
+        assertEquals("RECERTIFICATION", StudentImportService.processTypeForImport(
+                "TECHNOLOGICAL", LocalDate.of(2025, 11, 26)));
+        assertEquals("CERTIFICATION", StudentImportService.processTypeForImport(
+                "TECHNOLOGICAL", null));
+        assertEquals("CERTIFICATION", StudentImportService.processTypeForImport(
+                "ONE", LocalDate.of(2025, 11, 26)));
+    }
+
+    @Test
+    void recognizesEvidenceOfPriorApproval() {
+        assertTrue(StudentImportService.statusIndicatesPriorApproval("Aprobada"));
+        assertTrue(StudentImportService.statusIndicatesPriorApproval("Vigente — Regular"));
+        assertTrue(StudentImportService.statusIndicatesPriorApproval("Vencida"));
+        assertFalse(StudentImportService.statusIndicatesPriorApproval("No aprobada"));
+        assertFalse(StudentImportService.statusIndicatesPriorApproval("Sin presentar"));
     }
 
     @Test
@@ -114,6 +142,10 @@ class StudentImportServiceParsingTest {
                 StudentImportService.normalizeImportCertificationStatus("AGILE", "SI"));
         assertEquals("Sin presentar",
                 StudentImportService.normalizeImportCertificationStatus("AGILE", "EN TIEMPO"));
+        assertEquals("Aprobada",
+                StudentImportService.normalizeImportCertificationStatus("JIRA", "FORMADO"));
+        assertEquals("Sin presentar",
+                StudentImportService.normalizeImportCertificationStatus("JIRA", "PENDIENTE DE FORMACIÓN"));
         assertEquals("No aplica",
                 StudentImportService.normalizeImportCertificationStatus("TECHNOLOGICAL", "NO APLICA"));
     }
@@ -127,12 +159,20 @@ class StudentImportServiceParsingTest {
     }
 
     @Test
-    void comparesAttemptsOnlyWhenTheSpreadsheetContainsAnAttemptColumn() {
+    void mapsRejectedExamStatusesBeforeApprovedTextFragments() {
+        assertEquals("FAILED", StudentImportService.internalExamStatus("NO APROBADO"));
+        assertEquals("FAILED", StudentImportService.internalExamStatus("REPROBADO"));
+        assertEquals("PASSED", StudentImportService.internalExamStatus("APROBADO"));
+        assertEquals("NOT_SCHEDULED", StudentImportService.internalExamStatus(null));
+    }
+
+    @Test
+    void importsAdministrativeFailuresOnlyForSpreadsheetAttemptColumns() {
         assertTrue(StudentImportService.importsAttempt("TECHNOLOGICAL"));
         assertTrue(StudentImportService.importsAttempt("DEVELOPMENT_SECURITY"));
         assertFalse(StudentImportService.importsAttempt("NORMATIVE_TESTING"));
         assertFalse(StudentImportService.importsAttempt("ONE"));
         assertFalse(StudentImportService.importsAttempt("AGILE"));
+        assertFalse(StudentImportService.importsAttempt("JIRA"));
     }
-
 }

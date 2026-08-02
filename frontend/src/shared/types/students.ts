@@ -39,6 +39,7 @@ export interface StudentSummary {
   appliesNormativeTesting: boolean
   appliesOne: boolean
   appliesAgile: boolean
+  appliesJira: boolean
 }
 
 export interface StudentDetail extends StudentSummary {
@@ -82,6 +83,7 @@ export interface StudentCertificationFlags {
   appliesNormativeTesting: boolean
   appliesOne: boolean
   appliesAgile: boolean
+  appliesJira: boolean
 }
 
 export interface CreateStudentPayload {
@@ -102,6 +104,7 @@ export interface CreateStudentPayload {
   appliesNormativeTesting?: boolean
   appliesOne?: boolean
   appliesAgile?: boolean
+  appliesJira?: boolean
 }
 
 export interface UpdateStudentPayload {
@@ -119,6 +122,7 @@ export interface UpdateStudentPayload {
   appliesNormativeTesting?: boolean
   appliesOne?: boolean
   appliesAgile?: boolean
+  appliesJira?: boolean
   version: number
 }
 

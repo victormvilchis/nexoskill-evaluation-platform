@@ -7,6 +7,8 @@ import static org.mockito.Mockito.verify;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
+import com.nexoskill.evaluation.certifications.domain.CertificationExamStatus;
+import com.nexoskill.evaluation.certifications.domain.CertificationTrackingStatus;
 import com.nexoskill.evaluation.certifications.domain.CertificationType;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
@@ -78,8 +80,33 @@ class StudentCertificationServiceAuthorizationTest {
         assertThat(StudentCertificationService.requiresApplicationDate(
                 CertificationType.AGILE, true)).isFalse();
         assertThat(StudentCertificationService.requiresApplicationDate(
+                CertificationType.JIRA, true)).isFalse();
+        assertThat(StudentCertificationService.requiresApplicationDate(
                 CertificationType.TECHNOLOGICAL, false)).isFalse();
         assertThat(StudentCertificationService.requiresApplicationDate(
                 CertificationType.TECHNOLOGICAL, null)).isFalse();
     }
+    @Test
+    void summarizesManualResultsWithoutInventingExamDataForNonExpiringCertifications() {
+        CertificationModels.CycleCommand approved = new CertificationModels.CycleCommand(
+                null, CertificationType.TECHNOLOGICAL, null, null, true,
+                CertificationTrackingStatus.APPROVED, null, LocalDate.of(2025, 11, 26), true,
+                null, null, null, true, null, java.util.List.of());
+        CertificationModels.CycleCommand failed = new CertificationModels.CycleCommand(
+                null, CertificationType.DEVELOPMENT_SECURITY, null, null, false,
+                CertificationTrackingStatus.NOT_APPROVED, null, LocalDate.of(2026, 5, 18), false,
+                null, null, null, true, null, java.util.List.of());
+        CertificationModels.CycleCommand nonExpiring = new CertificationModels.CycleCommand(
+                null, CertificationType.JIRA, null, null, false,
+                CertificationTrackingStatus.APPROVED, null, null, true,
+                null, null, null, true, null, java.util.List.of());
+
+        assertThat(StudentCertificationService.manualExamStatus(CertificationType.TECHNOLOGICAL, approved))
+                .isEqualTo(CertificationExamStatus.PASSED);
+        assertThat(StudentCertificationService.manualExamStatus(CertificationType.DEVELOPMENT_SECURITY, failed))
+                .isEqualTo(CertificationExamStatus.FAILED);
+        assertThat(StudentCertificationService.manualExamStatus(CertificationType.JIRA, nonExpiring))
+                .isEqualTo(CertificationExamStatus.NOT_SCHEDULED);
+    }
+
 }

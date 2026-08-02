@@ -82,7 +82,7 @@ class StudentFoundationServiceTest {
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
                 null, "ST-99", "student@example.com", "Nombre", "Apellidos", null, StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY,
                 "00000000-0000-0000-0000-000000000031", null,
-                false, false, false, false, false);
+                false, false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
                 new StudentService.Actor(7L, "127.0.0.1", "test")));
         assertThat(exception.getCode()).isEqualTo("STUDENT_CERTIFICATIONS_NOT_ENABLED");
@@ -94,7 +94,7 @@ class StudentFoundationServiceTest {
         StudentFoundationService.CreateCommand command = new StudentFoundationService.CreateCommand(
                 tenant.organizationPublicId(), "ST-99", "student@example.com", "Nombre", "Apellidos",
                 null, StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), null,
-                null, null, false, false, false, false, false);
+                null, null, false, false, false, false, false, false);
         BusinessException exception = assertThrows(BusinessException.class, () -> service.create(tenant, command,
                 new StudentService.Actor(7L, "127.0.0.1", "test")));
         assertThat(exception.getCode()).isEqualTo("STUDENT_ORGANIZATION_FORBIDDEN");
