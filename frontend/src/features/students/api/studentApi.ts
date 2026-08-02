@@ -86,7 +86,7 @@ export function deactivateStudent(publicId: string) {
   return apiRequest<StudentDetail>(`/admin/students/${publicId}/deactivate`, { method: 'POST' })
 }
 
-export function permanentlyDeleteStudent(publicId: string) {
+export function deleteStudent(publicId: string) {
   return apiRequest<StudentDeletionResult>(`/admin/students/${publicId}?confirmed=true`, { method: 'DELETE' })
 }
 

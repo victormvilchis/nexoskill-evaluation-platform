@@ -6,7 +6,7 @@ import {
   deactivateStudent,
   getStudentAdministration,
   getStudentAdministrativeHistory,
-  permanentlyDeleteStudent,
+  deleteStudent,
   resetStudentPassword,
   revokeAllStudentSessions,
   revokeStudentSession
@@ -175,19 +175,19 @@ export function StudentManagementPage() {
     }
   }
 
-  async function executePermanentDelete() {
+  async function executeDelete() {
     if (!deleteConfirmed) return
     setBusy(true)
     setError(undefined)
     try {
-      await permanentlyDeleteStudent(publicId)
-      toast.success('Colaborador eliminado permanentemente',
-        'La cuenta y la información exclusiva del colaborador fueron eliminadas. La operación no puede deshacerse.')
+      await deleteStudent(publicId)
+      toast.success('Colaborador eliminado',
+        'La cuenta quedó eliminada lógicamente; sus históricos, resultados y certificaciones se conservaron.')
       navigate('/admin/students', { replace: true })
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
-        : 'No fue posible eliminar permanentemente al colaborador.')
+        : 'No fue posible eliminar al colaborador.')
     } finally {
       setBusy(false)
     }
@@ -300,10 +300,10 @@ export function StudentManagementPage() {
 
       {permissions.has('STUDENT_DELETE') && (
         <section className="ns-card student-administration-section student-permanent-delete-zone">
-          <div className="ns-card-heading"><div><span className="ns-step">5</span><h2>Zona de eliminación permanente</h2></div></div>
-          <p>La eliminación borra la cuenta, credenciales, sesiones, asignaciones, avances, intentos, resultados, certificaciones y datos personales exclusivos del colaborador. No elimina contenido maestro ni información de otras personas.</p>
+          <div className="ns-card-heading"><div><span className="ns-step">5</span><h2>Eliminación lógica</h2></div></div>
+          <p>La eliminación bloquea el acceso y oculta al colaborador de la operación diaria. Sus identificadores, certificaciones, intentos, resultados, auditoría e históricos se conservan.</p>
           <button className="danger-button" type="button" disabled={busy}
-            onClick={() => { setDeleteConfirmed(false); setDeleteOpen(true) }}>Eliminar permanentemente</button>
+            onClick={() => { setDeleteConfirmed(false); setDeleteOpen(true) }}>Eliminar colaborador</button>
         </section>
       )}
 
@@ -322,14 +322,14 @@ export function StudentManagementPage() {
         confirmLabel="Generar contraseña" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executePasswordReset()} />
 
-      <ConfirmDialog open={deleteOpen} title="Eliminar permanentemente al colaborador"
-        description="Esta acción eliminará permanentemente al colaborador y toda su información asociada. Esta operación no se puede deshacer."
-        confirmLabel="Eliminar permanentemente" tone="danger" busy={busy} confirmDisabled={!deleteConfirmed}
+      <ConfirmDialog open={deleteOpen} title="Eliminar colaborador"
+        description="El colaborador quedará eliminado lógicamente y perderá el acceso. Sus identificadores, certificaciones, resultados e históricos se conservarán."
+        confirmLabel="Eliminar colaborador" tone="danger" busy={busy} confirmDisabled={!deleteConfirmed}
         onCancel={() => { setDeleteOpen(false); setDeleteConfirmed(false) }}
-        onConfirm={() => void executePermanentDelete()}>
+        onConfirm={() => void executeDelete()}>
         <label className="student-delete-confirmation">
           <input type="checkbox" checked={deleteConfirmed} onChange={(event) => setDeleteConfirmed(event.target.checked)} />
-          <span>Entiendo que esta acción eliminará permanentemente al colaborador y toda su información.</span>
+          <span>Confirmo que el colaborador perderá el acceso y que sus históricos se conservarán.</span>
         </label>
       </ConfirmDialog>
 

@@ -24,7 +24,7 @@ public class AdminQuestionCollectionController {
 	@PreAuthorize("hasAuthority('COLLECTION_VIEW')")
 	public CollectionPage search(@RequestParam(required = false) String query,
 			@RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(defaultValue = "0") int page,
-			@RequestParam(defaultValue = "20") int size) {
+			@RequestParam(defaultValue = "10") int size) {
 		return service.search(query, status, page, size);
 	}
 

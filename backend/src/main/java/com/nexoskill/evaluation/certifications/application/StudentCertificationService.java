@@ -422,7 +422,9 @@ public class StudentCertificationService {
     }
 
     private AttemptView addAttemptInternal(Scope scope, String cyclePublicId, AttemptCommand command, Long actorId) {
-        CycleRow cycle = requireCycle(scope, cyclePublicId);
+        // Serializa la numeración por ciclo. El índice único de persistencia permanece como
+        // segunda barrera frente a solicitudes concurrentes o ejecuciones en varios nodos.
+        CycleRow cycle = requireCycleForUpdate(scope, cyclePublicId);
         validateAttemptsSupported(cycle);
         validateAttempt(command);
         Integer next = jdbc.queryForObject("""
@@ -1050,19 +1052,30 @@ public class StudentCertificationService {
     }
 
     private CycleRow requireCycle(Scope scope, String publicId) {
-        List<CycleRow> rows = jdbc.query("""
+        return queryCycle(scope, publicId, false);
+    }
+
+    private CycleRow requireCycleForUpdate(Scope scope, String publicId) {
+        return queryCycle(scope, publicId, true);
+    }
+
+    private CycleRow queryCycle(Scope scope, String publicId, boolean forUpdate) {
+        String sql = """
             SELECT STUDENT_CERTIFICATION_CYCLE_ID, PUBLIC_ID, CERTIFICATION_TYPE, PROCESS_TYPE,
                    TRACKING_STATUS, DEADLINE_DATE, LAST_APPROVED_APPLICATION_DATE,
                    PREVIOUS_APPROVED_CYCLE_ID, ACTIVE, VERSION_NO
               FROM STUDENT_CERTIFICATION_CYCLE
              WHERE PUBLIC_ID = :publicId AND STUDENT_ID = :studentId AND ORGANIZATION_ID = :organizationId
-            """, Map.of("publicId", publicId, "studentId", scope.student().getId(),
-                "organizationId", scope.organizationId()), (rs, rowNum) -> new CycleRow(rs.getLong(1),
-                    rs.getString(2), CertificationType.valueOf(rs.getString(3)),
+            """ + (forUpdate ? " FOR UPDATE" : "");
+        List<CycleRow> rows = jdbc.query(sql, Map.of("publicId", publicId,
+                "studentId", scope.student().getId(), "organizationId", scope.organizationId()),
+                (rs, rowNum) -> new CycleRow(rs.getLong(1), rs.getString(2),
+                    CertificationType.valueOf(rs.getString(3)),
                     CertificationProcessType.valueOf(rs.getString(4)),
                     CertificationTrackingStatus.valueOf(rs.getString(5)), localDate(rs, "DEADLINE_DATE"),
                     localDate(rs, "LAST_APPROVED_APPLICATION_DATE"),
-                    nullableLong(rs, "PREVIOUS_APPROVED_CYCLE_ID"), rs.getBoolean("ACTIVE"), rs.getLong("VERSION_NO")));
+                    nullableLong(rs, "PREVIOUS_APPROVED_CYCLE_ID"), rs.getBoolean("ACTIVE"),
+                    rs.getLong("VERSION_NO")));
         if (rows.isEmpty()) throw new BusinessException("CERTIFICATION_CYCLE_NOT_FOUND", "El ciclo no existe.");
         return rows.getFirst();
     }

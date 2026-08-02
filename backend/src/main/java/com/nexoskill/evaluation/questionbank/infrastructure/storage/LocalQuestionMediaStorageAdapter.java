@@ -48,9 +48,14 @@ public class LocalQuestionMediaStorageAdapter implements QuestionMediaStoragePor
 	}
 
 	public void delete(String key) {
+		Path target = root.resolve(key).normalize();
+		if (!target.startsWith(root))
+			throw new IllegalStateException("Ruta inválida");
 		try {
-			Files.deleteIfExists(root.resolve(key).normalize());
-		} catch (Exception ignored) {
+			Files.deleteIfExists(target);
+		} catch (Exception exception) {
+			throw new BusinessException("QUESTION_MEDIA_DELETE_ERROR",
+					"No fue posible limpiar el archivo de imagen incompleto.");
 		}
 	}
 }

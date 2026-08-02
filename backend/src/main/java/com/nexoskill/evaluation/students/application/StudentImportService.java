@@ -12,6 +12,7 @@ import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.application.importing.XlsxCertificationReader;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.infrastructure.persistence.StudentImportReceiptStore;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import jakarta.persistence.EntityManager;
 import java.io.ByteArrayInputStream;
@@ -74,6 +75,7 @@ public class StudentImportService {
     private final NamedParameterJdbcTemplate jdbc;
     private final Clock clock;
     private final EntityManager entityManager;
+    private final StudentImportReceiptStore importReceipts;
     private final TransactionTemplate rowTransaction;
     private final Map<String, PendingImport> pending = new ConcurrentHashMap<>();
     private final Set<String> applying = ConcurrentHashMap.newKeySet();
@@ -81,7 +83,8 @@ public class StudentImportService {
     public StudentImportService(XlsxCertificationReader reader, StudentFoundationService foundation,
             StudentService studentService, StudentExperienceService experienceService,
             StudentCertificationService certificationService, NamedParameterJdbcTemplate jdbc, Clock clock,
-            PlatformTransactionManager transactionManager, EntityManager entityManager) {
+            PlatformTransactionManager transactionManager, EntityManager entityManager,
+            StudentImportReceiptStore importReceipts) {
         this.reader = reader;
         this.foundation = foundation;
         this.studentService = studentService;
@@ -90,6 +93,7 @@ public class StudentImportService {
         this.jdbc = jdbc;
         this.clock = clock;
         this.entityManager = entityManager;
+        this.importReceipts = importReceipts;
         this.rowTransaction = new TransactionTemplate(transactionManager);
         this.rowTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -276,8 +280,17 @@ public class StudentImportService {
         String normalizedToken = command.token().trim();
         PendingImport state = pending.get(normalizedToken);
         if (state == null) {
+            TenantContext requestTenant = resolveImportTenant(tenant, actor, null);
+            String receiptStatus = importReceipts.status(normalizedToken,
+                    requestTenant.organizationId(), actor.internalId());
+            if (receiptStatus != null) {
+                String message = "PROCESSING".equals(receiptStatus)
+                        ? "La importación ya se está aplicando. Espera a que termine."
+                        : "Esta vista previa ya fue procesada y no puede confirmarse nuevamente.";
+                throw new BusinessException("STUDENT_IMPORT_ALREADY_APPLIED", message);
+            }
             throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
-                    "La vista previa ya no está disponible. Puede haber sido aplicada, descartada o invalidada por un reinicio del backend. Vuelve a validar el archivo.");
+                    "La vista previa ya no está disponible. Puede haber sido descartada o invalidada por un reinicio del backend. Vuelve a validar el archivo.");
         }
         if (state.expiresAt().isBefore(java.time.Instant.now(clock))) {
             pending.remove(normalizedToken, state);
@@ -290,12 +303,13 @@ public class StudentImportService {
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
         Map<String, String> submittedConflictResolutions = indexConflictResolutions(command.conflicts());
-        Map<String, String> conflictResolutions = effectiveConflictResolutions(
-                state, submittedConflictResolutions);
+        Map<String, String> conflictResolutions = effectiveConflictResolutions(state, submittedConflictResolutions);
         if (!applying.add(normalizedToken)) {
             throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
                     "La importación ya se está aplicando. Espera a que termine antes de volver a confirmar.");
         }
+
+        boolean receiptReserved = false;
         try {
             validateSelectedNewStudents(effectiveTenant.organizationId(), state, newSelections);
             validateSelections(state, newSelections, changeSelections, lowSelections, conflictResolutions);
@@ -305,6 +319,11 @@ public class StudentImportService {
                 throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
                         "La vista previa fue descartada antes de iniciar la importación. Vuelve a validar el archivo.");
             }
+
+            importReceipts.reserve(state.token(), state.organizationId(), state.digest(),
+                    state.imported().size(), actor.internalId());
+            receiptReserved = true;
+
             List<ExistingStudent> lowCandidates = existingStudents(effectiveTenant.organizationId());
             List<Credential> credentials = new ArrayList<>();
             List<Issue> applyErrors = new ArrayList<>();
@@ -319,8 +338,7 @@ public class StudentImportService {
                     if (match.existing() != null) {
                         try {
                             rowTransaction.executeWithoutResult(status -> persistConflictDecisions(
-                                    state, imported.rowKey(), match.existing().id(),
-                                    conflictResolutions));
+                                    state, imported.rowKey(), match.existing().id(), conflictResolutions));
                         } catch (RuntimeException exception) {
                             LOGGER.error("Student import conflict decision persistence failed for row {} in organization {}",
                                     imported.rowNumber(), effectiveTenant.organizationId(), exception);
@@ -331,8 +349,9 @@ public class StudentImportService {
                     continue;
                 }
                 try {
-                    RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state, resolvedImported, match,
-                            newSelections, effectiveChangeSelections, conflictResolutions, requestActor, actor));
+                    RowOutcome outcome = rowTransaction.execute(status -> applyRow(effectiveTenant, state,
+                            resolvedImported, match, newSelections, effectiveChangeSelections,
+                            conflictResolutions, requestActor, actor));
                     if (outcome == null) continue;
                     if (outcome.credential() != null) credentials.add(outcome.credential());
                     created += outcome.created();
@@ -362,12 +381,26 @@ public class StudentImportService {
             ApplyResult result = new ApplyResult(created, updated, deactivated, applyErrors, credentials,
                     credentials.isEmpty() ? null
                             : "Las contraseñas temporales se muestran una sola vez. Cópialas antes de cerrar esta vista.");
+            importReceipts.complete(normalizedToken, result.created(), result.updated(),
+                    result.possibleLowsProcessed(), result.errors() == null ? 0 : result.errors().size());
             pending.remove(normalizedToken, state);
             return result;
+        } catch (RuntimeException exception) {
+            if (receiptReserved) {
+                try {
+                    String failureCode = exception instanceof BusinessException business
+                            ? business.getCode() : "STUDENT_IMPORT_UNEXPECTED_ERROR";
+                    importReceipts.fail(normalizedToken, failureCode);
+                } catch (RuntimeException receiptFailure) {
+                    LOGGER.error("Student import receipt failure for token {}", normalizedToken, receiptFailure);
+                }
+            }
+            throw exception;
         } finally {
             applying.remove(normalizedToken);
         }
     }
+
     public void discard(TenantContext tenant, AuthenticatedUser actor, String token) {
         if (token == null || token.isBlank()) return;
         String normalizedToken = token.trim();
@@ -1653,19 +1686,13 @@ public class StudentImportService {
     }
 
     static AuthenticatedUser certificationImportActor(AuthenticatedUser actor, TenantContext tenant) {
-        if (actor == null || actor.roles() == null || !actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)) {
-            return actor;
-        }
-        if (tenant == null || !tenant.hasOrganization() || !tenant.globalAdministrator()) {
+        if (actor == null || tenant == null || actor.roles() == null
+                || actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)
+                || tenant.globalAdministrator() || tenant.globalScope()) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "El Administrador global debe seleccionar una organización autorizada para importar certificaciones.");
+                    "GLOBAL no administra colaboradores comerciales.");
         }
-        Set<String> operationalRoles = new LinkedHashSet<>(actor.roles());
-        operationalRoles.add("MANAGER");
-        return new AuthenticatedUser(actor.internalId(), actor.publicId(), actor.email(), actor.firstName(),
-                actor.lastName(), actor.displayName(), Set.copyOf(operationalRoles), actor.permissions(),
-                actor.lastLoginAt(), actor.accessStatus(), actor.accessStartsAt(), actor.accessExpiresAt(),
-                actor.passwordChangeRequired(), actor.passwordChangedAt(), actor.temporaryPasswordExpiresAt());
+        return actor;
     }
 
     private TenantContext resolveImportTenant(TenantContext tenant, AuthenticatedUser actor,
@@ -1674,19 +1701,11 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
                     "No tienes permisos para importar colaboradores.");
         }
-        if (actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE) && tenant.globalAdministrator()) {
-            if (organizationPublicId == null || organizationPublicId.isBlank()) {
-                throw new BusinessException("STUDENT_IMPORT_ORGANIZATION_REQUIRED",
-                        "Selecciona la organización a la que se cargarán los colaboradores.");
-            }
-            Organization organization = organizationByPublicId(organizationPublicId.trim());
-            return TenantContext.organization(organization.id(), organization.publicId(), organization.code(), true);
-        }
         boolean organizationOperator = actor.roles().stream().anyMatch(ORGANIZATION_OPERATOR_ROLES::contains);
         if (!organizationOperator || tenant.globalScope() || !tenant.hasOrganization()
-                || tenant.globalAdministrator()) {
+                || tenant.globalAdministrator() || actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
-                    "Solo el Administrador global, Gestores y Supervisores autorizados pueden importar colaboradores.");
+                    "Solo Gestores y Supervisores de la organización pueden importar colaboradores.");
         }
         if (organizationPublicId != null && !organizationPublicId.isBlank()
                 && !organizationPublicId.trim().equals(tenant.organizationPublicId())) {
@@ -1701,11 +1720,6 @@ public class StudentImportService {
         if (state == null || actor == null || !Objects.equals(state.actorId(), actor.internalId())) {
             throw new BusinessException("STUDENT_IMPORT_FORBIDDEN",
                     "La vista previa pertenece a otro usuario.");
-        }
-        if (actor.roles() != null && actor.roles().contains(GLOBAL_ADMINISTRATOR_ROLE)
-                && tenant != null && tenant.globalAdministrator()) {
-            return TenantContext.organization(state.organization().id(), state.organization().publicId(),
-                    state.organization().code(), true);
         }
         TenantContext effective = resolveImportTenant(tenant, actor, null);
         if (!Objects.equals(state.organizationId(), effective.organizationId())) {

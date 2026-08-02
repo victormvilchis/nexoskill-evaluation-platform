@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.questionbank.application.service;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.port.out.QuestionCollectionPort;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +43,8 @@ public class CollectionService {
 				throw new BusinessException("COLLECTION_STATUS_INVALID", "El estado de colección no es válido.");
 			}
 		}
-		return port.search(q, status, Math.max(p, 0), Math.min(Math.max(z, 1), 100));
+		PaginationParameters.validate(p, z);
+		return port.search(q, status, p, z);
 	}
 
 	@Transactional

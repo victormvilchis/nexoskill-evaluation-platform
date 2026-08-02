@@ -337,13 +337,17 @@ public class StudentService {
     }
 
     Long requireOrganization(TenantContext tenant) {
-        if (tenant == null || !tenant.hasOrganization()) {
-            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización para administrar estudiantes.",
-                    Map.of("organizationPublicId", "Debes seleccionar una organización."));
+        if (tenant == null || !tenant.hasOrganization() || tenant.globalScope() || tenant.globalAdministrator()) {
+            throw new BusinessException("STUDENT_GLOBAL_FORBIDDEN",
+                    "GLOBAL no administra colaboradores comerciales.");
         }
         OrganizationJpaEntity organization = organizationRepository.findById(tenant.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe.",
-                        Map.of("organizationPublicId", "La organización seleccionada no existe.")));
+                        Map.of("organizationPublicId", "La organización asignada no existe.")));
+        if (organization.isGlobal()) {
+            throw new BusinessException("STUDENT_GLOBAL_FORBIDDEN",
+                    "GLOBAL no administra colaboradores comerciales.");
+        }
         return organization.getId();
     }
 

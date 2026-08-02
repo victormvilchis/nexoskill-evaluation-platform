@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.globalcontent.infrastructure.persistence;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ContentResource;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.Dependency;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ReviewFilter;
+import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ReviewPage;
 import com.nexoskill.evaluation.globalcontent.application.port.out.GlobalContentResourcePort;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
@@ -41,34 +42,30 @@ public class OracleGlobalContentResourceAdapter implements GlobalContentResource
     }
 
     @Override
-    public List<ContentResource> review(ReviewFilter filter) {
+    public ReviewPage review(ReviewFilter filter) {
         List<GlobalContentType> types = filter.contentType() == null
                 ? List.of(GlobalContentType.CATEGORY, GlobalContentType.QUESTION,
                         GlobalContentType.FORM, GlobalContentType.COLLECTION)
                 : List.of(filter.contentType());
-        List<ContentResource> result = new ArrayList<>();
-        for (GlobalContentType type : types) {
-            result.addAll(loadAll(type));
+        String union = reviewUnion(types);
+        String where = reviewWhere();
+        MapSqlParameterSource parameters = reviewParameters(filter);
+
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM (" + union + ") content " + where,
+                parameters, Long.class);
+        long totalElements = total == null ? 0L : total;
+        if (totalElements == 0L) {
+            return new ReviewPage(List.of(), filter.page(), filter.size(), 0L, 0);
         }
-        String query = normalize(filter.query());
-        return result.stream()
-                .filter(resource -> query == null || searchable(resource).contains(query))
-                .filter(resource -> filter.organizationPublicId() == null || filter.organizationPublicId().isBlank()
-                        || Objects.equals(resource.ownerOrganizationPublicId(), filter.organizationPublicId()))
-                .filter(resource -> filter.scope() == null || resource.scope() == filter.scope())
-                .filter(resource -> filter.status() == null || filter.status().isBlank()
-                        || "ALL".equalsIgnoreCase(filter.status())
-                        || resource.status().equalsIgnoreCase(filter.status()))
-                .filter(resource -> filter.creatorUserId() == null
-                        || Objects.equals(resource.createdBy(), filter.creatorUserId()))
-                .filter(resource -> filter.createdFrom() == null
-                        || !resource.createdAt().isBefore(filter.createdFrom()))
-                .filter(resource -> filter.createdTo() == null
-                        || !resource.createdAt().isAfter(filter.createdTo()))
-                .filter(resource -> filter.promoted() == null || resource.promoted() == filter.promoted())
-                .filter(resource -> filter.distributed() == null || resource.distributed() == filter.distributed())
-                .sorted(Comparator.comparing(ContentResource::createdAt).reversed())
-                .toList();
+
+        parameters.addValue("offset", (long) filter.page() * filter.size())
+                .addValue("pageSize", filter.size());
+        String sql = "SELECT * FROM (" + union + ") content " + where
+                + " ORDER BY content.CREATED_AT DESC, content.CONTENT_TYPE, content.CONTENT_ID"
+                + " OFFSET :offset ROWS FETCH NEXT :pageSize ROWS ONLY";
+        List<ContentResource> content = jdbc.query(sql, parameters, this::mapReviewResource);
+        int totalPages = (int) Math.ceil(totalElements / (double) filter.size());
+        return new ReviewPage(content, filter.page(), filter.size(), totalElements, totalPages);
     }
 
     @Override
@@ -166,6 +163,90 @@ public class OracleGlobalContentResourceAdapter implements GlobalContentResource
                         + " WHERE " + idColumn(type) + " = :id AND CONTENT_SCOPE = 'GLOBAL'",
                 new MapSqlParameterSource().addValue("status", status).addValue("actor", actorUserId)
                         .addValue("id", internalId));
+    }
+
+    private String reviewUnion(List<GlobalContentType> types) {
+        return types.stream().map(this::reviewSelect).collect(java.util.stream.Collectors.joining(" UNION ALL "));
+    }
+
+    private String reviewSelect(GlobalContentType type) {
+        String typeName = type.name();
+        return "SELECT '" + typeName + "' CONTENT_TYPE, source.*, "
+                + promotedExpression(typeName) + " PROMOTED_FLAG, "
+                + distributedExpression(typeName) + " DISTRIBUTED_FLAG FROM ("
+                + baseSelect(type) + ") source";
+    }
+
+    private String promotedExpression(String typeName) {
+        return "CASE WHEN EXISTS (SELECT 1 FROM GLOBAL_CONTENT_PROMOTION promotion "
+                + "WHERE promotion.SOURCE_CONTENT_TYPE = '" + typeName + "' "
+                + "AND promotion.SOURCE_CONTENT_ID = source.CONTENT_ID "
+                + "AND promotion.SOURCE_VERSION = source.VERSION_NO) THEN 1 ELSE 0 END";
+    }
+
+    private String distributedExpression(String typeName) {
+        return "CASE WHEN (source.CONTENT_SCOPE = 'GLOBAL' AND EXISTS ("
+                + "SELECT 1 FROM ORGANIZATION_GLOBAL_CONTENT_GRANT grant_value "
+                + "WHERE grant_value.CONTENT_TYPE = '" + typeName + "' "
+                + "AND grant_value.GLOBAL_CONTENT_ID = source.CONTENT_ID "
+                + "AND grant_value.STATUS = 'ACTIVE')) OR "
+                + "(source.CONTENT_SCOPE = 'ORGANIZATION' AND EXISTS ("
+                + "SELECT 1 FROM GLOBAL_CONTENT_PROMOTION promotion "
+                + "JOIN ORGANIZATION_GLOBAL_CONTENT_GRANT grant_value "
+                + "ON grant_value.CONTENT_TYPE = promotion.SOURCE_CONTENT_TYPE "
+                + "AND grant_value.GLOBAL_CONTENT_ID = promotion.GLOBAL_CONTENT_ID "
+                + "AND grant_value.STATUS = 'ACTIVE' "
+                + "WHERE promotion.SOURCE_CONTENT_TYPE = '" + typeName + "' "
+                + "AND promotion.SOURCE_CONTENT_ID = source.CONTENT_ID "
+                + "AND promotion.PROMOTION_STATUS = 'PUBLISHED')) THEN 1 ELSE 0 END";
+    }
+
+    private String reviewWhere() {
+        return " WHERE (:query IS NULL OR LOWER(content.CONTENT_NAME || ' ' || "
+                + "NVL(content.CONTENT_DESCRIPTION, '') || ' ' || "
+                + "NVL(content.OWNER_ORGANIZATION_NAME, '') || ' ' || content.CONTENT_TYPE) LIKE :query)"
+                + " AND (:organizationPublicId IS NULL OR content.OWNER_ORGANIZATION_PUBLIC_ID = :organizationPublicId)"
+                + " AND (:scope IS NULL OR content.CONTENT_SCOPE = :scope)"
+                + " AND (:status IS NULL OR UPPER(content.STATUS) = :status)"
+                + " AND (:creatorUserId IS NULL OR content.CREATED_BY = :creatorUserId)"
+                + " AND (:createdFrom IS NULL OR content.CREATED_AT >= :createdFrom)"
+                + " AND (:createdTo IS NULL OR content.CREATED_AT <= :createdTo)"
+                + " AND (:promoted IS NULL OR content.PROMOTED_FLAG = :promoted)"
+                + " AND (:distributed IS NULL OR content.DISTRIBUTED_FLAG = :distributed)";
+    }
+
+    private MapSqlParameterSource reviewParameters(ReviewFilter filter) {
+        String query = normalize(filter.query());
+        String status = normalize(filter.status());
+        if ("all".equals(status)) status = null;
+        return new MapSqlParameterSource()
+                .addValue("query", query == null ? null : "%" + query + "%")
+                .addValue("organizationPublicId", normalizeBlank(filter.organizationPublicId()))
+                .addValue("scope", filter.scope() == null ? null : filter.scope().name())
+                .addValue("status", status == null ? null : status.toUpperCase(Locale.ROOT))
+                .addValue("creatorUserId", filter.creatorUserId())
+                .addValue("createdFrom", filter.createdFrom() == null ? null : Timestamp.from(filter.createdFrom()))
+                .addValue("createdTo", filter.createdTo() == null ? null : Timestamp.from(filter.createdTo()))
+                .addValue("promoted", filter.promoted() == null ? null : filter.promoted() ? 1 : 0)
+                .addValue("distributed", filter.distributed() == null ? null : filter.distributed() ? 1 : 0);
+    }
+
+    private ContentResource mapReviewResource(ResultSet rs, int rowNum) throws SQLException {
+        GlobalContentType type = GlobalContentType.valueOf(rs.getString("CONTENT_TYPE"));
+        Long id = rs.getLong("CONTENT_ID");
+        return new ContentResource(type, id, rs.getString("PUBLIC_ID"), rs.getString("CONTENT_NAME"),
+                rs.getString("CONTENT_DESCRIPTION"), rs.getString("STATUS"),
+                ContentScope.valueOf(rs.getString("CONTENT_SCOPE")),
+                nullableLong(rs, "OWNER_ORGANIZATION_ID"), rs.getString("OWNER_ORGANIZATION_PUBLIC_ID"),
+                rs.getString("OWNER_ORGANIZATION_NAME"), nullableLong(rs, "CREATED_BY"),
+                instant(rs.getObject("CREATED_AT")), nullableLong(rs, "UPDATED_BY"),
+                instant(rs.getObject("UPDATED_AT")), rs.getLong("VERSION_NO"),
+                rs.getInt("PROMOTED_FLAG") == 1, rs.getInt("DISTRIBUTED_FLAG") == 1,
+                functionalHash(type, id));
+    }
+
+    private String normalizeBlank(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private List<ContentResource> loadAll(GlobalContentType type) {

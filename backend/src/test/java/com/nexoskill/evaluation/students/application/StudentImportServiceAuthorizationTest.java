@@ -2,7 +2,6 @@ package com.nexoskill.evaluation.students.application;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nexoskill.evaluation.authentication.infrastructure.security.AuthenticatedUser;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
@@ -13,15 +12,12 @@ import org.junit.jupiter.api.Test;
 class StudentImportServiceAuthorizationTest {
 
     @Test
-    void adaptsGlobalAdministratorOnlyForOrganizationScopedCertificationImport() {
+    void rejectsGlobalAdministratorEvenWithSelectedCommercialOrganization() {
         AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
         TenantContext organization = TenantContext.organization(10L, "org-public", "ORG", true);
 
-        AuthenticatedUser adapted = StudentImportService.certificationImportActor(administrator, organization);
-
-        assertTrue(adapted.roles().contains("ADMINISTRATOR"));
-        assertTrue(adapted.roles().contains("MANAGER"));
-        assertSame(administrator.permissions(), adapted.permissions());
+        assertThrows(BusinessException.class,
+                () -> StudentImportService.certificationImportActor(administrator, organization));
     }
 
     @Test
@@ -38,6 +34,15 @@ class StudentImportServiceAuthorizationTest {
 
         assertThrows(BusinessException.class,
                 () -> StudentImportService.certificationImportActor(administrator, null));
+    }
+
+    @Test
+    void rejectsOrganizationOperatorWhenTenantIsGlobal() {
+        AuthenticatedUser supervisor = actor(Set.of("SUPERVISOR"));
+
+        assertThrows(BusinessException.class,
+                () -> StudentImportService.certificationImportActor(supervisor,
+                        TenantContext.global(1L, "global-public", "GLOBAL")));
     }
 
     private AuthenticatedUser actor(Set<String> roles) {

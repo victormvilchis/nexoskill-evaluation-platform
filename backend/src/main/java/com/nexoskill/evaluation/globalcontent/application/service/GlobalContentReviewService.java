@@ -5,6 +5,7 @@ import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentMod
 import com.nexoskill.evaluation.globalcontent.application.port.out.GlobalContentResourcePort;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.shared.interfaces.rest.PaginationParameters;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,22 +32,17 @@ public class GlobalContentReviewService {
             throw new BusinessException("GLOBAL_CONTENT_REVIEW_CONTEXT_REQUIRED",
                     "Selecciona una organización o el alcance GLOBAL para realizar la consulta transversal.");
         }
-        int page = Math.max(0, filter.page());
-        int size = Math.min(Math.max(1, filter.size()), 100);
-        List<ContentResource> all = resources.review(filter);
-        int from = Math.min(page * size, all.size());
-        int to = Math.min(from + size, all.size());
-        int totalPages = all.isEmpty() ? 0 : (int) Math.ceil(all.size() / (double) size);
-        ReviewPage result = new ReviewPage(List.copyOf(all.subList(from, to)), page, size, all.size(), totalPages);
+        PaginationParameters.validate(filter.page(), filter.size());
+        ReviewPage result = resources.review(filter);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("organizationPublicId", filter.organizationPublicId());
         data.put("contentType", filter.contentType() == null ? null : filter.contentType().name());
         data.put("scope", filter.scope() == null ? null : filter.scope().name());
         data.put("status", filter.status());
-        data.put("page", page);
-        data.put("size", size);
-        data.put("totalElements", all.size());
+        data.put("page", result.page());
+        data.put("size", result.size());
+        data.put("totalElements", result.totalElements());
         audit.record(actorUserId, "GLOBAL_CONTENT_TRANSVERSAL_REVIEW", "GLOBAL_CONTENT",
                 "Consulta transversal de contenido organizacional y global.", null, null, data, clock.instant());
         return result;

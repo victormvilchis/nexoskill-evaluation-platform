@@ -8,6 +8,7 @@ import com.nexoskill.evaluation.globalcontent.application.service.GlobalContentA
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
+import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.questionbank.application.model.*;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionOperationContextPolicy;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionCreationTargetResolver;
@@ -41,6 +42,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private final Clock clock;
     private final TenantContextResolver tenantContextResolver;
     private final GlobalContentAccessPolicy accessPolicy;
+    private final QuestionMediaAccessPolicy mediaAccessPolicy;
     private final QuestionOperationContextPolicy operationContextPolicy;
     private final QuestionCreationTargetResolver creationTargetResolver;
     private final ContentSynchronizationService synchronization;
@@ -62,6 +64,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
             Clock clock,
             TenantContextResolver tenantContextResolver,
             GlobalContentAccessPolicy accessPolicy,
+            QuestionMediaAccessPolicy mediaAccessPolicy,
             QuestionOperationContextPolicy operationContextPolicy,
             QuestionCreationTargetResolver creationTargetResolver,
             ContentSynchronizationService synchronization,
@@ -81,6 +84,7 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         this.clock = clock;
         this.tenantContextResolver = tenantContextResolver;
         this.accessPolicy = accessPolicy;
+        this.mediaAccessPolicy = mediaAccessPolicy;
         this.operationContextPolicy = operationContextPolicy;
         this.creationTargetResolver = creationTargetResolver;
         this.synchronization = synchronization;
@@ -100,12 +104,14 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 UUID.randomUUID().toString(), selection.type(), difficulty(command.difficultyCode()),
                 technology(command.technologyPublicId(), ownership.scope(), ownership.organizationId()), command.levelCode(), selection.categories(),
                 trim(command.statement()), nullable(command.explanation()),
-                optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
+                optionalMedia(command.promptMediaPublicId(), command.actorUserId(),
+                        ownership.scope(), ownership.organizationId()), javaLanguage(command.codeContent()),
                 nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
                 settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
                 null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
         entity.assignOwnership(ownership.scope(), ownership.organizationId());
-        addOptions(entity, command.options());
+        addOptions(entity, command.options(), command.actorUserId(),
+                ownership.scope(), ownership.organizationId());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
         tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
                 saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
@@ -139,12 +145,14 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         entity.apply(selection.type(), difficulty(command.difficultyCode()),
                 technology(command.technologyPublicId(), entity.getContentScope(), entity.getOwnerOrganizationId()), command.levelCode(), selection.categories(),
                 trim(command.statement()), nullable(command.explanation()),
-                optionalMedia(command.promptMediaPublicId()), javaLanguage(command.codeContent()),
+                optionalMedia(command.promptMediaPublicId(), command.actorUserId(),
+                        entity.getContentScope(), entity.getOwnerOrganizationId()), javaLanguage(command.codeContent()),
                 nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
                 settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
                 null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
         markCustomized(entity);
-        addOptions(entity, command.options());
+        addOptions(entity, command.options(), command.actorUserId(),
+                entity.getContentScope(), entity.getOwnerOrganizationId());
         QuestionJpaEntity saved = questions.saveAndFlush(entity);
         tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
                 saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
@@ -411,7 +419,8 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                 null, null, data, clock.instant());
     }
 
-    private void addOptions(QuestionJpaEntity entity, List<QuestionOptionCommand> commands) {
+    private void addOptions(QuestionJpaEntity entity, List<QuestionOptionCommand> commands, Long actorUserId,
+            ContentScope targetScope, Long targetOrganizationId) {
         int order = 1;
         for (var command : commands) {
             entity.addOption(QuestionOptionJpaEntity.create(
@@ -419,9 +428,9 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
                     UUID.randomUUID().toString(),
                     order++,
                     nullable(command.text()),
-                    optionalMedia(command.mediaPublicId()),
+                    optionalMedia(command.mediaPublicId(), actorUserId, targetScope, targetOrganizationId),
                     nullable(command.matchText()),
-                    optionalMedia(command.matchMediaPublicId()),
+                    optionalMedia(command.matchMediaPublicId(), actorUserId, targetScope, targetOrganizationId),
                     command.correct(),
                     nullable(command.feedback()),
                     clock.instant()));
@@ -645,12 +654,16 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
     private String trim(String value) { return value == null ? null : value.trim(); }
     private String nullable(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
-    private QuestionMediaJpaEntity optionalMedia(String id) {
+    private QuestionMediaJpaEntity optionalMedia(String id, Long actorUserId,
+            ContentScope targetScope, Long targetOrganizationId) {
         if (id == null || id.isBlank()) return null;
         String normalized = PublicIdNormalizer.requiredUuid(id, "QUESTION_MEDIA_INVALID",
                 "La imagen indicada no es válida.");
-        return media.findByPublicId(normalized)
+        QuestionMediaJpaEntity value = media.findByPublicId(normalized)
                 .orElseThrow(() -> error("QUESTION_MEDIA_NOT_FOUND", "La imagen indicada no existe."));
+        TenantContext tenant = tenantContextResolver.resolve(request);
+        mediaAccessPolicy.assertAssignable(value, actorUserId, tenant, targetScope, targetOrganizationId);
+        return value;
     }
 
     private String writeAnswers(List<String> answers) {

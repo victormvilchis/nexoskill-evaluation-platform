@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.globalcontent.application.port.out;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ContentResource;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.Dependency;
 import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ReviewFilter;
+import com.nexoskill.evaluation.globalcontent.application.model.GlobalContentModels.ReviewPage;
 import com.nexoskill.evaluation.globalcontent.domain.model.GlobalContentType;
 import java.util.List;
 import java.util.Map;
@@ -10,7 +11,7 @@ import java.util.Map;
 public interface GlobalContentResourcePort {
     record ResourceKey(GlobalContentType type, Long internalId) {}
 
-    List<ContentResource> review(ReviewFilter filter);
+    ReviewPage review(ReviewFilter filter);
     ContentResource find(GlobalContentType type, String publicId);
     ContentResource findByInternalId(GlobalContentType type, Long internalId);
     List<Dependency> dependencies(GlobalContentType type, Long internalId);

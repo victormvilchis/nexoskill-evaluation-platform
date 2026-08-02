@@ -39,12 +39,13 @@ class StudentJpaEntityTest {
     }
 
     @Test
-    void marksDeletionOnlyAsATransientStateBeforePhysicalPurge() {
+    void softDeletesAndPreservesDeletionAuditMetadata() {
         StudentJpaEntity student = student(StudentStatus.ACTIVE, TODAY.minusDays(1), TODAY.plusDays(30));
-        student.markDeleting(9L, NOW);
+        student.softDelete(9L, NOW, "ELIMINACIÓN LÓGICA DE PRUEBA");
         assertThat(student.getStatus()).isEqualTo(StudentStatus.DELETED);
         assertThat(student.getDeletedAt()).isEqualTo(NOW);
-        assertThat(student.getDeletionReason()).isEqualTo("PERMANENT_DELETION_IN_PROGRESS");
+        assertThat(student.getDeletedBy()).isEqualTo(9L);
+        assertThat(student.getDeletionReason()).isEqualTo("ELIMINACIÓN LÓGICA DE PRUEBA");
         assertThat(student.canAuthenticateOn(TODAY, NOW)).isFalse();
     }
 

@@ -184,66 +184,31 @@ public class StudentFoundationService {
     @Transactional(readOnly = true)
     public TenantContext effectiveTenantForStudent(TenantContext tenant, String publicId) {
         requireTenant(tenant);
-        if (!tenant.globalAdministrator()) return tenant;
-        List<TenantContext> rows = jdbc.query("""
-            SELECT o.ORGANIZATION_ID, o.PUBLIC_ID, o.ORGANIZATION_CODE
-              FROM STUDENT s
-              JOIN ORGANIZATION o ON o.ORGANIZATION_ID = s.ORGANIZATION_ID
-             WHERE s.PUBLIC_ID = :publicId
-               AND s.STATUS <> 'DELETED'
-               AND o.ORGANIZATION_TYPE = 'CUSTOMER'
-            """, Map.of("publicId", publicId), (rs, rowNum) -> TenantContext.organization(
-                rs.getLong("ORGANIZATION_ID"), rs.getString("PUBLIC_ID"),
-                rs.getString("ORGANIZATION_CODE"), true));
-        if (rows.isEmpty()) throw new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe.");
-        return rows.getFirst();
+        return tenant;
     }
 
     private OrganizationJpaEntity resolveCatalogOrganization(TenantContext tenant, String organizationPublicId) {
         requireTenant(tenant);
-        OrganizationJpaEntity organization;
-        if (tenant.globalAdministrator()) {
-            if (organizationPublicId != null && !organizationPublicId.isBlank()) {
-                organization = organizationRepository.findByPublicId(organizationPublicId.trim())
-                        .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
-            } else if (!tenant.globalScope() && tenant.hasOrganization()) {
-                organization = organizationRepository.findById(tenant.organizationId())
-                        .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
-            } else {
-                throw new BusinessException("STUDENT_ORGANIZATION_REQUIRED",
-                        "Selecciona la organización del estudiante antes de consultar sus catálogos.");
-            }
-        } else {
-            if (organizationPublicId != null && !organizationPublicId.isBlank()) {
-                throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
-                        "La organización se obtiene de la sesión autenticada.");
-            }
-            organization = organizationRepository.findById(tenant.organizationId())
-                    .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+        if (organizationPublicId != null && !organizationPublicId.isBlank()
+                && !organizationPublicId.trim().equals(tenant.organizationPublicId())) {
+            throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
+                    "La organización se obtiene de la sesión autenticada.");
         }
+        OrganizationJpaEntity organization = organizationRepository.findById(tenant.organizationId())
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
         validateOperationalOrganization(organization.getId());
         return organization;
     }
 
     private TenantContext resolveCreateTenant(TenantContext tenant, String organizationPublicId) {
         requireTenant(tenant);
-        if (!tenant.globalAdministrator()) {
-            if (organizationPublicId != null && !organizationPublicId.isBlank()) {
-                throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
-                        "La organización del estudiante se obtiene de la sesión autenticada.",
-                        Map.of("organizationPublicId", "No envíes una organización; se asigna automáticamente desde tu sesión."));
-            }
-            validateOperationalOrganization(tenant.organizationId());
-            return tenant;
+        if (organizationPublicId != null && !organizationPublicId.isBlank()) {
+            throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
+                    "La organización del colaborador se obtiene de la sesión autenticada.",
+                    Map.of("organizationPublicId", "No envíes una organización; se asigna desde tu sesión."));
         }
-        if (organizationPublicId == null || organizationPublicId.isBlank()) {
-            throw new BusinessException("STUDENT_ORGANIZATION_REQUIRED", "Selecciona la organización del estudiante.",
-                    Map.of("organizationPublicId", "Debes seleccionar una organización."));
-        }
-        OrganizationJpaEntity organization = organizationRepository.findByPublicId(organizationPublicId.trim())
-                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
-        validateOperationalOrganization(organization.getId());
-        return TenantContext.organization(organization.getId(), organization.getPublicId(), organization.getCode(), true);
+        validateOperationalOrganization(tenant.organizationId());
+        return tenant;
     }
 
     private void validateOperationalOrganization(Long organizationId) {
@@ -412,16 +377,8 @@ public class StudentFoundationService {
 
     private String buildWhere(TenantContext tenant, SearchCriteria criteria, MapSqlParameterSource params) {
         StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
-        if (tenant.globalAdministrator()) {
-            if (notBlank(criteria.organizationPublicId())) {
-                where.append(" AND o.PUBLIC_ID = :organizationPublicId ");
-                params.addValue("organizationPublicId", criteria.organizationPublicId().trim());
-            }
-            where.append(" AND o.ORGANIZATION_TYPE = 'CUSTOMER' ");
-        } else {
-            where.append(" AND s.ORGANIZATION_ID = :tenantOrganizationId ");
-            params.addValue("tenantOrganizationId", tenant.organizationId());
-        }
+        where.append(" AND s.ORGANIZATION_ID = :tenantOrganizationId ");
+        params.addValue("tenantOrganizationId", tenant.organizationId());
         where.append(" AND s.STATUS <> 'DELETED' ");
         if (notBlank(criteria.query())) {
             where.append(" AND (LOWER(s.DISPLAY_NAME) LIKE :query OR LOWER(s.EMAIL) LIKE :query "
@@ -518,8 +475,9 @@ public class StudentFoundationService {
     }
 
     private void requireTenant(TenantContext tenant) {
-        if (tenant == null || (!tenant.globalAdministrator() && !tenant.hasOrganization())) {
-            throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "No existe un contexto autorizado.");
+        if (tenant == null || !tenant.hasOrganization() || tenant.globalScope() || tenant.globalAdministrator()) {
+            throw new BusinessException("STUDENT_GLOBAL_FORBIDDEN",
+                    "GLOBAL no administra colaboradores comerciales.");
         }
     }
 

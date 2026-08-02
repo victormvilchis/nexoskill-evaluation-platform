@@ -1,6 +1,13 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+
 app:
   security:
     cookie-secure: true
+    allowed-origins: ${APP_ALLOWED_ORIGINS}
   seed:
     enabled: false
 

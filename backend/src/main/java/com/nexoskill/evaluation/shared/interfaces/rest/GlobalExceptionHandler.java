@@ -77,15 +77,16 @@ public class GlobalExceptionHandler {
                 "QUESTION_GLOBAL_CLONE_EXISTS", "QUESTION_DUPLICATE_SCOPE_INVALID",
                 "QUESTION_DUPLICATE_CONFIGURATION_INVALID", "STUDENT_DELETION_IN_PROGRESS",
                 "CERTIFICATION_CYCLE_CONFLICT", "CERTIFICATION_CYCLE_VERSION_CONFLICT",
-                "CERTIFICATION_ATTEMPT_VERSION_CONFLICT" -> HttpStatus.CONFLICT;
+                "CERTIFICATION_ATTEMPT_VERSION_CONFLICT", "STUDENT_IMPORT_ALREADY_APPLIED",
+                "STUDENT_IMPORT_APPLY_IN_PROGRESS" -> HttpStatus.CONFLICT;
 		case "QUESTION_NOT_FOUND", "CATEGORY_NOT_FOUND", "COLLECTION_NOT_FOUND", "USER_NOT_FOUND",
                 "ORGANIZATION_NOT_FOUND", "GLOBAL_ORGANIZATION_NOT_FOUND", "ORGANIZATION_LICENSE_NOT_FOUND",
                 "STUDENT_NOT_FOUND", "STUDENT_SESSION_NOT_FOUND", "GLOBAL_CONTENT_NOT_FOUND",
                 "GLOBAL_CONTENT_PROMOTION_NOT_FOUND", "GLOBAL_CONTENT_VERSION_NOT_FOUND",
                 "GLOBAL_CONTENT_GRANT_NOT_FOUND", "GLOBAL_CONTENT_DISTRIBUTION_NOT_FOUND",
                 "GLOBAL_CONTENT_REPLICATION_LINK_NOT_FOUND", "QUESTION_TECHNOLOGY_NOT_FOUND",
-                "QUESTION_DUPLICATE_SOURCE_NOT_FOUND", "CERTIFICATION_CYCLE_NOT_FOUND",
-                "CERTIFICATION_ATTEMPT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+                "QUESTION_DUPLICATE_SOURCE_NOT_FOUND", "QUESTION_MEDIA_NOT_FOUND",
+                "CERTIFICATION_CYCLE_NOT_FOUND", "CERTIFICATION_ATTEMPT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
 		case "STUDENT_INVALID_CREDENTIALS", "STUDENT_ACCOUNT_UNAVAILABLE", "STUDENT_ACCESS_EXPIRED",
                 "STUDENT_TEMP_PASSWORD_EXPIRED" -> HttpStatus.UNAUTHORIZED;
 		case "SELF_DEACTIVATE_NOT_ALLOWED", "SELF_DELETE_NOT_ALLOWED", "SELF_SUSPEND_NOT_ALLOWED",
@@ -103,7 +104,9 @@ public class GlobalExceptionHandler {
                 "CERTIFICATION_OPERATION_FORBIDDEN", "CERTIFICATIONS_NOT_ENABLED" -> HttpStatus.FORBIDDEN;
         case "ORGANIZATION_PERSISTENCE_INVALID", "ORGANIZATION_LICENSE_PERSISTENCE_INVALID",
                 "ORGANIZATION_CREATE_FAILED", "QUESTION_GLOBAL_CLONE_FAILED",
-                "STUDENT_PERMANENT_DELETE_FAILED", "QUESTION_DUPLICATE_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+                "STUDENT_PERMANENT_DELETE_FAILED", "QUESTION_DUPLICATE_FAILED",
+                "QUESTION_MEDIA_STORAGE_ERROR", "QUESTION_MEDIA_READ_ERROR",
+                "QUESTION_MEDIA_DELETE_ERROR" -> HttpStatus.INTERNAL_SERVER_ERROR;
 		default -> HttpStatus.BAD_REQUEST;
 		};
 
@@ -114,7 +117,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiErrorResponse> handleUnreadable(HttpMessageNotReadableException exception,
             HttpServletRequest request) {
-        LOGGER.warn("Invalid request payload on {}: {}", request.getRequestURI(), exception.getMessage());
+        LOGGER.warn("Invalid request payload on {} ({})", request.getRequestURI(),
+                diagnosticType(exception));
         String field = "request";
         Throwable cause = exception.getCause();
         if (cause instanceof JsonMappingException mappingException && !mappingException.getPath().isEmpty()) {
@@ -137,7 +141,8 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(AccessDeniedException.class)
 	public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException exception,
 			HttpServletRequest request) {
-		LOGGER.warn("Access denied on {}: {}", request.getRequestURI(), exception.getMessage());
+		LOGGER.warn("Access denied on {} ({})", request.getRequestURI(),
+                diagnosticType(exception));
         if (platformAccessDeniedHandler != null) {
             PlatformAccessDeniedHandler.Denial denial = platformAccessDeniedHandler.resolveAndAudit(request);
             return response(HttpStatus.FORBIDDEN, denial.code(), denial.message(), request.getRequestURI(), null);
@@ -194,7 +199,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ApiErrorResponse> handleMultipart(MultipartException exception,
             HttpServletRequest request) {
-        LOGGER.warn("Invalid multipart request on {}: {}", request.getRequestURI(), exception.getMessage());
+        LOGGER.warn("Invalid multipart request on {} ({})", request.getRequestURI(),
+                diagnosticType(exception));
         return response(HttpStatus.BAD_REQUEST, "STUDENT_IMPORT_FILE_INVALID",
                 "No fue posible leer el archivo enviado. Verifica que sea un .xlsx válido e inténtalo nuevamente.",
                 request.getRequestURI(), null);
@@ -207,6 +213,14 @@ public class GlobalExceptionHandler {
 		return response(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
 				"Ocurrió un error interno. Intenta nuevamente.", request.getRequestURI(), null);
 	}
+
+    private String diagnosticType(Throwable exception) {
+        Throwable current = exception;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current.getClass().getSimpleName();
+    }
 
 	private ResponseEntity<ApiErrorResponse> response(HttpStatus status, String code, String message, String path,
 			Map<String, String> fieldErrors) {

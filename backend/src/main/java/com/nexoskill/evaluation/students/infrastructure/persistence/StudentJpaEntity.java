@@ -269,12 +269,13 @@ public class StudentJpaEntity {
         touch(actorId, now);
     }
 
-    /** Estado transitorio que bloquea operaciones dentro de la transacción de purga. */
-    public void markDeleting(Long actorId, Instant now) {
+    public void softDelete(Long actorId, Instant now, String reason) {
         this.status = StudentStatus.DELETED;
         this.deletedAt = now;
         this.deletedBy = actorId;
-        this.deletionReason = "PERMANENT_DELETION_IN_PROGRESS";
+        this.deletionReason = reason == null || reason.isBlank()
+                ? "ELIMINACIÓN LÓGICA"
+                : reason.trim();
         touch(actorId, now);
     }
 

@@ -22,7 +22,7 @@ class AdminStudentControllerTest {
     void shouldReturnOkAndAnEmptyPageWhenTheOrganizationHasNoStudents() throws Exception {
         StudentService service = mock(StudentService.class);
         TenantContextResolver tenantResolver = mock(TenantContextResolver.class);
-        TenantContext tenant = TenantContext.organization(20L, "org-public", "ACME", true);
+        TenantContext tenant = TenantContext.organization(20L, "org-public", "ACME", false);
         when(tenantResolver.resolve(any())).thenReturn(tenant);
         when(service.search(any(), any(), any(), anyBoolean(), anyInt(), anyInt()))
                 .thenReturn(new StudentService.PageResult(List.of(), 0, 10, 0, 0));

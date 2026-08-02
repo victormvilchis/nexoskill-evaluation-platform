@@ -41,7 +41,7 @@ class StudentServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 26);
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
-    private static final TenantContext TENANT = TenantContext.organization(20L, "org-public", "ACME", true);
+    private static final TenantContext TENANT = TenantContext.organization(20L, "org-public", "ACME", false);
 
     private StudentRepository students;
     private StudentSessionRepository sessions;
@@ -77,7 +77,7 @@ class StudentServiceTest {
     void shouldReturnAnEmptyPageWhenTheOrganizationHasNoStudents() {
         when(students.existsByOrganizationId(20L)).thenReturn(false);
         StudentService.PageResult result = service.search(TENANT, null,
-                com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 20);
+                com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 10);
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();
         assertThat(result.totalPages()).isZero();
@@ -88,9 +88,9 @@ class StudentServiceTest {
     @Test
     void shouldKeepTheResponseEmptyWhenTheRepositoryReturnsAnEmptyPage() {
         when(students.existsByOrganizationId(20L)).thenReturn(true);
-        when(students.search(any(), any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 20)));
+        when(students.search(any(), any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 10)));
         StudentService.PageResult result = service.search(TENANT, null,
-                com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 20);
+                com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 10);
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();
     }

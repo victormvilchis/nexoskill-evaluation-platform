@@ -16,6 +16,17 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
     List<QuestionJpaEntity> findAllByStatus(QuestionStatus status);
 
     @Query(value = """
+            SELECT DISTINCT q.*
+              FROM QUESTION q
+              LEFT JOIN QUESTION_OPTION option_value
+                ON option_value.QUESTION_ID = q.QUESTION_ID
+             WHERE q.PROMPT_MEDIA_ID = :mediaId
+                OR option_value.MEDIA_ID = :mediaId
+                OR option_value.MATCH_MEDIA_ID = :mediaId
+            """, nativeQuery = true)
+    List<QuestionJpaEntity> findAllUsingMedia(@Param("mediaId") Long mediaId);
+
+    @Query(value = """
             SELECT q.*
               FROM QUESTION q
              WHERE q.STATUS = :status

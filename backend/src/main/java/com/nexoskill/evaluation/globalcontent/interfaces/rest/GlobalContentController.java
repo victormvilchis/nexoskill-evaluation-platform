@@ -56,7 +56,7 @@ public class GlobalContentController {
             @RequestParam(required = false) Boolean promoted,
             @RequestParam(required = false) Boolean distributed,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "10") int size,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         return review.review(new ReviewFilter(query, organizationPublicId, contentType, scope, status,
                 creatorUserId, createdFrom, createdTo, promoted, distributed, page, size), actor.internalId());

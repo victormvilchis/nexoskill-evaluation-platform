@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.nexoskill.evaluation.certifications.application.StudentCertificationService;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.application.importing.XlsxCertificationReader;
+import com.nexoskill.evaluation.students.infrastructure.persistence.StudentImportReceiptStore;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import jakarta.persistence.EntityManager;
 import java.sql.Date;
@@ -123,6 +124,7 @@ class StudentImportServicePersistenceContextTest {
                 jdbc,
                 Clock.systemUTC(),
                 mock(PlatformTransactionManager.class),
-                entityManager);
+                entityManager,
+                mock(StudentImportReceiptStore.class));
     }
 }

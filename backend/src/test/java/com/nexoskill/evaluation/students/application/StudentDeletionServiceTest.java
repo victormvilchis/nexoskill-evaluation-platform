@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,16 +26,13 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class StudentDeletionServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-29T16:00:00Z");
-    private static final TenantContext TENANT = TenantContext.organization(20L, "org-public", "ORG", true);
+    private static final TenantContext TENANT = TenantContext.organization(20L, "org-public", "ORG", false);
 
     private StudentRepository students;
     private StudentSessionRepository sessions;
-    private NamedParameterJdbcTemplate jdbc;
     private AuditLogPort audit;
     private StudentDeletionService service;
 
@@ -43,10 +40,8 @@ class StudentDeletionServiceTest {
     void setUp() {
         students = org.mockito.Mockito.mock(StudentRepository.class);
         sessions = org.mockito.Mockito.mock(StudentSessionRepository.class);
-        jdbc = org.mockito.Mockito.mock(NamedParameterJdbcTemplate.class);
         audit = org.mockito.Mockito.mock(AuditLogPort.class);
-        service = new StudentDeletionService(students, sessions, jdbc, audit,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new StudentDeletionService(students, sessions, audit, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -59,16 +54,16 @@ class StudentDeletionServiceTest {
                 });
 
         verify(students, never()).findByOrganizationIdAndPublicIdForUpdate(any(), anyString());
-        verify(jdbc, never()).update(anyString(), any(MapSqlParameterSource.class));
+        verify(students, never()).saveAndFlush(any());
+        verify(sessions, never()).revokeActive(any(), any(), any(), any(), any());
     }
 
     @Test
-    void purgesExclusiveRelationsAndFinallyDeletesTheStudent() {
+    void softDeletesStudentAndPreservesHistoricalRelations() {
         StudentJpaEntity student = student();
         when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public"))
                 .thenReturn(Optional.of(student));
         when(students.saveAndFlush(student)).thenReturn(student);
-        when(jdbc.update(anyString(), any(MapSqlParameterSource.class))).thenReturn(1);
 
         StudentDeletionService.DeletionResult result = service.deletePermanently(TENANT, "student-public", true,
                 new StudentService.Actor(1L, "127.0.0.1", "test"));
@@ -76,13 +71,29 @@ class StudentDeletionServiceTest {
         assertThat(result.publicId()).isEqualTo("student-public");
         assertThat(result.operationReference()).isNotBlank();
         assertThat(result.deletedAt()).isEqualTo(NOW);
+        assertThat(student.getStatus()).isEqualTo(StudentStatus.DELETED);
+        assertThat(student.getDeletedAt()).isEqualTo(NOW);
+        assertThat(student.getDeletedBy()).isEqualTo(1L);
+        assertThat(student.getDeletionReason()).contains("ELIMINACIÓN LÓGICA");
+
         verify(students).saveAndFlush(student);
         verify(sessions).revokeActive(30L, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
                 StudentSessionRevocationReason.DELETED, NOW);
-        verify(jdbc, times(9)).update(anyString(), any(MapSqlParameterSource.class));
-        verify(audit).record(any(), org.mockito.ArgumentMatchers.eq("STUDENT_PERMANENTLY_DELETED"),
-                org.mockito.ArgumentMatchers.eq("STUDENTS"), anyString(), any(), any(), any(),
-                org.mockito.ArgumentMatchers.eq(NOW));
+        verify(audit).record(eq(1L), eq("STUDENT_DELETED"), eq("STUDENTS"),
+                anyString(), eq("127.0.0.1"), eq("test"), any(), eq(NOW));
+    }
+
+    @Test
+    void rejectsGlobalAdministratorContext() {
+        TenantContext globalAdministratorInOrganization = TenantContext.organization(
+                20L, "org-public", "ORG", true);
+
+        assertThatThrownBy(() -> service.deletePermanently(globalAdministratorInOrganization,
+                "student-public", true, new StudentService.Actor(1L, "127.0.0.1", "test")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_DELETE_FORBIDDEN"));
+
+        verify(students, never()).findByOrganizationIdAndPublicIdForUpdate(any(), anyString());
     }
 
     private StudentJpaEntity student() {

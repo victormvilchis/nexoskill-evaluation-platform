@@ -200,7 +200,7 @@ public class AdminStudentController {
                 actor(actor, request));
     }
 
-    /** Compatibilidad temporal con clientes anteriores. */
+    /** Compatibilidad temporal con clientes anteriores; la operación conserva históricos. */
     @PostMapping("/{publicId}/permanent-delete")
     @PreAuthorize("hasAuthority('STUDENT_DELETE')")
     public StudentDeletionService.DeletionResult deletePermanently(@PathVariable String publicId,
@@ -326,8 +326,8 @@ public class AdminStudentController {
             String temporaryPassword, boolean mustChangePassword) {}
 
     public record PermanentDeleteRequest(
-            @NotNull(message = "Debes confirmar la eliminación permanente.")
-            @AssertTrue(message = "Debes confirmar que comprendes que la eliminación es permanente.") Boolean confirmed) {}
+            @NotNull(message = "Debes confirmar la eliminación lógica.")
+            @AssertTrue(message = "Debes confirmar la eliminación del colaborador.") Boolean confirmed) {}
 
     private StudentEffectiveStatus parseStatus(String value) {
         if (value == null || value.isBlank() || "ACTIVE".equalsIgnoreCase(value)) return StudentEffectiveStatus.ACTIVE;

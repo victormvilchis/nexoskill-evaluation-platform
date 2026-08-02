@@ -20,6 +20,8 @@ import com.nexoskill.evaluation.organizations.infrastructure.persistence.Organiz
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryStatusHistoryJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryStatusHistoryRepository;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionDifficultyJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTechnologyJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTypeJpaEntity;
@@ -52,6 +54,7 @@ public class CatalogAdministrationService {
     private static final String INACTIVE = "INACTIVE";
 
     private final SpringDataQuestionCategoryRepository categories;
+    private final QuestionCategoryStatusHistoryRepository categoryHistory;
     private final SpringDataQuestionTechnologyRepository technologies;
     private final SpringDataQuestionTypeRepository types;
     private final SpringDataQuestionDifficultyRepository difficulties;
@@ -64,6 +67,7 @@ public class CatalogAdministrationService {
     private final Clock clock;
 
     public CatalogAdministrationService(SpringDataQuestionCategoryRepository categories,
+            QuestionCategoryStatusHistoryRepository categoryHistory,
             SpringDataQuestionTechnologyRepository technologies,
             SpringDataQuestionTypeRepository types,
             SpringDataQuestionDifficultyRepository difficulties,
@@ -75,6 +79,7 @@ public class CatalogAdministrationService {
             AuditLogPort audit,
             Clock clock) {
         this.categories = categories;
+        this.categoryHistory = categoryHistory;
         this.technologies = technologies;
         this.types = types;
         this.difficulties = difficulties;
@@ -295,10 +300,12 @@ public class CatalogAdministrationService {
         switch (type) {
             case CATEGORIES -> {
                 QuestionCategoryJpaEntity entity = requireCategory(id);
-                jdbc.update("DELETE FROM QUESTION_CATEGORY_STATUS_HISTORY WHERE CATEGORY_ID = :id",
-                        new MapSqlParameterSource("id", entity.getId()));
-                categories.delete(entity);
-                categories.flush();
+                Instant now = clock.instant();
+                entity.softDelete(actorId, now);
+                categories.saveAndFlush(entity);
+                categoryHistory.save(QuestionCategoryStatusHistoryJpaEntity.create(
+                        entity.getId(), actorId, CatalogStatus.INACTIVE, CatalogStatus.DELETED,
+                        "Eliminación lógica desde administración de catálogos", now));
             }
             case TECHNOLOGIES -> {
                 QuestionTechnologyJpaEntity entity = requireTechnology(id);
@@ -314,7 +321,9 @@ public class CatalogAdministrationService {
             case DIFFICULTIES -> { difficulties.delete(requireDifficulty(id)); difficulties.flush(); }
         }
         record(actorId, "CATALOG_ITEM_DELETED", type, item,
-                "Se eliminó físicamente un valor inactivo sin dependencias.", tenant);
+                type == CatalogType.CATEGORIES
+                        ? "Se eliminó lógicamente una categoría inactiva y se conservó su historial."
+                        : "Se eliminó físicamente un valor inactivo sin dependencias.", tenant);
     }
 
     private TypeSummary typeSummary(CatalogType type, TenantContext tenant) {
