@@ -13,6 +13,9 @@ public interface QuestionCatalogPort {
 	List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId,
 		String targetScope, String organizationPublicId);
 
+	List<QuestionTechnologySummary> technologyOptions(TenantContext tenant, String questionPublicId,
+		String targetScope, String organizationPublicId);
+
 	QuestionCategorySummary get(String publicId, TenantContext tenant);
 
 	QuestionCategorySummary create(CategoryCommands.Create command);

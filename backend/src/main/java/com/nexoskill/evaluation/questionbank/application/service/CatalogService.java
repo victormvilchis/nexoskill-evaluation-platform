@@ -40,6 +40,12 @@ public class CatalogService {
 	}
 
 	@Transactional(readOnly = true)
+	public List<QuestionTechnologySummary> technologyOptions(TenantContext tenant, String questionPublicId,
+			String targetScope, String organizationPublicId) {
+		return port.technologyOptions(tenant, questionPublicId, targetScope, organizationPublicId);
+	}
+
+	@Transactional(readOnly = true)
 	public QuestionCategorySummary get(String publicId, TenantContext tenant) {
 		return port.get(publicId, tenant);
 	}

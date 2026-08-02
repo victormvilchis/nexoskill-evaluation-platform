@@ -14,6 +14,7 @@ import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionOwnershipView;
+import com.nexoskill.evaluation.questionbank.application.port.out.QuestionBankPort;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionAvailabilityMode;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
@@ -26,8 +27,37 @@ class QuestionSaveServiceTest {
     private final QuestionServices.Create create = mock(QuestionServices.Create.class);
     private final QuestionServices.Update update = mock(QuestionServices.Update.class);
     private final QuestionAvailabilityService availability = mock(QuestionAvailabilityService.class);
-    private final QuestionSaveService service = new QuestionSaveService(create, update, availability);
+    private final QuestionBankPort questions = mock(QuestionBankPort.class);
+    private final QuestionSaveService service = new QuestionSaveService(create, update, availability, questions);
     private final QuestionSaveService.Actor actor = new QuestionSaveService.Actor(7L, "127.0.0.1", "test");
+
+    @Test
+    void globalCreationDistributesIndependentCopiesOnlyToSelectedOrganizations() {
+        QuestionDetail question = question(ContentScope.GLOBAL);
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        when(create.execute(isNull())).thenReturn(question);
+
+        service.create(null, QuestionAvailabilityMode.SELECTED_ORGANIZATIONS,
+                List.of("org-20", "org-20", "org-30"), tenant, actor);
+
+        verify(questions).copyGlobalToOrganization(question.publicId(), "org-20", actor.userId());
+        verify(questions).copyGlobalToOrganization(question.publicId(), "org-30", actor.userId());
+        verify(availability, never()).update(any(), any(), any(), any());
+    }
+
+    @Test
+    void globalCreationDistributesToEveryActiveCommercialOrganization() {
+        QuestionDetail question = question(ContentScope.GLOBAL);
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        when(create.execute(isNull())).thenReturn(question);
+        when(questions.activeCommercialOrganizationPublicIds()).thenReturn(List.of("org-20", "org-30"));
+
+        service.create(null, QuestionAvailabilityMode.GLOBAL, List.of(), tenant, actor);
+
+        verify(questions).copyGlobalToOrganization(question.publicId(), "org-20", actor.userId());
+        verify(questions).copyGlobalToOrganization(question.publicId(), "org-30", actor.userId());
+        verify(availability, never()).update(any(), any(), any(), any());
+    }
 
     @Test
     void globalAdministratorCanSaveGlobalAvailabilityFromAnOrganizationalContext() {

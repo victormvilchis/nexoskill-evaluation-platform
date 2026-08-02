@@ -13,6 +13,10 @@ public interface SpringDataQuestionTechnologyRepository
     Optional<QuestionTechnologyJpaEntity> findByCodeIgnoreCase(String code);
     List<QuestionTechnologyJpaEntity> findByStatusOrderByDisplayOrderAscNameAsc(QuestionTechnologyStatus status);
     List<QuestionTechnologyJpaEntity> findAllByOrderByDisplayOrderAscNameAsc();
+    List<QuestionTechnologyJpaEntity> findAllByContentScopeOrderByDisplayOrderAscNameAsc(
+            com.nexoskill.evaluation.organizations.domain.model.ContentScope contentScope);
+    List<QuestionTechnologyJpaEntity> findAllByContentScopeAndOwnerOrganizationIdOrderByDisplayOrderAscNameAsc(
+            com.nexoskill.evaluation.organizations.domain.model.ContentScope contentScope, Long ownerOrganizationId);
 
     @Query("""
             select t from QuestionTechnologyJpaEntity t

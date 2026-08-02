@@ -133,8 +133,10 @@ public class AdminQuestionController {
     @PostMapping("/{id}/duplicate")
     @PreAuthorize("hasAuthority('QUESTION_DUPLICATE')")
     public ResponseEntity<QuestionDetail> duplicate(@PathVariable String id,
+            @RequestBody(required = false) QuestionRequests.Duplicate body,
             @AuthenticationPrincipal AuthenticatedUser actor) {
-        var question = duplicate.execute(id, actor.internalId());
+        var question = duplicate.execute(id, body == null ? null : body.targetScope(),
+                body == null ? null : body.organizationPublicId(), actor.internalId());
         return ResponseEntity.created(URI.create("/api/v1/admin/questions/" + question.publicId())).body(question);
     }
 

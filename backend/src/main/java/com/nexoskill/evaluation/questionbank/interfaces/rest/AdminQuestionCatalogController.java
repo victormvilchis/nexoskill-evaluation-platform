@@ -51,6 +51,16 @@ public class AdminQuestionCatalogController {
 		return service.questionOptions(tenant(request), questionPublicId, targetScope, organizationPublicId);
 	}
 
+	@GetMapping("/technology-options")
+	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
+	public List<QuestionTechnologySummary> technologyOptions(
+			@RequestParam(name = "questionPublicId", required = false) String questionPublicId,
+			@RequestParam(name = "targetScope", required = false) String targetScope,
+			@RequestParam(name = "organizationPublicId", required = false) String organizationPublicId,
+			HttpServletRequest request) {
+		return service.technologyOptions(tenant(request), questionPublicId, targetScope, organizationPublicId);
+	}
+
 	@GetMapping("/categories/{id}")
 	@PreAuthorize("hasAuthority('QUESTION_CATEGORY_MANAGE')")
 	public QuestionCategorySummary get(@PathVariable String id, HttpServletRequest request) {

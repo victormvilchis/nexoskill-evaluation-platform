@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getCatalogItems } from '../features/catalogs/api/catalogApi'
 import type { CatalogItem } from '../features/catalogs/types/catalogs'
 import { useAuth } from '../features/authentication/context/AuthContext'
-import { searchOrganizations } from '../features/organizations/api/organizationApi'
+import { getAllOrganizations } from '../features/organizations/api/organizationApi'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import {
   changeQuestionStatus,
@@ -29,6 +29,7 @@ import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type {
   CloneToGlobalPreview,
+  ContentScope,
   QuestionCatalogs,
   QuestionPage,
   QuestionStatus,
@@ -55,6 +56,14 @@ interface CloneState {
   notes: string
 }
 
+interface DuplicateState {
+  question: QuestionSummary
+  targetScope: ContentScope
+  organizationPublicId: string
+  busy: boolean
+  error?: string
+}
+
 function formatDate(value?: string) {
   if (!value) return 'Sin actualización'
   return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(value))
@@ -70,6 +79,7 @@ export function AdminQuestionsPage() {
   const supervisor = Boolean(user?.roles.includes('SUPERVISOR'))
   const canWriteQuestions = permissions.has('QUESTION_CREATE') || permissions.has('QUESTION_UPDATE') || permissions.has('QUESTION_ARCHIVE')
   const query = searchParams.get('q') ?? ''
+  const scope = globalAdministrator ? (searchParams.get('scope') ?? '') as ContentScope | '' : ''
   const organizationPublicId = globalAdministrator ? searchParams.get('organization') ?? '' : ''
   const categoryPublicId = searchParams.get('category') ?? ''
   const rawStatus = searchParams.get('status') ?? 'ACTIVE'
@@ -90,6 +100,7 @@ export function AdminQuestionsPage() {
   const [busyId, setBusyId] = useState<string>()
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [cloneState, setCloneState] = useState<CloneState>()
+  const [duplicateState, setDuplicateState] = useState<DuplicateState>()
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
   const updateFilter = useCallback((key: string, value: string) => {
@@ -102,13 +113,24 @@ export function AdminQuestionsPage() {
     }, { replace: true })
   }, [setSearchParams])
 
+  const updateScopeFilter = useCallback((value: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (value) next.set('scope', value)
+      else next.delete('scope')
+      if (value === 'GLOBAL') next.delete('organization')
+      next.delete('page')
+      return next
+    }, { replace: true })
+  }, [setSearchParams])
+
   useEffect(() => {
     const controller = new AbortController()
     Promise.all([
       getQuestionCatalogs(controller.signal),
       getQuestionCreationYears(controller.signal),
       globalAdministrator
-        ? searchOrganizations({ status: 'ALL', size: 100, signal: controller.signal }).then((result) => result.content)
+        ? getAllOrganizations({ status: 'ALL', sort: 'name', direction: 'ASC', signal: controller.signal })
         : Promise.resolve([] as OrganizationSummary[])
     ])
       .then(([catalogResponse, yearResponse, organizationResponse]) => {
@@ -152,6 +174,7 @@ export function AdminQuestionsPage() {
     searchQuestions({
       query: debouncedQuery.trim() || undefined,
       status,
+      scope: globalAdministrator ? scope || undefined : undefined,
       organizationPublicId: globalAdministrator ? organizationPublicId || undefined : undefined,
       categoryPublicId: categoryPublicId || undefined,
       difficultyCode: difficultyCode || undefined,
@@ -178,10 +201,10 @@ export function AdminQuestionsPage() {
       })
     return () => controller.abort()
   }, [categoryPublicId, creationYear, debouncedQuery, difficultyCode, globalAdministrator,
-    organizationPublicId, page, reloadKey, size, status])
+    organizationPublicId, page, reloadKey, scope, size, status])
 
   const questions = data?.content ?? []
-  const hasFilters = Boolean(query || organizationPublicId || categoryPublicId || status !== 'ACTIVE' || difficultyCode || creationYear)
+  const hasFilters = Boolean(query || scope || organizationPublicId || categoryPublicId || status !== 'ACTIVE' || difficultyCode || creationYear)
   const canManageQuestion = useCallback((question: QuestionSummary) =>
     globalAdministrator || question.ownership.scope === 'ORGANIZATION', [globalAdministrator])
 
@@ -208,11 +231,20 @@ export function AdminQuestionsPage() {
     }, { replace: true })
   }
 
-  async function duplicate(question: QuestionSummary) {
+  function requestDuplicate(question: QuestionSummary) {
+    if (globalAdministrator && question.ownership.scope === 'GLOBAL') {
+      setDuplicateState({ question, targetScope: 'GLOBAL', organizationPublicId: '', busy: false })
+      return
+    }
+    void duplicateWithinCurrentScope(question)
+  }
+
+  async function duplicateWithinCurrentScope(question: QuestionSummary) {
+    if (busyId === question.publicId) return
     setBusyId(question.publicId)
     try {
       const copy = await duplicateQuestion(question.publicId)
-      toast.success('Pregunta duplicada', 'La copia se creó dentro del mismo alcance y propietario.')
+      toast.success('Pregunta duplicada', 'La copia se creó correctamente dentro de tu organización.')
       navigate(`/admin/questions/${copy.publicId}/edit`)
     } catch (requestError) {
       toast.error('No fue posible duplicar la pregunta', requestError instanceof ApiRequestError
@@ -220,6 +252,41 @@ export function AdminQuestionsPage() {
         : 'No fue posible duplicar la pregunta dentro del contexto actual.')
     } finally {
       setBusyId(undefined)
+    }
+  }
+
+  async function executeDuplicate() {
+    if (!duplicateState || duplicateState.busy) return
+    if (duplicateState.targetScope === 'ORGANIZATION' && !duplicateState.organizationPublicId) {
+      setDuplicateState((current) => current ? {
+        ...current,
+        error: 'Selecciona la organización propietaria de la nueva pregunta.'
+      } : current)
+      return
+    }
+    setDuplicateState((current) => current ? { ...current, busy: true, error: undefined } : current)
+    try {
+      await duplicateQuestion(duplicateState.question.publicId, {
+        targetScope: duplicateState.targetScope,
+        organizationPublicId: duplicateState.targetScope === 'ORGANIZATION'
+          ? duplicateState.organizationPublicId
+          : undefined
+      })
+      toast.success(
+        duplicateState.targetScope === 'GLOBAL'
+          ? 'La pregunta global se duplicó correctamente.'
+          : 'La pregunta se duplicó correctamente para la organización seleccionada.'
+      )
+      setDuplicateState(undefined)
+      reload()
+    } catch (requestError) {
+      setDuplicateState((current) => current ? {
+        ...current,
+        busy: false,
+        error: requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible duplicar la pregunta.'
+      } : current)
     }
   }
 
@@ -279,7 +346,7 @@ export function AdminQuestionsPage() {
     try {
       if (type === 'DELETE') {
         await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación lógica desde el Banco de Preguntas')
-        toast.success('Pregunta eliminada', 'La información histórica se conservó.')
+        toast.success('Pregunta eliminada', 'La pregunta fue retirada de los formularios donde estaba siendo utilizada.')
       } else if (type === 'RESTORE') {
         await restoreQuestion(question.publicId, question.entityVersion)
         toast.success('Pregunta restaurada como inactiva')
@@ -310,7 +377,7 @@ export function AdminQuestionsPage() {
     : pendingAction?.type === 'RESTORE' ? 'Restaurar pregunta'
       : pendingAction?.type === 'ARCHIVE' ? 'Inactivar pregunta' : 'Activar pregunta'
   const dialogDescription = pendingAction?.type === 'DELETE'
-    ? 'La eliminación será lógica. Si la pregunta se utiliza en formularios activos, la operación será rechazada. Formularios, colecciones, intentos, resultados e historial no se eliminarán.'
+    ? 'La pregunta será eliminada lógicamente y también será retirada de todos los formularios donde actualmente se encuentra utilizada. Las demás preguntas, intentos, resultados e historial permanecerán sin cambios. ¿Deseas continuar?'
     : pendingAction?.type === 'RESTORE'
       ? 'La pregunta se restaurará como inactiva. Después podrás activarla cuando su configuración sea válida.'
       : pendingAction?.type === 'ARCHIVE'
@@ -339,6 +406,13 @@ export function AdminQuestionsPage() {
       <FilterToolbar hasActiveFilters={hasFilters} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={(value) => updateFilter('q', value)} placeholder="Buscar por texto de la pregunta" />
         {globalAdministrator && (
+          <ResourceSelectField label="Alcance" value={scope} onChange={updateScopeFilter}>
+            <option value="">Todos los alcances</option>
+            <option value="GLOBAL">Global</option>
+            <option value="ORGANIZATION">Organizacional</option>
+          </ResourceSelectField>
+        )}
+        {globalAdministrator && scope !== 'GLOBAL' && (
           <ResourceSelectField label="Organización" value={organizationPublicId} onChange={(value) => updateFilter('organization', value)}>
             <option value="">Todas las organizaciones</option>
             {organizations.map((organization) => <option value={organization.publicId} key={organization.publicId}>{organization.name}</option>)}
@@ -430,8 +504,9 @@ export function AdminQuestionsPage() {
                       {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && (
                         <TableActionLink to={`/admin/questions/${question.publicId}/edit`} label="Editar" icon="edit" tone="primary" />
                       )}
-                      {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED' && (
-                        <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => void duplicate(question)} />
+                      {canManageQuestion(question) && permissions.has('QUESTION_DUPLICATE') && question.status !== 'DELETED'
+                        && (!globalAdministrator || question.ownership.scope === 'GLOBAL') && (
+                        <TableActionButton label="Duplicar" icon="copy" disabled={busyId === question.publicId} onClick={() => requestDuplicate(question)} />
                       )}
                       {canManageQuestion(question) && permissions.has('QUESTION_ARCHIVE') && question.status === 'ACTIVE' && (
                         <TableActionButton label="Inactivar" icon="archive" disabled={busyId === question.publicId} onClick={() => setPendingAction({ type: 'ARCHIVE', question })} />
@@ -478,6 +553,52 @@ export function AdminQuestionsPage() {
         onCancel={() => setPendingAction(null)}
         onConfirm={() => void executePendingAction()}
       />
+
+      {duplicateState && (
+        <div className="ns-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target && !duplicateState.busy) setDuplicateState(undefined)
+        }}>
+          <section className="ns-modal-card question-duplicate-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-title">
+            <header>
+              <div><p className="eyebrow">Banco de Preguntas</p><h2 id="duplicate-title">Duplicar pregunta global</h2></div>
+              <button className="icon-button" type="button" disabled={duplicateState.busy} onClick={() => setDuplicateState(undefined)}><Icon name="close" /></button>
+            </header>
+            <p className="clone-source-statement">{duplicateState.question.statement}</p>
+            <div className="availability-mode" role="radiogroup" aria-label="Destino de la duplicación">
+              <label>
+                <input type="radio" name="duplicateTarget" checked={duplicateState.targetScope === 'GLOBAL'} disabled={duplicateState.busy}
+                  onChange={() => setDuplicateState((current) => current ? { ...current, targetScope: 'GLOBAL', organizationPublicId: '', error: undefined } : current)} />
+                <span><strong>Nueva pregunta global</strong><small>La copia será independiente y quedará sin distribución organizacional.</small></span>
+              </label>
+              <label>
+                <input type="radio" name="duplicateTarget" checked={duplicateState.targetScope === 'ORGANIZATION'} disabled={duplicateState.busy}
+                  onChange={() => setDuplicateState((current) => current ? { ...current, targetScope: 'ORGANIZATION', error: undefined } : current)} />
+                <span><strong>Nueva pregunta organizacional</strong><small>La copia pertenecerá únicamente a la organización seleccionada.</small></span>
+              </label>
+            </div>
+            {duplicateState.targetScope === 'ORGANIZATION' && (
+              <label className="ns-field">
+                <span>Organización propietaria</span>
+                <select value={duplicateState.organizationPublicId} disabled={duplicateState.busy}
+                  onChange={(event) => setDuplicateState((current) => current ? { ...current, organizationPublicId: event.target.value, error: undefined } : current)}>
+                  <option value="">Selecciona una organización</option>
+                  {organizations.filter((organization) => organization.status === 'ACTIVE' && organization.organizationType === 'CUSTOMER').map((organization) => (
+                    <option value={organization.publicId} key={organization.publicId}>{organization.name} · {organization.code}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {duplicateState.error && <p className="error-message" role="alert">{duplicateState.error}</p>}
+            <p className="muted">La pregunta original permanecerá sin cambios. La nueva copia conservará enunciado, clasificación, etiquetas, opciones, respuestas y explicación.</p>
+            <footer>
+              <button className="secondary-button" type="button" disabled={duplicateState.busy} onClick={() => setDuplicateState(undefined)}>Cancelar</button>
+              <button className="primary-button" type="button" disabled={duplicateState.busy} onClick={() => void executeDuplicate()}>
+                {duplicateState.busy ? 'Duplicando…' : 'Confirmar duplicación'}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {cloneState && (
         <div className="ns-modal-backdrop" role="presentation" onMouseDown={(event) => {

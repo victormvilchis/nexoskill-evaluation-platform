@@ -2,7 +2,6 @@ package com.nexoskill.evaluation.questionbank.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,7 +11,6 @@ import static org.mockito.Mockito.when;
 import com.nexoskill.evaluation.organizations.application.TenantContextResolver;
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
-import com.nexoskill.evaluation.questionbank.application.model.CreateQuestionCommand;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionAnswerSettings;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionCategoryRef;
 import com.nexoskill.evaluation.questionbank.application.model.QuestionDetail;
@@ -27,15 +25,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 class QuestionDuplicateServiceTest {
     private final QuestionBankPort port = mock(QuestionBankPort.class);
-    private final QuestionServices.Create create = mock(QuestionServices.Create.class);
     private final TenantContextResolver tenantContextResolver = mock(TenantContextResolver.class);
     private final HttpServletRequest request = mock(HttpServletRequest.class);
     private final QuestionServices.Duplicate service = new QuestionServices.Duplicate(
-            port, create, tenantContextResolver, request);
+            port, tenantContextResolver, request);
 
     @Test
     void globalAdministratorDuplicatesGlobalQuestionAsUnpublishedGlobalContent() {
@@ -44,17 +40,11 @@ class QuestionDuplicateServiceTest {
         QuestionDetail copy = question(ContentScope.GLOBAL, "global", "GLOBAL");
         when(port.get(source.publicId())).thenReturn(source);
         when(tenantContextResolver.resolve(request)).thenReturn(tenant);
-        when(create.execute(any())).thenReturn(copy);
+        when(port.duplicate(source.publicId(), 7L)).thenReturn(copy);
 
         assertThat(service.execute(source.publicId(), 7L)).isSameAs(copy);
 
-        ArgumentCaptor<CreateQuestionCommand> command = ArgumentCaptor.forClass(CreateQuestionCommand.class);
-        verify(create).execute(command.capture());
-        assertThat(command.getValue().contentScope()).isEqualTo("GLOBAL");
-        assertThat(command.getValue().organizationPublicId()).isNull();
-        assertThat(command.getValue().categoryPublicIds()).containsExactly("category-1");
-        assertThat(command.getValue().tags()).containsExactly("herencia");
-        assertThat(command.getValue().options()).hasSize(2);
+        verify(port).duplicate(source.publicId(), 7L);
     }
 
 
@@ -67,12 +57,40 @@ class QuestionDuplicateServiceTest {
         QuestionDetail secondCopy = question(ContentScope.GLOBAL, "global", "GLOBAL", QuestionStatus.ACTIVE);
         when(port.get(active.publicId())).thenReturn(active, archived);
         when(tenantContextResolver.resolve(request)).thenReturn(tenant);
-        when(create.execute(any())).thenReturn(firstCopy, secondCopy);
+        when(port.duplicate(active.publicId(), 7L)).thenReturn(firstCopy, secondCopy);
 
         assertThat(service.execute(active.publicId(), 7L)).isSameAs(firstCopy);
         assertThat(service.execute(active.publicId(), 7L)).isSameAs(secondCopy);
 
-        verify(create, times(2)).execute(any());
+        verify(port, times(2)).duplicate(active.publicId(), 7L);
+    }
+
+    @Test
+    void globalAdministratorDuplicatesGlobalQuestionIntoSelectedOrganization() {
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        QuestionDetail source = question(ContentScope.GLOBAL, "global", "GLOBAL");
+        QuestionDetail copy = question(ContentScope.ORGANIZATION, "org-20", "ORG_20");
+        when(port.get(source.publicId())).thenReturn(source);
+        when(tenantContextResolver.resolve(request)).thenReturn(tenant);
+        when(port.duplicateGlobalToOrganization(source.publicId(), "org-20", 7L)).thenReturn(copy);
+
+        assertThat(service.execute(source.publicId(), "ORGANIZATION", "org-20", 7L)).isSameAs(copy);
+
+        verify(port).duplicateGlobalToOrganization(source.publicId(), "org-20", 7L);
+    }
+
+    @Test
+    void nonAdministratorCannotSelectAnotherDuplicateDestination() {
+        TenantContext tenant = TenantContext.organization(20L, "org-20", "ORG_20", false);
+        QuestionDetail source = question(ContentScope.ORGANIZATION, "org-20", "ORG_20");
+        when(port.get(source.publicId())).thenReturn(source);
+        when(tenantContextResolver.resolve(request)).thenReturn(tenant);
+
+        assertThatThrownBy(() -> service.execute(source.publicId(), "ORGANIZATION", "org-21", 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Solo el Administrador global puede seleccionar otro destino para la duplicación.");
+
+        verify(port, never()).duplicateGlobalToOrganization(source.publicId(), "org-21", 7L);
     }
 
     @Test
@@ -84,7 +102,7 @@ class QuestionDuplicateServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("No se puede duplicar una pregunta eliminada.");
 
-        verify(create, never()).execute(any());
+        verify(port, never()).duplicate(deleted.publicId(), 7L);
     }
 
     @Test
@@ -93,14 +111,11 @@ class QuestionDuplicateServiceTest {
         QuestionDetail source = question(ContentScope.ORGANIZATION, "org-20", "ORG_20");
         when(port.get(source.publicId())).thenReturn(source);
         when(tenantContextResolver.resolve(request)).thenReturn(tenant);
-        when(create.execute(any())).thenReturn(source);
+        when(port.duplicate(source.publicId(), 7L)).thenReturn(source);
 
         service.execute(source.publicId(), 7L);
 
-        ArgumentCaptor<CreateQuestionCommand> command = ArgumentCaptor.forClass(CreateQuestionCommand.class);
-        verify(create).execute(command.capture());
-        assertThat(command.getValue().contentScope()).isEqualTo("ORGANIZATION");
-        assertThat(command.getValue().organizationPublicId()).isEqualTo("org-20");
+        verify(port).duplicate(source.publicId(), 7L);
     }
 
     @Test
@@ -114,7 +129,7 @@ class QuestionDuplicateServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("No tienes permisos para duplicar esta pregunta dentro del contexto actual.");
 
-        verify(create, never()).execute(any());
+        verify(port, never()).duplicate(source.publicId(), 7L);
     }
 
     private static QuestionDetail question(ContentScope scope, String organizationPublicId,

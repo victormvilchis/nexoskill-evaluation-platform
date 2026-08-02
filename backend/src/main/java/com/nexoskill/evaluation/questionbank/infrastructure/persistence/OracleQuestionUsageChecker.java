@@ -6,9 +6,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Verifica usos operativos de una pregunta directamente en base de datos.
- * Las relaciones se conservan. El resultado se utiliza para auditar que
- * las dependencias activas permanezcan intactas durante cambios de estado.
+ * Verifica usos operativos y retira relaciones directas cuando una pregunta
+ * se elimina lógicamente. Los pools por categoría se conservan porque no
+ * almacenan una referencia directa a la pregunta y solo consumen preguntas activas.
  */
 @Component
 public class OracleQuestionUsageChecker implements QuestionUsageChecker {
@@ -60,4 +60,15 @@ public class OracleQuestionUsageChecker implements QuestionUsageChecker {
             """, Map.of("questionId", questionId), Integer.class);
         return count != null && count > 0;
     }
+    @Override
+    public DetachmentResult detachFromForms(Long questionId) {
+        if (questionId == null) return new DetachmentResult(0, 0);
+        Map<String, Object> params = Map.of("questionId", questionId);
+        int fixedRelations = jdbc.update(
+                "DELETE FROM FORM_QUESTION WHERE QUESTION_ID = :questionId", params);
+        int collectionRelations = jdbc.update(
+                "DELETE FROM COLLECTION_QUESTION_RELATION WHERE QUESTION_ID = :questionId", params);
+        return new DetachmentResult(fixedRelations, collectionRelations);
+    }
+
 }

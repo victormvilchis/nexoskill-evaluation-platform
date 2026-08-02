@@ -42,6 +42,20 @@ export function getQuestionCategoryOptions(
   return apiRequest<QuestionCategory[]>(`/admin/question-catalogs/question-options${suffix}`, { signal })
 }
 
+export function getQuestionTechnologyOptions(
+  questionPublicId?: string,
+  targetScope?: ContentScope,
+  organizationPublicId?: string,
+  signal?: AbortSignal
+) {
+  const query = new URLSearchParams()
+  if (questionPublicId) query.set('questionPublicId', questionPublicId)
+  if (!questionPublicId && targetScope) query.set('targetScope', targetScope)
+  if (!questionPublicId && organizationPublicId) query.set('organizationPublicId', organizationPublicId)
+  const suffix = query.size > 0 ? `?${query.toString()}` : ''
+  return apiRequest<QuestionCatalogs['technologies']>(`/admin/question-catalogs/technology-options${suffix}`, { signal })
+}
+
 export function getQuestionCategories(
   signal?: AbortSignal,
   status: CatalogStatus | 'ALL' = 'ACTIVE'
@@ -211,9 +225,13 @@ export function createQuestionOrganizationCopy(id: string) {
   })
 }
 
-export function duplicateQuestion(id: string) {
+export function duplicateQuestion(
+  id: string,
+  payload?: { targetScope: ContentScope; organizationPublicId?: string }
+) {
   return apiRequest<QuestionDetail>(`/admin/questions/${id}/duplicate`, {
-    method: 'POST'
+    method: 'POST',
+    body: payload ? JSON.stringify(payload) : undefined
   })
 }
 

@@ -17,8 +17,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -89,47 +91,94 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     @Override
     public List<QuestionCategorySummary> questionOptions(TenantContext tenant, String questionPublicId,
             String targetScopeValue, String organizationPublicId) {
-        ContentScope targetScope;
-        Long targetOrganizationId;
-        Set<Long> retainedCategoryIds = Set.of();
-
-        if (questionPublicId == null || questionPublicId.isBlank()) {
-            QuestionCreationTargetResolver.Target target = creationTargetResolver.resolve(tenant,
-                    targetScopeValue, organizationPublicId);
-            targetScope = target.scope();
-            targetOrganizationId = target.organizationId();
-        } else {
-            String normalizedId = PublicIdNormalizer.requiredUuid(questionPublicId, "QUESTION_ID_INVALID",
-                    "La pregunta indicada no es válida.");
-            QuestionJpaEntity question = questions.findByPublicId(normalizedId)
-                    .orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
-            if (!tenant.globalAdministrator()) {
-                accessPolicy.assertReadable(GlobalContentType.QUESTION, question.getId(), question.getContentScope(),
-                        question.getOwnerOrganizationId(), tenant, "QUESTION_ACCESS_FORBIDDEN",
-                        "No tienes permisos para acceder a esta pregunta.");
-            }
-            targetScope = question.getContentScope();
-            targetOrganizationId = question.getOwnerOrganizationId();
-            retainedCategoryIds = new HashSet<>(question.getCategories().stream()
-                    .map(QuestionCategoryJpaEntity::getId).toList());
-        }
-
-        if (targetOrganizationId == null) {
+        QuestionOptionTarget target = optionTarget(tenant, questionPublicId, targetScopeValue, organizationPublicId);
+        if (target.scope() == ContentScope.ORGANIZATION && target.organizationId() == null) {
             throw error("QUESTION_CATEGORY_CONTEXT_NOT_RESOLVED",
                     "No fue posible determinar las categorías disponibles para el contexto actual.");
         }
 
-        List<QuestionCategoryJpaEntity> candidates = targetScope == ContentScope.GLOBAL
-                ? categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)
-                : categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
-                        ContentScope.ORGANIZATION, targetOrganizationId);
-        Set<Long> retained = retainedCategoryIds;
-        return candidates.stream()
+        LinkedHashMap<Long, QuestionCategoryJpaEntity> candidates = new LinkedHashMap<>();
+        if (target.scope() == ContentScope.GLOBAL) {
+            categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)
+                    .forEach(value -> candidates.put(value.getId(), value));
+        } else {
+            if (tenant.globalAdministrator()) {
+                categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)
+                        .forEach(value -> candidates.put(value.getId(), value));
+            }
+            categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
+                            ContentScope.ORGANIZATION, target.organizationId())
+                    .forEach(value -> candidates.put(value.getId(), value));
+            target.retainedCategories().forEach(value -> candidates.putIfAbsent(value.getId(), value));
+        }
+
+        Set<Long> retained = target.retainedCategories().stream()
+                .map(QuestionCategoryJpaEntity::getId).collect(java.util.stream.Collectors.toSet());
+        return candidates.values().stream()
                 .filter(category -> category.getStatus() == CatalogStatus.ACTIVE
                         || (category.getStatus() == CatalogStatus.INACTIVE && retained.contains(category.getId())))
                 .sorted(Comparator.comparing(QuestionCategoryJpaEntity::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::summary)
                 .toList();
+    }
+
+    @Override
+    public List<QuestionTechnologySummary> technologyOptions(TenantContext tenant, String questionPublicId,
+            String targetScopeValue, String organizationPublicId) {
+        QuestionOptionTarget target = optionTarget(tenant, questionPublicId, targetScopeValue, organizationPublicId);
+        if (target.scope() == ContentScope.ORGANIZATION && target.organizationId() == null) {
+            throw error("QUESTION_TECHNOLOGY_CONTEXT_NOT_RESOLVED",
+                    "No fue posible determinar las tecnologías disponibles para el contexto actual.");
+        }
+
+        LinkedHashMap<Long, QuestionTechnologyJpaEntity> candidates = new LinkedHashMap<>();
+        if (target.scope() == ContentScope.GLOBAL) {
+            technologies.findAllByContentScopeOrderByDisplayOrderAscNameAsc(ContentScope.GLOBAL)
+                    .forEach(value -> candidates.put(value.getId(), value));
+        } else {
+            if (tenant.globalAdministrator()) {
+                technologies.findAllByContentScopeOrderByDisplayOrderAscNameAsc(ContentScope.GLOBAL)
+                        .forEach(value -> candidates.put(value.getId(), value));
+            }
+            technologies.findAllByContentScopeAndOwnerOrganizationIdOrderByDisplayOrderAscNameAsc(
+                            ContentScope.ORGANIZATION, target.organizationId())
+                    .forEach(value -> candidates.put(value.getId(), value));
+            if (target.retainedTechnology() != null) {
+                candidates.putIfAbsent(target.retainedTechnology().getId(), target.retainedTechnology());
+            }
+        }
+
+        Long retainedId = target.retainedTechnology() == null ? null : target.retainedTechnology().getId();
+        return candidates.values().stream()
+                .filter(value -> value.getStatus()
+                        == com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus.ACTIVE
+                        || Objects.equals(value.getId(), retainedId))
+                .sorted(Comparator.comparingInt(QuestionTechnologyJpaEntity::getDisplayOrder)
+                        .thenComparing(QuestionTechnologyJpaEntity::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(value -> new QuestionTechnologySummary(value.getPublicId(), value.getCode(), value.getName(),
+                        value.getStatus().name(), value.getDisplayOrder()))
+                .toList();
+    }
+
+    private QuestionOptionTarget optionTarget(TenantContext tenant, String questionPublicId,
+            String targetScopeValue, String organizationPublicId) {
+        if (questionPublicId == null || questionPublicId.isBlank()) {
+            QuestionCreationTargetResolver.Target target = creationTargetResolver.resolve(tenant,
+                    targetScopeValue, organizationPublicId);
+            return new QuestionOptionTarget(target.scope(), target.organizationId(), List.of(), null);
+        }
+
+        String normalizedId = PublicIdNormalizer.requiredUuid(questionPublicId, "QUESTION_ID_INVALID",
+                "La pregunta indicada no es válida.");
+        QuestionJpaEntity question = questions.findByPublicId(normalizedId)
+                .orElseThrow(() -> error("QUESTION_NOT_FOUND", "La pregunta solicitada no existe."));
+        if (!tenant.globalAdministrator()) {
+            accessPolicy.assertReadable(GlobalContentType.QUESTION, question.getId(), question.getContentScope(),
+                    question.getOwnerOrganizationId(), tenant, "QUESTION_ACCESS_FORBIDDEN",
+                    "No tienes permisos para acceder a esta pregunta.");
+        }
+        return new QuestionOptionTarget(question.getContentScope(), question.getOwnerOrganizationId(),
+                List.copyOf(question.getCategories()), question.getTechnology());
     }
 
     @Override
@@ -350,6 +399,10 @@ public class OracleQuestionCatalogAdapter implements QuestionCatalogPort {
     }
 
     private BusinessException error(String code, String message) { return new BusinessException(code, message); }
+
+    private record QuestionOptionTarget(ContentScope scope, Long organizationId,
+            List<QuestionCategoryJpaEntity> retainedCategories,
+            QuestionTechnologyJpaEntity retainedTechnology) {}
 
     private record ScopeTarget(ContentScope scope, Long organizationId) {}
 }

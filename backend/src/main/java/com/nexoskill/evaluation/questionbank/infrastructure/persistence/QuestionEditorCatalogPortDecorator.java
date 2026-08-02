@@ -63,6 +63,15 @@ public class QuestionEditorCatalogPortDecorator implements QuestionCatalogPort {
     }
 
     @Override
+    public List<com.nexoskill.evaluation.questionbank.application.model.QuestionTechnologySummary> technologyOptions(
+            TenantContext tenant,
+            String questionPublicId,
+            String targetScope,
+            String organizationPublicId) {
+        return delegate.technologyOptions(tenant, questionPublicId, targetScope, organizationPublicId);
+    }
+
+    @Override
     public QuestionCategorySummary get(String publicId, TenantContext tenant) {
         return delegate.get(publicId, tenant);
     }

@@ -4,7 +4,8 @@ import type {
   OrganizationPage,
   OrganizationPayload,
   OrganizationStatus,
-  OrganizationStatusHistory
+  OrganizationStatusHistory,
+  OrganizationSummary
 } from '../types/organizations'
 import type { SortDirection } from '../../../shared/types/pagination'
 
@@ -27,6 +28,28 @@ export async function searchOrganizations(params: {
   return apiRequest<OrganizationPage>(`/admin/organizations?${search.toString()}`, {
     signal: params.signal
   })
+}
+
+export async function getAllOrganizations(params: {
+  status?: OrganizationStatus | 'ALL'
+  sort?: string
+  direction?: SortDirection
+  signal?: AbortSignal
+} = {}): Promise<OrganizationSummary[]> {
+  const result: OrganizationSummary[] = []
+  let page = 0
+  let totalPages = 1
+  while (page < totalPages) {
+    const response = await searchOrganizations({
+      ...params,
+      page,
+      size: 100
+    })
+    result.push(...response.content)
+    totalPages = response.totalPages
+    page += 1
+  }
+  return result
 }
 
 export function getOrganization(publicId: string, signal?: AbortSignal) {

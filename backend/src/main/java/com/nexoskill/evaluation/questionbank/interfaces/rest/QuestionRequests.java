@@ -103,6 +103,9 @@ public final class QuestionRequests {
     public record Status(@PositiveOrZero long expectedEntityVersion) {
     }
 
+    public record Duplicate(String targetScope, String organizationPublicId) {
+    }
+
     public record CloneToGlobal(boolean includeDependencies, @Size(max = 1000) String notes) {
     }
 

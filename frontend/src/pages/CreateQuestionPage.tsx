@@ -11,7 +11,14 @@ export function CreateQuestionPage() {
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   async function save(payload: QuestionPayload) {
     await createQuestion(payload)
-    completeSave({ title: 'Pregunta creada correctamente.' })
+    const title = payload.contentScope === 'GLOBAL'
+      ? payload.availabilityMode && payload.availabilityMode !== 'NONE'
+        ? 'La pregunta global y su distribución se guardaron correctamente.'
+        : 'La pregunta global se creó correctamente.'
+      : globalAdministrator && payload.contentScope === 'ORGANIZATION'
+        ? 'La pregunta se creó correctamente para la organización seleccionada.'
+        : 'La pregunta se creó correctamente para tu organización.'
+    completeSave({ title })
   }
   return (
     <main className="content-page editor-page">

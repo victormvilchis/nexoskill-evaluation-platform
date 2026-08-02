@@ -62,6 +62,16 @@ class QuestionEditorCatalogPortDecoratorTest {
     }
 
     @Test
+    void keepsTechnologyOptionsOnTheOwnerAwareDelegate() {
+        TenantContext tenant = TenantContext.organization(20L, "organization", "ORG", false);
+
+        adapter.technologyOptions(tenant, null, "ORGANIZATION", "organization");
+
+        verify(delegate).technologyOptions(tenant, null, "ORGANIZATION", "organization");
+        verifyNoInteractions(types, difficulties);
+    }
+
+    @Test
     void keepsCategoryOptionsOnTheOwnerAwareDelegate() {
         TenantContext tenant = TenantContext.organization(20L, "organization", "ORG", false);
 

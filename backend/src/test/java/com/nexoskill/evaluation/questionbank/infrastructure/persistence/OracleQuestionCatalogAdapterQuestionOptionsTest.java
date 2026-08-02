@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.questionbank.infrastructure.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.nexoskill.evaluation.globalcontent.application.service.ContentSynchronizationService;
@@ -10,6 +11,7 @@ import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
+import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
 import com.nexoskill.evaluation.questionbank.application.service.QuestionCreationTargetResolver;
 import java.time.Clock;
 import java.time.Instant;
@@ -73,6 +75,74 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
     }
 
     @Test
+    void globalAdministratorSeesGlobalAndSelectedOrganizationCategories() {
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        QuestionCategoryJpaEntity organizationCategory = mock(QuestionCategoryJpaEntity.class);
+        when(organizationCategory.getId()).thenReturn(11L);
+        when(organizationCategory.getPublicId()).thenReturn("00000000-0000-0000-0000-000000000011");
+        when(organizationCategory.getCode()).thenReturn("APX");
+        when(organizationCategory.getName()).thenReturn("APX");
+        when(organizationCategory.getStatus()).thenReturn(CatalogStatus.ACTIVE);
+        when(organizationCategory.getContentScope()).thenReturn(ContentScope.ORGANIZATION);
+        when(organizationCategory.getOwnerOrganizationId()).thenReturn(2L);
+        when(organizationCategory.getVersion()).thenReturn(0L);
+        when(organizationCategory.getCreatedAt()).thenReturn(Instant.parse("2026-07-29T12:00:00Z"));
+        when(questions.countAllByCategory(11L)).thenReturn(0L);
+        when(creationTargetResolver.resolve(tenant, "ORGANIZATION", "customer"))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.ORGANIZATION, 2L, "customer"));
+        when(categories.findAllByContentScopeOrderByNameAsc(ContentScope.GLOBAL)).thenReturn(List.of(category));
+        when(categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
+                ContentScope.ORGANIZATION, 2L)).thenReturn(List.of(organizationCategory));
+
+        var result = adapter.questionOptions(tenant, null, "ORGANIZATION", "customer");
+
+        assertEquals(List.of("APX", "Java"), result.stream().map(value -> value.name()).toList());
+    }
+
+    @Test
+    void organizationUserSeesOnlyOwnOrganizationCategories() {
+        TenantContext tenant = TenantContext.organization(2L, "customer", "CUSTOMER", false);
+        QuestionCategoryJpaEntity organizationCategory = mock(QuestionCategoryJpaEntity.class);
+        when(organizationCategory.getId()).thenReturn(11L);
+        when(organizationCategory.getPublicId()).thenReturn("00000000-0000-0000-0000-000000000011");
+        when(organizationCategory.getCode()).thenReturn("APX");
+        when(organizationCategory.getName()).thenReturn("APX");
+        when(organizationCategory.getStatus()).thenReturn(CatalogStatus.ACTIVE);
+        when(organizationCategory.getContentScope()).thenReturn(ContentScope.ORGANIZATION);
+        when(organizationCategory.getOwnerOrganizationId()).thenReturn(2L);
+        when(organizationCategory.getVersion()).thenReturn(0L);
+        when(organizationCategory.getCreatedAt()).thenReturn(Instant.parse("2026-07-29T12:00:00Z"));
+        when(questions.countAllByCategory(11L)).thenReturn(0L);
+        when(creationTargetResolver.resolve(tenant, "ORGANIZATION", "customer"))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.ORGANIZATION, 2L, "customer"));
+        when(categories.findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
+                ContentScope.ORGANIZATION, 2L)).thenReturn(List.of(organizationCategory));
+
+        var result = adapter.questionOptions(tenant, null, "ORGANIZATION", "customer");
+
+        assertEquals(List.of("APX"), result.stream().map(value -> value.name()).toList());
+    }
+
+    @Test
+    void globalAdministratorSeesGlobalAndSelectedOrganizationTechnologies() {
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        QuestionTechnologyJpaEntity globalTechnology = technology(21L,
+                "00000000-0000-0000-0000-000000000021", "JAVA", "Java", 1);
+        QuestionTechnologyJpaEntity organizationTechnology = technology(22L,
+                "00000000-0000-0000-0000-000000000022", "APX", "APX", 2);
+        when(creationTargetResolver.resolve(tenant, "ORGANIZATION", "customer"))
+                .thenReturn(new QuestionCreationTargetResolver.Target(ContentScope.ORGANIZATION, 2L, "customer"));
+        when(technologies.findAllByContentScopeOrderByDisplayOrderAscNameAsc(ContentScope.GLOBAL))
+                .thenReturn(List.of(globalTechnology));
+        when(technologies.findAllByContentScopeAndOwnerOrganizationIdOrderByDisplayOrderAscNameAsc(
+                ContentScope.ORGANIZATION, 2L)).thenReturn(List.of(organizationTechnology));
+
+        var result = adapter.technologyOptions(tenant, null, "ORGANIZATION", "customer");
+
+        assertEquals(List.of("Java", "APX"), result.stream().map(value -> value.name()).toList());
+    }
+
+    @Test
     void retainsAnInactiveCategoryAlreadyAssignedDuringEdit() {
         TenantContext tenant = TenantContext.organization(2L, "customer", "CUSTOMER", false);
         when(question.getId()).thenReturn(20L);
@@ -119,6 +189,18 @@ class OracleQuestionCatalogAdapterQuestionOptionsTest {
         var result = adapter.questionOptions(tenant, null, null, null);
 
         assertEquals(0, result.size());
+    }
+
+    private static QuestionTechnologyJpaEntity technology(Long id, String publicId, String code,
+            String name, int displayOrder) {
+        QuestionTechnologyJpaEntity value = mock(QuestionTechnologyJpaEntity.class);
+        when(value.getId()).thenReturn(id);
+        when(value.getPublicId()).thenReturn(publicId);
+        when(value.getCode()).thenReturn(code);
+        when(value.getName()).thenReturn(name);
+        when(value.getStatus()).thenReturn(QuestionTechnologyStatus.ACTIVE);
+        when(value.getDisplayOrder()).thenReturn(displayOrder);
+        return value;
     }
 
 }

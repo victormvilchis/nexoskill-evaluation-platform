@@ -370,6 +370,9 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
                       JOIN QUESTION_CATEGORY_RELATION qcr
                         ON fp.SOURCE_TYPE = 'CATEGORY'
                        AND qcr.CATEGORY_ID = fp.CATEGORY_ID
+                      JOIN QUESTION q_pool
+                        ON q_pool.QUESTION_ID = qcr.QUESTION_ID
+                       AND q_pool.STATUS <> 'DELETED'
                       LEFT JOIN LEARNING_COLLECTION_LEVEL lcl ON lcl.FORM_ID = f.FORM_ID
                       LEFT JOIN LEARNING_COLLECTION lc ON lc.COLLECTION_ID = lcl.COLLECTION_ID
                      WHERE qcr.QUESTION_ID IN (:ids)

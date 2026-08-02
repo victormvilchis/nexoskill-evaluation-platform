@@ -7,8 +7,6 @@ import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.shared.domain.PublicIdNormalizer;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
@@ -106,20 +104,24 @@ public final class QuestionServices {
     @Service
     public static class Duplicate {
         private final QuestionBankPort port;
-        private final Create create;
         private final TenantContextResolver tenantContextResolver;
         private final HttpServletRequest request;
 
-        public Duplicate(QuestionBankPort port, Create create,
+        public Duplicate(QuestionBankPort port,
                 TenantContextResolver tenantContextResolver, HttpServletRequest request) {
             this.port = port;
-            this.create = create;
             this.tenantContextResolver = tenantContextResolver;
             this.request = request;
         }
 
         @Transactional
         public QuestionDetail execute(String id, Long actor) {
+            return execute(id, null, null, actor);
+        }
+
+        @Transactional
+        public QuestionDetail execute(String id, String requestedTargetScope,
+                String requestedOrganizationPublicId, Long actor) {
             QuestionDetail source = port.get(id);
             if (source == null || source.ownership() == null || source.ownership().scope() == null) {
                 throw new BusinessException("QUESTION_DUPLICATE_CONTEXT_INVALID",
@@ -133,48 +135,37 @@ public final class QuestionServices {
                 throw new BusinessException("QUESTION_ACTOR_REQUIRED",
                         "No fue posible identificar al usuario que realiza la duplicación.");
             }
-            if (source.categories() == null || source.categories().isEmpty()) {
-                throw new BusinessException("QUESTION_DUPLICATE_CONFIGURATION_INVALID",
-                        "No fue posible duplicar la pregunta porque no tiene categorías válidas.");
-            }
 
             var tenant = tenantContextResolver.resolve(request);
             assertCanDuplicate(source, tenant);
 
-            ContentScope scope = source.ownership().scope();
-            String ownerPublicId = scope == ContentScope.ORGANIZATION
-                    ? source.ownership().organizationPublicId() : null;
-            if (scope == ContentScope.ORGANIZATION
-                    && (ownerPublicId == null || ownerPublicId.isBlank())) {
-                throw new BusinessException("QUESTION_DUPLICATE_OWNER_INVALID",
-                        "No fue posible identificar la organización propietaria de la pregunta.");
+            if (requestedTargetScope == null || requestedTargetScope.isBlank()) {
+                return port.duplicate(id, actor);
+            }
+            if (!tenant.globalAdministrator()) {
+                throw new BusinessException("QUESTION_DUPLICATE_TARGET_FORBIDDEN",
+                        "Solo el Administrador global puede seleccionar otro destino para la duplicación.");
+            }
+            if (source.ownership().scope() != ContentScope.GLOBAL) {
+                throw new BusinessException("QUESTION_DUPLICATE_GLOBAL_SOURCE_REQUIRED",
+                        "La selección de destino solo está disponible al duplicar una pregunta global.");
             }
 
-            List<QuestionOptionCommand> options = (source.options() == null ? List.<QuestionOptionView>of() : source.options()).stream()
-                    .sorted(Comparator.comparingInt(QuestionOptionView::order))
-                    .map(option -> new QuestionOptionCommand(option.text(), mediaId(option.media()),
-                            option.matchText(), mediaId(option.matchMedia()), option.correct(), option.feedback()))
-                    .toList();
-            List<String> tags = (source.tags() == null ? List.<QuestionTagView>of() : source.tags()).stream()
-                    .map(Duplicate::tagValue)
-                    .filter(value -> value != null && !value.isBlank())
-                    .toList();
-            QuestionAnswerSettings settings = source.answerSettings() == null
-                    ? QuestionAnswerSettings.empty() : source.answerSettings();
-
-            CreateQuestionCommand command = new CreateQuestionCommand(
-                    source.typeCode(), source.difficultyCode(),
-                    source.technology() == null ? null : source.technology().publicId(),
-                    source.levelCode(),
-                    source.categories().stream().map(QuestionCategoryRef::publicId).toList(),
-                    tags,
-                    source.statement(), source.explanation(), mediaId(source.promptMedia()),
-                    source.codeContent(), settings, options, scope.name(), ownerPublicId, actor);
-
-            // Duplicar siempre crea un recurso nuevo dentro del mismo alcance. No ejecuta
-            // los flujos de disponibilidad ni clonación, por lo que una copia GLOBAL nace
-            // sin organizaciones asociadas y una copia organizacional conserva su propietario.
-            return create.execute(command);
+            ContentScope targetScope;
+            try {
+                targetScope = ContentScope.valueOf(requestedTargetScope.trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException exception) {
+                throw new BusinessException("QUESTION_DUPLICATE_TARGET_INVALID",
+                        "El destino seleccionado para la duplicación no es válido.");
+            }
+            if (targetScope == ContentScope.GLOBAL) {
+                return port.duplicate(id, actor);
+            }
+            if (requestedOrganizationPublicId == null || requestedOrganizationPublicId.isBlank()) {
+                throw new BusinessException("QUESTION_DUPLICATE_OWNER_INVALID",
+                        "Selecciona la organización propietaria de la nueva pregunta.");
+            }
+            return port.duplicateGlobalToOrganization(id, requestedOrganizationPublicId, actor);
         }
 
         private static void assertCanDuplicate(QuestionDetail source,
@@ -188,17 +179,8 @@ public final class QuestionServices {
                         "No tienes permisos para duplicar esta pregunta dentro del contexto actual.");
             }
         }
-
-        private static String mediaId(QuestionMediaView media) {
-            return media == null ? null : media.publicId();
-        }
-
-        private static String tagValue(QuestionTagView tag) {
-            if (tag == null) return null;
-            return tag.displayName() == null || tag.displayName().isBlank()
-                    ? tag.slug() : tag.displayName();
-        }
     }
+
     @Service
     public static class CopyToOrganization {
         private final QuestionBankPort port;
@@ -206,6 +188,7 @@ public final class QuestionServices {
         @Transactional
         public QuestionDetail execute(String id, Long actor) { return port.copyToOrganization(id, actor); }
     }
+
     @Service
     public static class ChangeStatus {
         private final QuestionBankPort port;

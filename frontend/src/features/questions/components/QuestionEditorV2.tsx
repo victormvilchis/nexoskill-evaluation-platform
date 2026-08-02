@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { searchOrganizations } from '../../organizations/api/organizationApi'
+import { getAllOrganizations } from '../../organizations/api/organizationApi'
 import type { OrganizationSummary } from '../../organizations/types/organizations'
 import type { ContentScope, QuestionDetail, QuestionPayload } from '../../../shared/types/questions'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { QuestionEditor } from './QuestionEditor'
-import {
-  getQuestionAvailability,
-  type QuestionAvailabilityMode
-} from '../api/questionAvailabilityApi'
+import type { QuestionAvailabilityMode } from '../api/questionAvailabilityApi'
 
 interface Props {
   initial?: QuestionDetail
@@ -33,7 +30,9 @@ function mergeOrganizations(current: OrganizationSummary[], incoming: Organizati
 
 export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, onSubmit }: Props) {
   const editing = Boolean(initial)
-  const [targetScope, setTargetScope] = useState<ContentScope>(initial?.ownership.scope ?? 'GLOBAL')
+  const [targetScope, setTargetScope] = useState<ContentScope>(
+    initial?.ownership.scope ?? (globalAdministrator ? 'GLOBAL' : 'ORGANIZATION')
+  )
   const [ownerOrganizationPublicId, setOwnerOrganizationPublicId] = useState(
     initial?.ownership.organizationPublicId ?? ''
   )
@@ -41,7 +40,6 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
   const [selected, setSelected] = useState<string[]>([])
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [loadingOrganizations, setLoadingOrganizations] = useState(false)
-  const [loadingAvailability, setLoadingAvailability] = useState(Boolean(globalAdministrator && initial?.ownership.scope === 'GLOBAL'))
   const [error, setError] = useState<string>()
   const globalQuestion = targetScope === 'GLOBAL'
 
@@ -49,52 +47,18 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
     if (!globalAdministrator) return
     const controller = new AbortController()
     setLoadingOrganizations(true)
-    searchOrganizations({
+    getAllOrganizations({
       status: 'ACTIVE',
-      page: 0,
-      size: 100,
       sort: 'name',
       direction: 'ASC',
       signal: controller.signal
     })
-      .then((page) => setOrganizations((current) => mergeOrganizations(current,
-        page.content.filter((item) => item.organizationType === 'CUSTOMER'))))
+      .then((items) => setOrganizations((current) => mergeOrganizations(current,
+        items.filter((item) => item.organizationType === 'CUSTOMER'))))
       .catch(() => { if (!controller.signal.aborted) setError('No fue posible consultar las organizaciones.') })
       .finally(() => { if (!controller.signal.aborted) setLoadingOrganizations(false) })
     return () => controller.abort()
   }, [globalAdministrator])
-
-  useEffect(() => {
-    if (!globalAdministrator || !globalQuestion || !initial?.publicId) {
-      setLoadingAvailability(false)
-      return
-    }
-    const controller = new AbortController()
-    setLoadingAvailability(true)
-    getQuestionAvailability(initial.publicId, controller.signal)
-      .then((availability) => {
-        setMode(availability.mode)
-        setSelected(availability.organizations.map((organization) => organization.publicId))
-        setOrganizations((current) => mergeOrganizations(current, availability.organizations.map((organization) => ({
-          publicId: organization.publicId,
-          code: organization.code,
-          name: organization.name,
-          organizationType: 'CUSTOMER',
-          status: 'ACTIVE',
-          contentMode: 'CUSTOM',
-          appliesCertifications: false,
-          manualStudentCode: false,
-          studentCount: 0,
-          activeStudentCount: 0,
-          inactiveStudentCount: 0,
-          expiredStudentCount: 0,
-          updatedAt: ''
-        }))))
-      })
-      .catch(() => { if (!controller.signal.aborted) setError('No fue posible consultar la disponibilidad actual.') })
-      .finally(() => { if (!controller.signal.aborted) setLoadingAvailability(false) })
-    return () => controller.abort()
-  }, [globalAdministrator, globalQuestion, initial?.publicId])
 
   const selectedOrganizations = useMemo(() => organizations.filter(
     (organization) => selected.includes(organization.publicId)
@@ -117,17 +81,12 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
 
   async function submit(payload: QuestionPayload) {
     setError(undefined)
-    if (loadingAvailability) {
-      const message = 'Espera a que termine de cargarse la disponibilidad de la pregunta.'
-      setError(message)
-      throw new ApiRequestError(message, 'QUESTION_AVAILABILITY_LOADING', 409)
-    }
     if (globalAdministrator && !editing && targetScope === 'ORGANIZATION' && !ownerOrganizationPublicId) {
       const message = 'Selecciona la organización propietaria de la pregunta.'
       setError(message)
       throw new ApiRequestError(message, 'QUESTION_OWNER_ORGANIZATION_REQUIRED', 400)
     }
-    if (globalAdministrator && globalQuestion && mode === 'SELECTED_ORGANIZATIONS' && selected.length === 0) {
+    if (globalAdministrator && !editing && globalQuestion && mode === 'SELECTED_ORGANIZATIONS' && selected.length === 0) {
       const message = 'Selecciona al menos una organización para esta pregunta.'
       setError(message)
       throw new ApiRequestError(message, 'QUESTION_ORGANIZATIONS_REQUIRED', 400)
@@ -135,14 +94,12 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
     const cleanPayload: QuestionPayload = {
       ...payload,
       difficultyCode: normalizedDifficulty(payload.difficultyCode),
-      technologyPublicId: undefined,
-      levelCode: undefined,
       contentScope: globalAdministrator && !editing ? targetScope : undefined,
       organizationPublicId: globalAdministrator && !editing && targetScope === 'ORGANIZATION'
         ? ownerOrganizationPublicId
         : undefined,
-      availabilityMode: globalAdministrator && globalQuestion ? mode : undefined,
-      availabilityOrganizationPublicIds: globalAdministrator && globalQuestion && mode === 'SELECTED_ORGANIZATIONS'
+      availabilityMode: globalAdministrator && !editing && globalQuestion ? mode : undefined,
+      availabilityOrganizationPublicIds: globalAdministrator && !editing && globalQuestion && mode === 'SELECTED_ORGANIZATIONS'
         ? selectedOrganizations.map((organization) => organization.publicId)
         : undefined
     }
@@ -187,29 +144,26 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
         </section>
       )}
 
-      {globalAdministrator && globalQuestion && (
+      {globalAdministrator && !editing && globalQuestion && (
         <section className="editor-card question-availability-card">
           <div className="section-heading">
-            <div><p className="eyebrow">Disponibilidad</p><h2>Acceso organizacional</h2></div>
+            <div><p className="eyebrow">Distribución</p><h2>Copias organizacionales</h2></div>
             <span className="availability-count">
-              {loadingAvailability ? 'Cargando…' : mode === 'NONE' ? 'Sin publicar' : mode === 'GLOBAL' ? 'Todas' : `${selected.length} seleccionadas`}
+              {mode === 'NONE' ? 'Solo GLOBAL' : mode === 'GLOBAL' ? 'Todas' : `${selected.length} seleccionadas`}
             </span>
           </div>
-          {editing && initial?.forms.length ? (
-            <p className="inline-warning-text">Esta pregunta global ya se utiliza en contenido. Los cambios se reflejarán en quienes consuman la referencia global, pero no modificarán copias organizacionales.</p>
-          ) : null}
-          <div className="availability-mode" role="radiogroup" aria-label="Disponibilidad de la pregunta">
+          <div className="availability-mode" role="radiogroup" aria-label="Distribución de la pregunta">
             <label>
-              <input type="radio" name="availabilityMode" disabled={loadingAvailability} checked={mode === 'NONE'} onChange={() => { setMode('NONE'); setSelected([]) }} />
-              <span><strong>No disponible para organizaciones</strong><small>Permanece en el catálogo GLOBAL sin publicación organizacional.</small></span>
+              <input type="radio" name="availabilityMode" checked={mode === 'NONE'} onChange={() => { setMode('NONE'); setSelected([]) }} />
+              <span><strong>Crear únicamente en GLOBAL</strong><small>No se generará ninguna copia organizacional.</small></span>
             </label>
             <label>
-              <input type="radio" name="availabilityMode" disabled={loadingAvailability} checked={mode === 'GLOBAL'} onChange={() => { setMode('GLOBAL'); setSelected([]) }} />
-              <span><strong>Disponible para todas las organizaciones</strong><small>La pregunta seguirá siendo propiedad de GLOBAL y no se copiará.</small></span>
+              <input type="radio" name="availabilityMode" checked={mode === 'GLOBAL'} onChange={() => { setMode('GLOBAL'); setSelected([]) }} />
+              <span><strong>Crear para todas las organizaciones</strong><small>Se generará una copia independiente para cada organización comercial activa.</small></span>
             </label>
             <label>
-              <input type="radio" name="availabilityMode" disabled={loadingAvailability} checked={mode === 'SELECTED_ORGANIZATIONS'} onChange={() => setMode('SELECTED_ORGANIZATIONS')} />
-              <span><strong>Disponible solo para organizaciones seleccionadas</strong><small>Solo las organizaciones habilitadas podrán consultarla y utilizarla.</small></span>
+              <input type="radio" name="availabilityMode" checked={mode === 'SELECTED_ORGANIZATIONS'} onChange={() => setMode('SELECTED_ORGANIZATIONS')} />
+              <span><strong>Crear para organizaciones seleccionadas</strong><small>Cada destino recibirá una copia independiente de la pregunta global.</small></span>
             </label>
           </div>
           {mode === 'SELECTED_ORGANIZATIONS' && (
@@ -246,6 +200,7 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
         organizationPublicId={editing
           ? initial?.ownership.organizationPublicId
           : targetScope === 'ORGANIZATION' ? ownerOrganizationPublicId : undefined}
+        catalogContextReady={!globalAdministrator || editing || targetScope === 'GLOBAL' || Boolean(ownerOrganizationPublicId)}
       />
     </div>
   )

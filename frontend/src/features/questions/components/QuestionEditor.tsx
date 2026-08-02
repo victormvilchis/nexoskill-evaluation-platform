@@ -6,7 +6,7 @@ import {
   type FormEvent
 } from 'react'
 import { Link } from 'react-router-dom'
-import { getQuestionCatalogs, getQuestionCategoryOptions } from '../api/questionApi'
+import { getQuestionCatalogs, getQuestionCategoryOptions, getQuestionTechnologyOptions } from '../api/questionApi'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
 import { useToast } from '../../../shared/components/ToastProvider'
@@ -91,17 +91,27 @@ interface QuestionEditorProps {
   submitLabel: string
   targetScope?: ContentScope
   organizationPublicId?: string
+  catalogContextReady?: boolean
 }
 
-export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, organizationPublicId }: QuestionEditorProps) {
+export function QuestionEditor({
+  initial,
+  onSubmit,
+  submitLabel,
+  targetScope,
+  organizationPublicId,
+  catalogContextReady = true
+}: QuestionEditorProps) {
   const toast = useToast()
   const [catalogs, setCatalogs] = useState<QuestionCatalogs>()
   const [availableCategories, setAvailableCategories] = useState<QuestionCatalogs['categories']>()
+  const [availableTechnologies, setAvailableTechnologies] = useState<QuestionCatalogs['technologies']>([])
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState<string>()
   const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
   const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'JR')
-  const [technologyPublicId] = useState(initial?.technology?.publicId ?? '')
+  const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
+  const [levelCode, setLevelCode] = useState(initial?.levelCode ?? '')
   const [categoryPublicIds, setCategoryPublicIds] = useState<string[]>(
     initial?.categories.map((category) => category.publicId) ?? []
   )
@@ -123,10 +133,16 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
     setCatalogLoading(true)
     setCatalogError(undefined)
     setAvailableCategories(undefined)
+    setAvailableTechnologies([])
     Promise.allSettled([
       getQuestionCatalogs(controller.signal),
-      getQuestionCategoryOptions(initial?.publicId, targetScope, organizationPublicId, controller.signal)
-    ]).then(([catalogResult, categoryResult]) => {
+      catalogContextReady
+        ? getQuestionCategoryOptions(initial?.publicId, targetScope, organizationPublicId, controller.signal)
+        : Promise.resolve([]),
+      catalogContextReady
+        ? getQuestionTechnologyOptions(initial?.publicId, targetScope, organizationPublicId, controller.signal)
+        : Promise.resolve([])
+    ]).then(([catalogResult, categoryResult, technologyResult]) => {
       if (controller.signal.aborted) return
       const failures: string[] = []
       if (catalogResult.status === 'fulfilled') {
@@ -143,6 +159,15 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
       } else {
         failures.push('No fue posible cargar las categorías disponibles.')
       }
+      if (technologyResult.status === 'fulfilled') {
+        setAvailableTechnologies(technologyResult.value)
+        if (!initial) {
+          const allowed = new Set(technologyResult.value.map((technology) => technology.publicId))
+          setTechnologyPublicId((current) => allowed.has(current) ? current : '')
+        }
+      } else {
+        failures.push('No fue posible cargar las tecnologías disponibles.')
+      }
       if (failures.length > 0) {
         const message = failures.join(' ')
         setCatalogError(message)
@@ -151,7 +176,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
       setCatalogLoading(false)
     })
     return () => controller.abort()
-  }, [initial?.publicId, targetScope, organizationPublicId, toast])
+  }, [catalogContextReady, initial?.publicId, targetScope, organizationPublicId, toast])
 
   const usesOptions = optionTypes.has(type)
   const categoryOptions = useMemo(() => {
@@ -238,6 +263,7 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
         typeCode: type,
         difficultyCode: difficultyCode || undefined,
         technologyPublicId: technologyPublicId || undefined,
+        levelCode: levelCode || undefined,
         categoryPublicIds,
         tags,
         statement: statement.trim(),
@@ -341,6 +367,35 @@ export function QuestionEditor({ initial, onSubmit, submitLabel, targetScope, or
             required
             disabled={busy}
             onChange={setDifficultyCode}
+          />
+          <QuestionClassificationSelect
+            id="question-technology"
+            label="Tecnología"
+            value={technologyPublicId}
+            options={[
+              { value: '', label: 'Sin tecnología' },
+              ...availableTechnologies.map((technology) => ({
+                value: technology.publicId,
+                label: technology.name
+              }))
+            ]}
+            help="Solo se muestran tecnologías válidas para el alcance seleccionado."
+            disabled={busy || catalogLoading}
+            onChange={setTechnologyPublicId}
+          />
+          <QuestionClassificationSelect
+            id="question-seniority"
+            label="Seniority"
+            value={levelCode}
+            options={[
+              { value: '', label: 'Sin seniority' },
+              { value: 'JR', label: 'JR' },
+              { value: 'STD', label: 'STD' },
+              { value: 'SR', label: 'SR' }
+            ]}
+            help="Clasificación de seniority independiente de la dificultad."
+            disabled={busy}
+            onChange={setLevelCode}
           />
         </div>
 
