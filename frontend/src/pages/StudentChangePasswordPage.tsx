@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { changeStudentPassword } from '../features/students/api/studentApi'
 import { useStudentAuth } from '../features/students/context/StudentAuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { BrandLogo } from '../shared/components/BrandLogo'
 
 export function StudentChangePasswordPage() {
   const navigate = useNavigate()
@@ -28,7 +29,7 @@ export function StudentChangePasswordPage() {
 
   return (
     <main className="login-page student-login-page">
-      <section className="login-brand"><div className="brand-mark">NS</div><p className="eyebrow">Seguridad</p><h1>Crea una contraseña personal</h1><p className="login-description">El cambio revocará la sesión actual y tendrás que iniciar sesión nuevamente.</p></section>
+      <section className="login-brand"><div className="login-brand-logo-panel"><BrandLogo className="login-brand-logo" /></div><p className="eyebrow">Seguridad</p><h1>Crea una contraseña personal</h1><p className="login-description">El cambio revocará la sesión actual en Valtieris Talent Platform y tendrás que iniciar sesión nuevamente.</p></section>
       <section className="login-card"><h2>Cambiar contraseña</h2><form className="login-form" onSubmit={submit}>
         <div className="form-field"><label htmlFor="currentPassword">Contraseña temporal</label><input id="currentPassword" type="password" value={currentPassword} required maxLength={128} onChange={(e) => setCurrentPassword(e.target.value)} /></div>
         <div className="form-field"><label htmlFor="newPassword">Nueva contraseña</label><input id="newPassword" type="password" value={newPassword} required minLength={10} maxLength={128} onChange={(e) => setNewPassword(e.target.value)} /></div>

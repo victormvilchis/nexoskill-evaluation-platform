@@ -16,7 +16,7 @@ import { Icon } from '../shared/components/Icon'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 
 const CONTENT_MODE_HELP: Record<ContentMode, string> = {
-  GLOBAL_CATALOG: 'La organización podrá consumir el catálogo global habilitado por NexoSkill.',
+  GLOBAL_CATALOG: 'La organización podrá consumir el catálogo global habilitado por Valtieris Talent Platform.',
   CLEAN: 'La organización iniciará sin contenido heredado y construirá su propio catálogo.',
   CUSTOM: 'La organización combinará contenido global autorizado con contenido propio.'
 }
@@ -227,7 +227,7 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
           <h1>{readOnly ? 'Detalle de organización' : editing ? 'Editar organización' : 'Nueva organización'}</h1>
           <p className="muted">
             {global
-              ? 'Contexto interno global de NexoSkill. No utiliza licenciamiento comercial.'
+              ? 'Contexto interno global de Valtieris Talent Platform. No utiliza licenciamiento comercial.'
               : 'Configura identidad, contenido, vencimiento y política comercial.'}
           </p>
         </div>

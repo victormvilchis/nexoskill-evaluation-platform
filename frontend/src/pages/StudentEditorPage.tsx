@@ -9,6 +9,7 @@ import { StudentTemporaryCredentialsDialog } from '../features/students/componen
 import type { StudentExperiencePayload } from '../features/students/types/studentImport'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
@@ -109,6 +110,8 @@ export function StudentEditorPage({ mode }: Props) {
   const [technologicalProfilePublicId, setTechnologicalProfilePublicId] = useState('')
   const [flags, setFlags] = useState<CertificationFlags>(EMPTY_FLAGS)
   const [experience, setExperience] = useState<StudentExperiencePayload>(EMPTY_EXPERIENCE)
+  const [confirmingDeactivation, setConfirmingDeactivation] = useState(false)
+  const [pendingFlagRemoval, setPendingFlagRemoval] = useState<keyof CertificationFlags>()
 
   useEffect(() => {
     if (!administrator || mode !== 'create') return
@@ -211,6 +214,13 @@ export function StudentEditorPage({ mode }: Props) {
   function clearCertificationData() {
     setProfessionalProfilePublicId(''); setTechnologicalProfilePublicId(''); setFlags(EMPTY_FLAGS)
   }
+  function requestFlagChange(key: keyof CertificationFlags, nextValue: boolean) {
+    if (mode === 'edit' && !nextValue && flags[key]) {
+      setPendingFlagRemoval(key)
+      return
+    }
+    setFlags((current) => ({ ...current, [key]: nextValue }))
+  }
   async function changeOrganization(nextPublicId: string) {
     const requestId = ++organizationRequest.current
     const hadData = hasCertificationData(professionalProfilePublicId, technologicalProfilePublicId, flags)
@@ -249,7 +259,7 @@ export function StudentEditorPage({ mode }: Props) {
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
     if (manualStudentCode && !studentCode.trim()) errors.studentCode = 'El Código a nivel organización es obligatorio.'
-    if (corporateUser.trim() && !admissionDate) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
+    if (corporateUser.trim() && !admissionDate && corporateUser.trim() !== (student?.corporateUser ?? '').trim()) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
     if (mode === 'create') {
       if (!displayName.trim()) errors.displayName = 'El nombre completo es obligatorio.'
     } else if (!displayName.trim() && !firstName.trim() && !lastName.trim()) {
@@ -262,11 +272,18 @@ export function StudentEditorPage({ mode }: Props) {
     if (Object.keys(errors).length > 0) focusFirstFieldError(errors)
     return Object.keys(errors).length === 0
   }
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (readOnly || saving || !validateForm()) return
-    if (mode === 'edit' && student?.admissionDate && !admissionDate
-      && !window.confirm('Al eliminar la Fecha de alta, el colaborador será dado de baja, quedará inactivo, perderá el acceso a la plataforma y ya no será posible gestionar sus certificaciones.')) return
+    if (mode === 'edit' && student?.admissionDate && !admissionDate) {
+      setConfirmingDeactivation(true)
+      return
+    }
+    void persistStudent()
+  }
+
+  async function persistStudent() {
+    if (readOnly || saving) return
     setSaving(true); setError(null)
     const certificationPayload = appliesCertifications ? {
       ...(professionalProfilePublicId ? { professionalProfilePublicId } : {}),
@@ -359,12 +376,41 @@ export function StudentEditorPage({ mode }: Props) {
             <label className="form-field"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <select name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={(event) => setTechnologicalProfilePublicId(event.target.value)} disabled={!admissionDate || technologicalProfileOptions.length === 0}><option value="">Seleccionar perfil tecnológico</option>{technologicalProfileOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name}</option>)}</select>}{!readOnly && admissionDate && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
 
           </div>}</section>}
-          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate} onChange={(event) => { const nextValue = event.target.checked; if (mode === 'edit' && !nextValue && flags[option.key] && !window.confirm('Esta área dejará de estar disponible para nuevos seguimientos. El historial existente se conservará.')) return; setFlags((current) => ({ ...current, [option.key]: nextValue })) }} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
+          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
         {!readOnly && organizationResolved && <div className="form-actions"><button className="primary-button" type="submit" disabled={saving || catalogLoading || Boolean(catalogError)}>{saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}</button></div>}
       </form>
       {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate('/admin/students', { replace: true }) }} />}
+      <ConfirmDialog
+        open={confirmingDeactivation}
+        title="Confirmar baja del colaborador"
+        description="Al eliminar la Fecha de alta, el colaborador será dado de baja, quedará inactivo, perderá el acceso a la plataforma y ya no será posible gestionar sus certificaciones."
+        confirmLabel="Confirmar baja"
+        tone="danger"
+        busy={saving}
+        onCancel={() => {
+          setConfirmingDeactivation(false)
+          setAdmissionDate(student?.admissionDate ?? '')
+        }}
+        onConfirm={() => {
+          setConfirmingDeactivation(false)
+          void persistStudent()
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingFlagRemoval)}
+        title="Confirmar cambio de seguimiento"
+        description="Esta área dejará de estar disponible para nuevos seguimientos. El historial existente se conservará."
+        confirmLabel="Confirmar cambio"
+        onCancel={() => setPendingFlagRemoval(undefined)}
+        onConfirm={() => {
+          if (pendingFlagRemoval) {
+            setFlags((current) => ({ ...current, [pendingFlagRemoval]: false }))
+          }
+          setPendingFlagRemoval(undefined)
+        }}
+      />
     </main>
   )
 }

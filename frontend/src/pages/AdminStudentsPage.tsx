@@ -108,8 +108,10 @@ export function AdminStudentsPage() {
     if (value) next.set(name, value); else next.delete(name)
     setSearchParams(next)
   }
-  function changeSort(value: string) {
-    const [nextSort = 'displayName', nextDirection = 'ASC'] = value.split(':')
+  function toggleSort(nextSort: 'displayName' | 'admissionDate' | 'expiresAt') {
+    const currentSort = searchParams.get('sort')
+    const currentDirection = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
+    const nextDirection = currentSort === nextSort && currentDirection === 'ASC' ? 'DESC' : 'ASC'
     const next = new URLSearchParams(searchParams); next.delete('page')
     next.set('sort', nextSort); next.set('direction', nextDirection)
     setSearchParams(next)
@@ -125,7 +127,8 @@ export function AdminStudentsPage() {
     if (nextSize === 10) next.delete('size'); else next.set('size', String(nextSize))
     setSearchParams(next)
   }
-  const sort = searchParams.get('sort') ?? 'displayName'
+  const activeSort = searchParams.get('sort')
+  const sort = activeSort ?? 'displayName'
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
   const selectedOrganization = organizations.find((item) => item.publicId === organization)
   const showStudentCode = administrator ? Boolean(organization && selectedOrganization?.manualStudentCode) : tenantManualStudentCode
@@ -152,15 +155,10 @@ export function AdminStudentsPage() {
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo, código o usuario corporativo" />
         {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
         <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as StudentEffectiveStatus | 'ALL')}>{statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
-        <ResourceSelectField label="Ordenar" value={`${sort}:${direction}`} onChange={changeSort}>
-          <option value="displayName:ASC">Nombre · A a Z</option><option value="displayName:DESC">Nombre · Z a A</option>
-          <option value="admissionDate:ASC">Fecha de alta · antigua a reciente</option><option value="admissionDate:DESC">Fecha de alta · reciente a antigua</option>
-          {showCertificationColumns && <><option value="expiresAt:ASC">Vencimiento · próximo a lejano</option><option value="expiresAt:DESC">Vencimiento · lejano a próximo</option></>}
-        </ResourceSelectField>
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
       <section className="ns-data-panel" aria-busy={loading}>
-        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}{showCertificationColumns && <th>Rol</th>}<th>Usuario corporativo</th><th>Fecha de alta</th><th>Estado</th>{showCertificationColumns && <th>Vencimiento</th>}<th className="ns-actions-column">Acciones</th></tr></thead><tbody>
+        <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th aria-sort={activeSort === 'displayName' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'displayName' ? ' active' : ''}`} type="button" onClick={() => toggleSort('displayName')}>Colaborador <span aria-hidden="true">{activeSort === 'displayName' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th>{administrator && <th>Organización</th>}{showStudentCode && <th>Código a nivel organización</th>}{showCertificationColumns && <th>Rol</th>}<th>Usuario corporativo</th><th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'admissionDate' ? ' active' : ''}`} type="button" onClick={() => toggleSort('admissionDate')}>Fecha de alta <span aria-hidden="true">{activeSort === 'admissionDate' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th><th>Estado</th>{showCertificationColumns && <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}><button className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`} type="button" onClick={() => toggleSort('expiresAt')}>Vencimiento <span aria-hidden="true">{activeSort === 'expiresAt' ? (direction === 'ASC' ? '↑' : '↓') : '↕'}</span></button></th>}<th className="ns-actions-column">Acciones</th></tr></thead><tbody>
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>

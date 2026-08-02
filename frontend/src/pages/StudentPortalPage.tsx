@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useStudentAuth } from '../features/students/context/StudentAuthContext'
+import { BrandLogo } from '../shared/components/BrandLogo'
 
 export function StudentPortalPage() {
   const navigate = useNavigate()
@@ -12,7 +13,7 @@ export function StudentPortalPage() {
   return (
     <main className="student-portal-page">
       <header className="student-portal-header">
-        <div><strong>NexoSkill</strong><span>{student.organizationName}</span></div>
+        <div className="student-portal-brand"><BrandLogo className="student-portal-brand-logo" /><span>{student.organizationName}</span></div>
         <button className="secondary-button" onClick={() => void handleLogout()}>Cerrar sesión</button>
       </header>
       <section className="student-welcome-card">

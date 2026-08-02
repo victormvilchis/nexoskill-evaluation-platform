@@ -87,7 +87,7 @@ function resolveCrumbs(pathname: string): Crumb[] {
     return base
   }
 
-  return [{ label: 'NexoSkill' }]
+  return [{ label: 'Valtieris' }]
 }
 
 export function Breadcrumbs() {

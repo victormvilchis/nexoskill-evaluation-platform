@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { changePassword } from '../features/authentication/api/authApi'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { BrandLogo } from '../shared/components/BrandLogo'
 import { useToast } from '../shared/components/ToastProvider'
 
 export function ChangePasswordPage() {
@@ -53,8 +54,8 @@ export function ChangePasswordPage() {
   return (
     <main className="password-page">
       <section className="password-card" aria-labelledby="password-title">
-        <div className="brand-mark password-mark" aria-hidden="true">NS</div>
-        <p className="eyebrow">Seguridad de la cuenta</p>
+        <BrandLogo variant="isotype" className="password-brand-logo" />
+        <p className="eyebrow">Valtieris Talent Platform · Seguridad de la cuenta</p>
         <h1 id="password-title">
           {user?.passwordChangeRequired
             ? 'Crea una nueva contraseña'

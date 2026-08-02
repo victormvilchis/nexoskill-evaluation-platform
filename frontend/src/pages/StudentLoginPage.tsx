@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useStudentAuth } from '../features/students/context/StudentAuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { BrandLogo } from '../shared/components/BrandLogo'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 
 export function StudentLoginPage() {
@@ -32,14 +33,16 @@ export function StudentLoginPage() {
   return (
     <main className="login-page student-login-page">
       <section className="login-brand">
-        <div className="brand-mark" aria-hidden="true">NS</div>
+        <div className="login-brand-logo-panel">
+          <BrandLogo className="login-brand-logo" />
+        </div>
         <p className="eyebrow">Portal de colaboradores</p>
         <h1>Tu espacio de aprendizaje</h1>
-        <p className="login-description">Acceso independiente y protegido para evaluaciones, colecciones y rutas asignadas.</p>
+        <p className="login-description">Acceso independiente y protegido a Valtieris Talent Platform para consultar evaluaciones, colecciones y rutas asignadas.</p>
       </section>
       <section className="login-card" aria-labelledby="student-login-title">
         <p className="eyebrow">Colaboradores</p>
-        <h2 id="student-login-title">Inicia sesión</h2>
+        <h2 id="student-login-title">Inicia sesión en Valtieris Talent Platform</h2>
         <p className="muted">Usa el código de tu organización y las credenciales proporcionadas.</p>
         {searchParams.get('passwordChanged') === '1' && (
           <div className="success-message" role="status">

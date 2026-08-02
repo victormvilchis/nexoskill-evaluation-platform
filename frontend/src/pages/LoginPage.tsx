@@ -1,6 +1,7 @@
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { LoginForm } from '../features/authentication/components/LoginForm'
 import { useAuth } from '../features/authentication/context/AuthContext'
+import { BrandLogo } from '../shared/components/BrandLogo'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 
 export function LoginPage() {
@@ -24,18 +25,20 @@ export function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-brand">
-        <div className="brand-mark" aria-hidden="true">NS</div>
-        <p className="eyebrow">NexoSkill Consulting</p>
-        <h1>Plataforma de evaluaciones</h1>
+        <div className="login-brand-logo-panel">
+          <BrandLogo className="login-brand-logo" />
+        </div>
+        <p className="eyebrow">Valtieris Talent Platform</p>
+        <h1>Evaluación y desarrollo de talento</h1>
         <p className="login-description">
-          Base segura para administrar usuarios y aplicar evaluaciones
-          profesionales.
+          Administra colaboradores, certificaciones y evaluaciones profesionales
+          desde una experiencia segura y centralizada.
         </p>
       </section>
 
       <section className="login-card" aria-labelledby="login-title">
         <p className="eyebrow">Acceso</p>
-        <h2 id="login-title">Inicia sesión</h2>
+        <h2 id="login-title">Inicia sesión en Valtieris Talent Platform</h2>
         <p className="muted">
           Ingresa con la cuenta configurada en la plataforma.
         </p>

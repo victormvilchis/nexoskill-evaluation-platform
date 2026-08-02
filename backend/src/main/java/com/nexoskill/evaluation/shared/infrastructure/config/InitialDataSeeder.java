@@ -47,7 +47,7 @@ public class InitialDataSeeder implements ApplicationRunner {
 		}
 
 		createIfMissing(properties.getSeed().getAdminEmail(), properties.getSeed().getAdminPassword(), "Administrador",
-				"NexoSkill", "Administrador NexoSkill", "ADMINISTRATOR");
+				"Valtieris", "Administrador Valtieris", "ADMINISTRATOR");
 
 	}
 

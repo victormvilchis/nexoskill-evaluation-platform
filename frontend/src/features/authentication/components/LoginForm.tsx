@@ -6,15 +6,8 @@ import { useAuth } from '../context/AuthContext'
 export function LoginForm() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const isLocalEnvironment = ['localhost', '127.0.0.1'].includes(
-    window.location.hostname
-  )
-  const [email, setEmail] = useState(
-    isLocalEnvironment ? 'admin@nexoskill.local' : ''
-  )
-  const [password, setPassword] = useState(
-    isLocalEnvironment ? 'Admin123!' : ''
-  )
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 

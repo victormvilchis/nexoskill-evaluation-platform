@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ApplicationLayout } from './layouts/ApplicationLayout'
 import { AdminQuestionDetailPage } from './pages/AdminQuestionDetailPage'
 import { AdminCollectionsPage } from './pages/AdminCollectionsPage'
@@ -33,7 +34,34 @@ import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute
 import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
 
+function resolveDocumentSection(pathname: string) {
+  if (pathname === '/login') return 'Acceso'
+  if (pathname === '/student-login') return 'Acceso de colaboradores'
+  if (pathname.startsWith('/student/change-password')) return 'Cambiar contraseña'
+  if (pathname.startsWith('/student')) return 'Portal de colaboradores'
+  if (pathname.startsWith('/admin/organizations')) return 'Organizaciones'
+  if (pathname.startsWith('/admin/students')) return 'Colaboradores'
+  if (pathname.startsWith('/admin/users')) return 'Usuarios'
+  if (pathname.startsWith('/admin/questions')) return 'Preguntas'
+  if (pathname.startsWith('/admin/forms')) return 'Formularios'
+  if (pathname.startsWith('/admin/collections')) return 'Colecciones'
+  if (pathname.startsWith('/admin/catalogs')) return 'Catálogos'
+  if (pathname === '/dashboard') return 'Inicio'
+  if (pathname === '/profile') return 'Perfil'
+  if (pathname === '/change-password') return 'Cambiar contraseña'
+  return undefined
+}
+
 export default function App() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const section = resolveDocumentSection(location.pathname)
+    document.title = section
+      ? `${section} | Valtieris Talent Platform`
+      : 'Valtieris Talent Platform'
+  }, [location.pathname])
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
+import { BrandLogo } from '../shared/components/BrandLogo'
 import { Breadcrumbs } from '../shared/components/Breadcrumbs'
 import { Icon, type IconName } from '../shared/components/Icon'
 
@@ -61,8 +62,8 @@ const navigationConfig: NavSection[] = [
 ]
 
 function initials(displayName?: string) {
-  const values = (displayName ?? 'NS').trim().split(/\s+/).filter(Boolean)
-  return values.slice(0, 2).map((value) => value[0]?.toUpperCase() ?? '').join('') || 'NS'
+  const values = (displayName ?? 'VT').trim().split(/\s+/).filter(Boolean)
+  return values.slice(0, 2).map((value) => value[0]?.toUpperCase() ?? '').join('') || 'VT'
 }
 
 function routeMatches(pathname: string, to?: string) {
@@ -200,12 +201,9 @@ export function ApplicationLayout() {
       )}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <NavLink className="sidebar-brand" to="/dashboard" aria-label="Ir al inicio">
-            <div className="brand-mark small" aria-hidden="true">NS</div>
-            <div className="sidebar-brand-copy">
-              <strong>NexoSkill</strong>
-              <span>Evaluaciones</span>
-            </div>
+          <NavLink className="sidebar-brand" to="/dashboard" aria-label="Ir al inicio de Valtieris Talent Platform">
+            <BrandLogo variant="horizontal" className="sidebar-brand-logo sidebar-brand-logo-expanded" decorative />
+            <BrandLogo variant="isotype" className="sidebar-brand-logo sidebar-brand-logo-collapsed" decorative />
           </NavLink>
           <button
             aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
@@ -297,7 +295,7 @@ export function ApplicationLayout() {
           })}
         </nav>
         <div className="sidebar-footer">
-          <span className="sidebar-version">NexoSkill Platform</span>
+          <span className="sidebar-version">Valtieris Talent Platform</span>
         </div>
       </aside>
       <div className="app-content">
