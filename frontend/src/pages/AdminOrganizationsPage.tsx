@@ -202,16 +202,18 @@ export function AdminOrganizationsPage() {
               <tr>
                 <th>Organización</th>
                 <th>Modalidad</th>
-                <th>Colaboradores</th>
+                <th className="ns-number-column">Activos</th>
+                <th className="ns-number-column">Inactivos</th>
+                <th className="ns-number-column">Vencidos</th>
                 <th>Vigencia</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="ns-table-empty">Cargando organizaciones…</td></tr>}
+              {loading && <tr><td colSpan={8} className="ns-table-empty">Cargando organizaciones…</td></tr>}
               {!loading && !error && data?.content.length === 0 && (
-                <tr><td colSpan={6} className="ns-table-empty">
+                <tr><td colSpan={8} className="ns-table-empty">
                   <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones activas'}</strong>
                   <span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea la primera organización comercial para comenzar.'}</span>
                 </td></tr>
@@ -223,11 +225,9 @@ export function AdminOrganizationsPage() {
                     <small><code className="ns-code-label">{item.code}</code> · {item.organizationType === 'GLOBAL' ? 'Sistema global' : 'Comercial'}</small>
                   </td>
                   <td><span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>{CONTENT_MODE_LABELS[item.contentMode]}</span></td>
-                  <td><div className="org-student-counts" aria-label={`Activos: ${item.activeStudentCount ?? 0}. Inactivos: ${item.inactiveStudentCount ?? 0}. Vencidos: ${item.expiredStudentCount ?? 0}.`}>
-                    <span><small>Activos</small><strong>{item.activeStudentCount ?? 0}</strong></span>
-                    <span><small>Inactivos</small><strong>{item.inactiveStudentCount ?? 0}</strong></span>
-                    <span><small>Vencidos</small><strong>{item.expiredStudentCount ?? 0}</strong></span>
-                  </div></td>
+                  <td className="ns-number-column">{item.activeStudentCount ?? 0}</td>
+                  <td className="ns-number-column">{item.inactiveStudentCount ?? 0}</td>
+                  <td className="ns-number-column">{item.expiredStudentCount ?? 0}</td>
                   <td>{formatDate(item.expiresOn)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{STATUS_LABELS[item.status]}</span></td>
                   <td>
