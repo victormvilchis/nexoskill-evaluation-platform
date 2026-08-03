@@ -80,6 +80,12 @@ public class FormJpaEntity {
     @Column(name = "THANK_YOU_MESSAGE", length = 2000)
     public String thankYouMessage;
 
+    @Column(name = "CONTENT_MODE", nullable = false, length = 20)
+    public String contentMode;
+
+    @Column(name = "CREATE_OPERATION_ID", length = 36)
+    public String createOperationId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "CONTENT_SCOPE", nullable = false, length = 20)
     public ContentScope contentScope;

@@ -8,5 +8,10 @@ app:
 
 logging:
   level:
+    root: INFO
     com.nexoskill.evaluation: INFO
+    org.springframework: INFO
+    org.springframework.boot.autoconfigure: WARN
     org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN

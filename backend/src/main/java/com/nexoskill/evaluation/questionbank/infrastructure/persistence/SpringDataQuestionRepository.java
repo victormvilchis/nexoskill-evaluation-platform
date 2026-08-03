@@ -15,6 +15,122 @@ public interface SpringDataQuestionRepository extends JpaRepository<QuestionJpaE
     List<QuestionJpaEntity> findAllByPublicIdIn(Collection<String> ids);
     List<QuestionJpaEntity> findAllByStatus(QuestionStatus status);
 
+
+    @Query(value = """
+            SELECT q.*
+              FROM QUESTION q
+             WHERE q.STATUS = 'ACTIVE'
+               AND (
+                    (:targetGlobal = 1 AND q.CONTENT_SCOPE = 'GLOBAL')
+                    OR (
+                        :targetGlobal = 0
+                        AND (
+                            (q.CONTENT_SCOPE = 'ORGANIZATION' AND q.OWNER_ORGANIZATION_ID = :organizationId)
+                            OR (
+                                q.CONTENT_SCOPE = 'GLOBAL'
+                                AND (
+                                    NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
+                                    OR EXISTS (
+                                        SELECT 1
+                                          FROM QUESTION_ORGANIZATION_AVAILABILITY availability
+                                         WHERE availability.QUESTION_ID = q.QUESTION_ID
+                                           AND availability.ORGANIZATION_ID = :organizationId
+                                           AND availability.STATUS = 'ACTIVE'
+                                    )
+                                )
+                                AND (
+                                    NOT EXISTS (
+                                        SELECT 1 FROM GLOBAL_CONTENT_VERSION any_version
+                                         WHERE any_version.CONTENT_TYPE = 'QUESTION'
+                                           AND any_version.CONTENT_ID = q.QUESTION_ID
+                                    )
+                                    OR EXISTS (
+                                        SELECT 1 FROM GLOBAL_CONTENT_VERSION published
+                                         WHERE published.CONTENT_TYPE = 'QUESTION'
+                                           AND published.CONTENT_ID = q.QUESTION_ID
+                                           AND published.EDITORIAL_STATUS = 'PUBLISHED'
+                                    )
+                                )
+                            )
+                        )
+                    )
+               )
+               AND (
+                    :query IS NULL
+                    OR LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE :query
+                    OR LOWER(q.PUBLIC_ID) LIKE :query
+               )
+               AND (
+                    :categoryPublicId IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_CATEGORY_RELATION relation
+                          JOIN QUESTION_CATEGORY category ON category.CATEGORY_ID = relation.CATEGORY_ID
+                         WHERE relation.QUESTION_ID = q.QUESTION_ID
+                           AND category.PUBLIC_ID = :categoryPublicId
+                    )
+               )
+             ORDER BY NVL(q.UPDATED_AT, q.CREATED_AT) DESC, q.QUESTION_ID DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*)
+              FROM QUESTION q
+             WHERE q.STATUS = 'ACTIVE'
+               AND (
+                    (:targetGlobal = 1 AND q.CONTENT_SCOPE = 'GLOBAL')
+                    OR (
+                        :targetGlobal = 0
+                        AND (
+                            (q.CONTENT_SCOPE = 'ORGANIZATION' AND q.OWNER_ORGANIZATION_ID = :organizationId)
+                            OR (
+                                q.CONTENT_SCOPE = 'GLOBAL'
+                                AND (
+                                    NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
+                                    OR EXISTS (
+                                        SELECT 1
+                                          FROM QUESTION_ORGANIZATION_AVAILABILITY availability
+                                         WHERE availability.QUESTION_ID = q.QUESTION_ID
+                                           AND availability.ORGANIZATION_ID = :organizationId
+                                           AND availability.STATUS = 'ACTIVE'
+                                    )
+                                )
+                                AND (
+                                    NOT EXISTS (
+                                        SELECT 1 FROM GLOBAL_CONTENT_VERSION any_version
+                                         WHERE any_version.CONTENT_TYPE = 'QUESTION'
+                                           AND any_version.CONTENT_ID = q.QUESTION_ID
+                                    )
+                                    OR EXISTS (
+                                        SELECT 1 FROM GLOBAL_CONTENT_VERSION published
+                                         WHERE published.CONTENT_TYPE = 'QUESTION'
+                                           AND published.CONTENT_ID = q.QUESTION_ID
+                                           AND published.EDITORIAL_STATUS = 'PUBLISHED'
+                                    )
+                                )
+                            )
+                        )
+                    )
+               )
+               AND (:query IS NULL OR LOWER(DBMS_LOB.SUBSTR(q.STATEMENT_TEXT, 4000, 1)) LIKE :query
+                    OR LOWER(q.PUBLIC_ID) LIKE :query)
+               AND (
+                    :categoryPublicId IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                          FROM QUESTION_CATEGORY_RELATION relation
+                          JOIN QUESTION_CATEGORY category ON category.CATEGORY_ID = relation.CATEGORY_ID
+                         WHERE relation.QUESTION_ID = q.QUESTION_ID
+                           AND category.PUBLIC_ID = :categoryPublicId
+                    )
+               )
+            """, nativeQuery = true)
+    Page<QuestionJpaEntity> findActiveForForm(
+            @Param("targetGlobal") int targetGlobal,
+            @Param("organizationId") Long organizationId,
+            @Param("query") String query,
+            @Param("categoryPublicId") String categoryPublicId,
+            Pageable pageable);
+
     @Query(value = """
             SELECT DISTINCT q.*
               FROM QUESTION q

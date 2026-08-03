@@ -12,10 +12,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 public interface FormRepository extends JpaRepository<FormJpaEntity, Long> {
     Optional<FormJpaEntity> findByPublicId(String publicId);
+    Optional<FormJpaEntity> findByCreateOperationId(String createOperationId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select form from FormJpaEntity form where form.publicId = :publicId")
+    Optional<FormJpaEntity> findByPublicIdForUpdate(@Param("publicId") String publicId);
     boolean existsByCode(String code);
     List<FormJpaEntity> findAllByStatus(String status);
 
