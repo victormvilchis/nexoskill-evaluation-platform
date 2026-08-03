@@ -1388,7 +1388,9 @@ public class StudentImportService {
                 ON student_technology.TECHNOLOGY_ID = s.TECHNOLOGY_ID
               LEFT JOIN CERTIFICATION_PROFILE_CATALOG p ON p.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
               LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tp ON tp.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
-             WHERE s.ORGANIZATION_ID = :organizationId AND s.STATUS <> 'DELETED'
+             WHERE s.ORGANIZATION_ID = :organizationId
+               AND s.RECORD_MODULE = 'COLLABORATOR'
+               AND s.STATUS <> 'DELETED'
             """, Map.of("organizationId", organizationId), this::mapExisting);
     }
 

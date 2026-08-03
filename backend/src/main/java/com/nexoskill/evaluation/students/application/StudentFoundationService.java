@@ -8,6 +8,7 @@ import com.nexoskill.evaluation.organizations.infrastructure.persistence.Organiz
 import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.domain.StudentRecordModule;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -101,17 +102,40 @@ public class StudentFoundationService {
 
     @Transactional(readOnly = true)
     public StudentView get(TenantContext tenant, String publicId) {
+        return getByModule(tenant, publicId, StudentRecordModule.COLLABORATOR);
+    }
+
+    @Transactional(readOnly = true)
+    public StudentView getTalent(TenantContext tenant, String publicId) {
+        return getByModule(tenant, publicId, StudentRecordModule.TALENT_BANK);
+    }
+
+    private StudentView getByModule(TenantContext tenant, String publicId, StudentRecordModule module) {
         TenantContext effective = effectiveTenantForStudent(tenant, publicId);
         List<StudentView> rows = jdbc.query(BASE_SELECT
-                + " WHERE s.PUBLIC_ID = :publicId AND s.ORGANIZATION_ID = :organizationId AND s.STATUS <> 'DELETED'",
+                + " WHERE s.PUBLIC_ID = :publicId AND s.ORGANIZATION_ID = :organizationId AND s.RECORD_MODULE = :recordModule AND s.STATUS <> 'DELETED'",
                 new MapSqlParameterSource("publicId", publicId)
-                        .addValue("organizationId", effective.organizationId()), this::mapStudent);
-        if (rows.isEmpty()) throw new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe.");
+                        .addValue("organizationId", effective.organizationId())
+                        .addValue("recordModule", module.name()), this::mapStudent);
+        if (rows.isEmpty()) {
+            throw new BusinessException(module == StudentRecordModule.TALENT_BANK ? "TALENT_NOT_FOUND" : "STUDENT_NOT_FOUND",
+                    module == StudentRecordModule.TALENT_BANK ? "El talento no existe." : "El colaborador no existe.");
+        }
         return rows.getFirst();
     }
 
     @Transactional
     public CreateResult create(TenantContext tenant, CreateCommand command, StudentService.Actor actor) {
+        return createRecord(tenant, command, actor, false);
+    }
+
+    @Transactional
+    CreateResult createTalentIdentity(TenantContext tenant, CreateCommand command, StudentService.Actor actor) {
+        return createRecord(tenant, command, actor, true);
+    }
+
+    private CreateResult createRecord(TenantContext tenant, CreateCommand command, StudentService.Actor actor,
+            boolean talentIdentity) {
         TenantContext effective = resolveCreateTenant(tenant, command.organizationPublicId());
         OrganizationJpaEntity organization = organizationRepository.findById(effective.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
@@ -120,43 +144,72 @@ public class StudentFoundationService {
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), command.appliesJira());
         StudentStatus initialStatus = command.admissionDate() == null ? StudentStatus.INACTIVE : StudentStatus.ACTIVE;
-        StudentService.CreateResult creation = studentService.create(effective,
-                new StudentService.CreateCommand(command.email(), command.firstName(),
+        StudentService.CreateCommand identityCommand = new StudentService.CreateCommand(command.email(), command.firstName(),
                         command.lastName(), command.displayName(), initialStatus,
                         command.validFrom(), command.expiresAt(), command.admissionDate(),
-                        command.studentCode(), command.corporateUser()), actor);
+                        command.studentCode(), command.corporateUser());
+        StudentService.CreateResult creation = talentIdentity
+                ? studentService.createTalentIdentity(effective, identityCommand, actor)
+                : studentService.create(effective, identityCommand, actor);
         StudentService.StudentDetail created = creation.student();
         updateFoundation(created.publicId(), organization, command.admissionDate(),
                 command.professionalProfilePublicId(), command.technologicalProfilePublicId(),
                 command.appliesTechnologicalCertification(), command.appliesDevelopmentSecurity(),
                 command.appliesNormativeTesting(), command.appliesOne(), command.appliesAgile(),
                 command.appliesJira(), actor.userId(), null);
-        recordFoundationAudit(actor, "STUDENT_FOUNDATION_CREATED", created.publicId(), organization, command);
+        if (!talentIdentity) {
+            recordFoundationAudit(actor, "STUDENT_FOUNDATION_CREATED", created.publicId(), organization, command);
+        }
         return new CreateResult(get(tenant, created.publicId()), creation.temporaryPassword());
     }
 
     @Transactional
     public StudentView update(TenantContext tenant, String publicId, UpdateCommand command, StudentService.Actor actor) {
+        return updateByModule(tenant, publicId, command, actor, StudentRecordModule.COLLABORATOR);
+    }
+
+    @Transactional
+    public StudentView updateTalent(TenantContext tenant, String publicId, UpdateCommand command, StudentService.Actor actor) {
+        return updateByModule(tenant, publicId, command, actor, StudentRecordModule.TALENT_BANK);
+    }
+
+    private StudentView updateByModule(TenantContext tenant, String publicId, UpdateCommand command,
+            StudentService.Actor actor, StudentRecordModule module) {
         TenantContext effective = effectiveTenantForStudent(tenant, publicId);
         OrganizationJpaEntity organization = organizationRepository.findById(effective.organizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
-        StudentView previous = get(tenant, publicId);
-        validateCertificationConfiguration(organization, command.admissionDate(), command.professionalProfilePublicId(),
+        StudentView previous = module == StudentRecordModule.TALENT_BANK
+                ? getTalent(tenant, publicId) : get(tenant, publicId);
+        boolean moveToTalentBank = module == StudentRecordModule.COLLABORATOR
+                && previous.admissionDate() != null && command.admissionDate() == null;
+        LocalDate effectiveAdmissionDate = moveToTalentBank ? previous.admissionDate() : command.admissionDate();
+        validateCertificationConfiguration(organization, effectiveAdmissionDate, command.professionalProfilePublicId(),
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), command.appliesJira());
-        validateInactiveCertificationChanges(previous, command);
-        studentService.update(effective, publicId,
-                new StudentService.UpdateCommand(command.email(), command.firstName(), command.lastName(),
-                        command.displayName(), command.validFrom(), command.expiresAt(), command.admissionDate(),
-                        command.studentCode(), command.corporateUser(), command.version()), actor);
-        updateFoundation(publicId, organization, command.admissionDate(), command.professionalProfilePublicId(),
+        if (module == StudentRecordModule.COLLABORATOR && !moveToTalentBank) {
+            validateInactiveCertificationChanges(previous, command);
+        }
+        StudentService.UpdateCommand studentCommand = new StudentService.UpdateCommand(command.email(), command.firstName(),
+                command.lastName(), command.displayName(), command.validFrom(), command.expiresAt(), effectiveAdmissionDate,
+                command.studentCode(), command.corporateUser(), command.version());
+        if (module == StudentRecordModule.TALENT_BANK) {
+            studentService.updateTalentRecord(effective, publicId, studentCommand, actor);
+        } else {
+            studentService.update(effective, publicId, studentCommand, actor);
+        }
+        updateFoundation(publicId, organization, effectiveAdmissionDate, command.professionalProfilePublicId(),
                 command.technologicalProfilePublicId(), command.appliesTechnologicalCertification(),
                 command.appliesDevelopmentSecurity(), command.appliesNormativeTesting(), command.appliesOne(),
                 command.appliesAgile(), command.appliesJira(), actor.userId(), previous.admissionDate());
         recordApplicabilityChanges(actor, previous, command, organization);
-        recordFoundationAudit(actor, "STUDENT_FOUNDATION_UPDATED", publicId, organization, command);
-        return get(tenant, publicId);
+        recordFoundationAudit(actor, module == StudentRecordModule.TALENT_BANK
+                ? "TALENT_FOUNDATION_UPDATED" : "STUDENT_FOUNDATION_UPDATED", publicId, organization, command);
+        if (moveToTalentBank) {
+            studentService.deactivate(effective, publicId, actor);
+            return getTalent(tenant, publicId);
+        }
+        return module == StudentRecordModule.TALENT_BANK ? getTalent(tenant, publicId) : get(tenant, publicId);
     }
 
     private void validateInactiveCertificationChanges(StudentView previous, UpdateCommand command) {
@@ -435,7 +488,7 @@ public class StudentFoundationService {
             where.append(" AND s.ORGANIZATION_ID = :tenantOrganizationId ");
             params.addValue("tenantOrganizationId", tenant.organizationId());
         }
-        where.append(" AND s.STATUS <> 'DELETED' ");
+        where.append(" AND s.RECORD_MODULE = 'COLLABORATOR' AND s.STATUS <> 'DELETED' ");
         if (notBlank(criteria.query())) {
             where.append(" AND (LOWER(s.DISPLAY_NAME) LIKE :query OR LOWER(s.EMAIL) LIKE :query "
                     + "OR LOWER(s.STUDENT_CODE) LIKE :query OR LOWER(s.CORPORATE_USER) LIKE :query) ");

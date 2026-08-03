@@ -17,6 +17,19 @@ function resolveCrumbs(pathname: string): Crumb[] {
   if (pathname === '/dashboard') return [{ label: 'Inicio' }]
   if (pathname === '/profile') return [{ label: 'Cuenta' }, { label: 'Perfil' }]
   if (pathname === '/change-password') return [{ label: 'Cuenta' }, { label: 'Contraseña' }]
+  if (pathname.startsWith('/admin/talent-bank')) {
+    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Talent Bank', to: '/admin/talent-bank' }]
+    if (pathname === '/admin/talent-bank/new') base.push({ label: 'Nuevo talento' })
+    else if (pathname.endsWith('/new/academy')) base.push({ label: 'Academia' })
+    else if (pathname.endsWith('/new/prospect')) base.push({ label: 'Prospecto' })
+    else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
+    else if (pathname.endsWith('/convert')) base.push({ label: 'Convertir a colaborador' })
+    else if (pathname !== '/admin/talent-bank') base.push({ label: 'Detalle' })
+    return base
+  }
+  if (pathname.startsWith('/admin/permanent-deletions')) {
+    return [{ label: 'Administración' }, { label: 'Eliminaciones definitivas' }]
+  }
   if (pathname.startsWith('/admin/collaborators')) {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Colaboradores', to: '/admin/collaborators' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nuevo colaborador' })

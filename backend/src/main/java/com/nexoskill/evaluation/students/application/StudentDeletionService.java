@@ -3,6 +3,7 @@ package com.nexoskill.evaluation.students.application;
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import com.nexoskill.evaluation.students.domain.StudentRecordModule;
 import com.nexoskill.evaluation.students.domain.StudentSessionRevocationReason;
 import com.nexoskill.evaluation.students.domain.StudentSessionStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
@@ -53,6 +54,9 @@ public class StudentDeletionService {
         if (!student.getOrganizationId().equals(tenant.organizationId())) {
             throw new BusinessException("STUDENT_DELETE_FORBIDDEN",
                     "No tienes permisos para eliminar colaboradores de otra organización.");
+        }
+        if (student.getRecordModule() != StudentRecordModule.COLLABORATOR) {
+            throw new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe.");
         }
         if (student.getStatus() == StudentStatus.DELETED) {
             throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El colaborador ya fue eliminado.");

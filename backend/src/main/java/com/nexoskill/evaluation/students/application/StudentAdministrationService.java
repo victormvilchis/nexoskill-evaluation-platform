@@ -54,7 +54,16 @@ public class StudentAdministrationService {
                 .addValue("studentPublicId", publicId)
                 .addValue("offset", safePage * safeSize)
                 .addValue("size", safeSize);
-        String where = " WHERE MODULE_CODE IN ('STUDENTS','STUDENT_CERTIFICATIONS') "
+        String where = " WHERE MODULE_CODE IN ('STUDENTS','STUDENT_CERTIFICATIONS','TALENT_BANK') "
+                + "AND EVENT_TYPE IN ('STUDENT_CREATED','STUDENT_UPDATED','STUDENT_FOUNDATION_CREATED',"
+                + "'STUDENT_FOUNDATION_UPDATED','STUDENT_ACTIVATED','STUDENT_MOVED_TO_TALENT_BANK',"
+                + "'STUDENT_PASSWORD_RESET','STUDENT_SESSION_REVOKED','STUDENT_SESSIONS_REVOKED',"
+                + "'STUDENT_DELETED','STUDENT_EXPIRED','STUDENT_CERTIFICATION_APPLICABILITY_CHANGED',"
+                + "'STUDENT_CERTIFICATIONS_UPDATED','STUDENT_CERTIFICATION_CYCLE_CREATED',"
+                + "'STUDENT_CERTIFICATION_CYCLE_UPDATED','STUDENT_CERTIFICATION_PRIMARY_CHANGED',"
+                + "'STUDENT_CERTIFICATION_CYCLE_CANCELLED','STUDENT_CERTIFICATION_ATTEMPT_CREATED',"
+                + "'STUDENT_CERTIFICATION_ATTEMPT_UPDATED','TALENT_ACADEMY_CREATED','TALENT_PROSPECT_CREATED',"
+                + "'TALENT_UPDATED','TALENT_FOUNDATION_UPDATED','TALENT_CV_UPDATED','TALENT_CONVERTED_TO_STUDENT') "
                 + "AND DBMS_LOB.INSTR(EVENT_DATA, :studentPublicId) > 0 ";
         Long total = jdbc.queryForObject("SELECT COUNT(*) FROM AUDIT_EVENT" + where, params, Long.class);
         List<AdministrativeHistoryItem> content = jdbc.query("""
@@ -65,13 +74,43 @@ public class StudentAdministrationService {
                     Timestamp occurredAt = rs.getTimestamp("OCCURRED_AT");
                     long userId = rs.getLong("USER_ID");
                     boolean userIdWasNull = rs.wasNull();
-                    return new AdministrativeHistoryItem(rs.getString("PUBLIC_ID"), rs.getString("EVENT_TYPE"),
+                    String eventType = rs.getString("EVENT_TYPE");
+                    return new AdministrativeHistoryItem(rs.getString("PUBLIC_ID"), historyLabel(eventType),
                             rs.getString("DESCRIPTION"), userIdWasNull ? null : userId,
                             occurredAt == null ? null : occurredAt.toInstant());
                 });
         long safeTotal = total == null ? 0 : total;
         return new HistoryPage(content, safePage, safeSize, safeTotal,
                 safeTotal == 0 ? 0 : (int) Math.ceil((double) safeTotal / safeSize));
+    }
+
+
+    private String historyLabel(String eventType) {
+        return switch (eventType == null ? "" : eventType) {
+            case "STUDENT_CREATED" -> "Alta de colaborador";
+            case "STUDENT_UPDATED", "STUDENT_FOUNDATION_UPDATED" -> "Actualización de colaborador";
+            case "STUDENT_FOUNDATION_CREATED" -> "Configuración inicial";
+            case "STUDENT_ACTIVATED" -> "Activación";
+            case "STUDENT_MOVED_TO_TALENT_BANK" -> "Baja de BBVA";
+            case "STUDENT_PASSWORD_RESET" -> "Restablecimiento de contraseña";
+            case "STUDENT_SESSION_REVOKED", "STUDENT_SESSIONS_REVOKED" -> "Revocación de acceso";
+            case "STUDENT_DELETED" -> "Eliminación lógica";
+            case "STUDENT_EXPIRED" -> "Vencimiento";
+            case "STUDENT_CERTIFICATION_APPLICABILITY_CHANGED" -> "Cambio de aplicabilidad";
+            case "STUDENT_CERTIFICATIONS_UPDATED" -> "Actualización de certificaciones";
+            case "STUDENT_CERTIFICATION_CYCLE_CREATED" -> "Alta de ciclo de certificación";
+            case "STUDENT_CERTIFICATION_CYCLE_UPDATED" -> "Actualización de ciclo";
+            case "STUDENT_CERTIFICATION_PRIMARY_CHANGED" -> "Cambio de certificación principal";
+            case "STUDENT_CERTIFICATION_CYCLE_CANCELLED" -> "Cancelación de ciclo";
+            case "STUDENT_CERTIFICATION_ATTEMPT_CREATED" -> "Registro de intento";
+            case "STUDENT_CERTIFICATION_ATTEMPT_UPDATED" -> "Actualización de intento";
+            case "TALENT_ACADEMY_CREATED" -> "Alta en Academia";
+            case "TALENT_PROSPECT_CREATED" -> "Alta de prospecto";
+            case "TALENT_UPDATED", "TALENT_FOUNDATION_UPDATED" -> "Actualización de talento";
+            case "TALENT_CV_UPDATED" -> "Actualización de CV";
+            case "TALENT_CONVERTED_TO_STUDENT" -> "Conversión a colaborador";
+            default -> "Cambio relevante";
+        };
     }
 
     public record AdministrationView(StudentFoundationService.StudentView student, SeatView seat,

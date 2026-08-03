@@ -75,19 +75,19 @@ class StudentServiceTest {
 
     @Test
     void shouldReturnAnEmptyPageWhenTheOrganizationHasNoStudents() {
-        when(students.existsByOrganizationId(20L)).thenReturn(false);
+        when(students.existsByOrganizationIdAndRecordModule(20L, com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR)).thenReturn(false);
         StudentService.PageResult result = service.search(TENANT, null,
                 com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 10);
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();
         assertThat(result.totalPages()).isZero();
-        verify(students, times(1)).existsByOrganizationId(20L);
+        verify(students, times(1)).existsByOrganizationIdAndRecordModule(20L, com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR);
         verify(students, never()).search(any(), any(), any(), any(), any());
     }
 
     @Test
     void shouldKeepTheResponseEmptyWhenTheRepositoryReturnsAnEmptyPage() {
-        when(students.existsByOrganizationId(20L)).thenReturn(true);
+        when(students.existsByOrganizationIdAndRecordModule(20L, com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR)).thenReturn(true);
         when(students.search(any(), any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 10)));
         StudentService.PageResult result = service.search(TENANT, null,
                 com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 10);
@@ -167,7 +167,9 @@ class StudentServiceTest {
         StudentService.StudentDetail updated = service.deactivate(TENANT, "student-public",
                 new StudentService.Actor(1L, "127.0.0.1", "browser"));
         assertThat(updated.status()).isEqualTo(StudentStatus.INACTIVE);
-        assertThat(student.getAdmissionDate()).isNull();
+        assertThat(student.getAdmissionDate()).isEqualTo(TODAY.minusDays(1));
+        assertThat(student.getRecordModule()).isEqualTo(com.nexoskill.evaluation.students.domain.StudentRecordModule.TALENT_BANK);
+        assertThat(student.getTalentType()).isEqualTo(com.nexoskill.evaluation.students.domain.TalentType.BBVA_EXIT);
         verify(sessions).revokeActive(student.getId(), StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
                 StudentSessionRevocationReason.DEACTIVATED, NOW);
     }

@@ -51,6 +51,17 @@ function sessionLabel(session: StudentSession) {
   return 'Vencida'
 }
 
+function revocationReasonLabel(reason?: string | null) {
+  if (!reason) return undefined
+  return ({
+    DEACTIVATED: 'Baja de BBVA',
+    EXPIRED: 'Vigencia vencida',
+    PASSWORD_RESET: 'Restablecimiento de contraseña',
+    ADMIN_REVOKED: 'Revocación administrativa',
+    ALL_SESSIONS_REVOKED: 'Revocación administrativa de todas las sesiones'
+  } as Record<string, string>)[reason] ?? reason
+}
+
 export function StudentManagementPage() {
   const { publicId = '' } = useParams()
   const navigate = useNavigate()
@@ -111,12 +122,18 @@ export function StudentManagementPage() {
     setBusy(true)
     setError(undefined)
     try {
-      if (pendingAction === 'ACTIVATE') await activateStudent(publicId)
-      else await deactivateStudent(publicId)
-      const response = await loadAdministration()
-      setPendingAction(undefined)
-      setHistoryPage(0)
-      toast.success('Estado actualizado', `${response.student.displayName} quedó como ${STATUS_LABELS[response.student.effectiveStatus].toLowerCase()}.`)
+      if (pendingAction === 'ACTIVATE') {
+        await activateStudent(publicId)
+        const response = await loadAdministration()
+        setPendingAction(undefined)
+        setHistoryPage(0)
+        toast.success('Estado actualizado', `${response.student.displayName} quedó como ${STATUS_LABELS[response.student.effectiveStatus].toLowerCase()}.`)
+      } else {
+        await deactivateStudent(publicId)
+        setPendingAction(undefined)
+        toast.success('Baja de BBVA registrada', 'El colaborador fue trasladado a Talent Bank y dejó de contabilizarse en los indicadores operativos.')
+        navigate('/admin/talent-bank', { replace: true })
+      }
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
@@ -239,7 +256,7 @@ export function StudentManagementPage() {
             <button className="primary-button" type="button" disabled={busy} onClick={() => setPendingAction('ACTIVATE')}>Activar</button>
           )}
           {canDeactivate && permissions.has('STUDENT_STATUS_CHANGE') && (
-            <button className="secondary-button" type="button" disabled={busy} onClick={() => setPendingAction('DEACTIVATE')}>Desactivar</button>
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => setPendingAction('DEACTIVATE')}>Dar de baja de BBVA</button>
           )}
         </div>
       </section>
@@ -265,7 +282,7 @@ export function StudentManagementPage() {
                   <div>
                     <strong>{sessionLabel(session)}</strong>
                     <small>{formatDateTime(session.createdAt)} · {session.ipAddress ?? 'IP no disponible'}</small>
-                    {session.revocationReason && <small>Motivo: {session.revocationReason}</small>}
+                    {session.revocationReason && <small>Motivo: {revocationReasonLabel(session.revocationReason)}</small>}
                   </div>
                   {session.status === 'ACTIVE' && (
                     <button className="secondary-button" type="button" disabled={busy}
@@ -312,9 +329,9 @@ export function StudentManagementPage() {
         confirmLabel="Activar" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
-      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Desactivar colaborador"
-        description="Se eliminará la Fecha de alta. El colaborador perderá el acceso inmediatamente, sus sesiones serán revocadas y ya no podrá gestionar certificaciones; sus identificadores, avances, resultados y certificaciones existentes se conservarán."
-        confirmLabel="Desactivar" busy={busy} onCancel={() => setPendingAction(undefined)}
+      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Dar de baja de BBVA"
+        description="El colaborador será retirado del módulo Colaboradores y trasladado a Talent Bank dentro de la misma organización. Conservará su información, certificaciones, historial y CV; perderá el acceso, sus sesiones serán revocadas y dejará de contabilizarse en los indicadores operativos."
+        confirmLabel="Dar de baja" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
       <ConfirmDialog open={pendingAction === 'RESET_PASSWORD'} title="Restablecer contraseña"

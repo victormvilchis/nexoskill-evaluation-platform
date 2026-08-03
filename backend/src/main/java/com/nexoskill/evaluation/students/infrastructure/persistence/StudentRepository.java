@@ -2,6 +2,7 @@ package com.nexoskill.evaluation.students.infrastructure.persistence;
 
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.domain.StudentRecordModule;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.List;
@@ -34,17 +35,21 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     Optional<StudentJpaEntity> findByNormalizedCorporateUser(String normalizedCorporateUser);
 
 
-    boolean existsByOrganizationId(Long organizationId);
+    boolean existsByOrganizationIdAndRecordModule(Long organizationId, StudentRecordModule recordModule);
 
-    long countByOrganizationIdAndStatusNot(Long organizationId, StudentStatus status);
+    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status")
+    long countByOrganizationIdAndStatusNot(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
 
-    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(Long organizationId, StudentStatus status);
+    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is not null")
+    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
 
-    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(Long organizationId, StudentStatus status);
+    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is null")
+    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
 
     @Query("""
         select count(s) from StudentJpaEntity s
         where s.organizationId = :organizationId
+          and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
           and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
           and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
                or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
@@ -54,7 +59,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
             @Param("today") LocalDate today);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.normalizedEmail = :normalizedEmail")
+    @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.normalizedEmail = :normalizedEmail")
     Optional<StudentJpaEntity> findForLogin(@Param("organizationId") Long organizationId,
             @Param("normalizedEmail") String normalizedEmail);
 
@@ -64,7 +69,8 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
     @Query("""
         select s.id from StudentJpaEntity s
-        where s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+        where s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
+          and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
           and s.expiresAt is not null
           and s.expiresAt < :now
         """)
@@ -73,6 +79,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     @Query("""
         select s from StudentJpaEntity s
         where s.organizationId = :organizationId
+          and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
           and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
           and (
                :status is null

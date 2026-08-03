@@ -29,6 +29,7 @@ public interface OrganizationRepository extends JpaRepository<OrganizationJpaEnt
           from OrganizationJpaEntity o
           left join StudentJpaEntity s
             on s.organizationId = o.id
+           and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
            and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
          where (:query is null or lower(o.name) like lower(concat('%', :query, '%'))
                 or lower(o.code) like lower(concat('%', :query, '%')))

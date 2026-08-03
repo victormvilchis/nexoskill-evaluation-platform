@@ -502,12 +502,26 @@ public class StudentCertificationService {
              WHERE STUDENT_ID = :studentId
              ORDER BY CHANGED_AT DESC, STUDENT_CERTIFICATION_HISTORY_ID DESC
              OFFSET :offset ROWS FETCH NEXT :size ROWS ONLY
-            """, params, (rs, rowNum) -> new HistoryView(rs.getString("PUBLIC_ID"), rs.getString("EVENT_TYPE"),
-                rs.getString("PREVIOUS_VALUES"), rs.getString("NEW_VALUES"), rs.getString("REASON"),
-                instant(rs, "CHANGED_AT")));
+            """, params, (rs, rowNum) -> new HistoryView(rs.getString("PUBLIC_ID"),
+                historyLabel(rs.getString("EVENT_TYPE")), rs.getString("PREVIOUS_VALUES"),
+                rs.getString("NEW_VALUES"), rs.getString("REASON"), instant(rs, "CHANGED_AT")));
         long safeTotal = total == null ? 0 : total;
         return new PageResult<>(content, safePage, safeSize, safeTotal,
                 safeTotal == 0 ? 0 : (int) Math.ceil((double) safeTotal / safeSize));
+    }
+
+    private String historyLabel(String eventType) {
+        return switch (eventType == null ? "" : eventType) {
+            case "PRIMARY_CHANGED" -> "Cambio de certificación principal";
+            case "CYCLE_CANCELLED" -> "Cancelación de ciclo de certificación";
+            case "IMPORT_SNAPSHOT_CREATED" -> "Registro de resultado de certificación";
+            case "IMPORT_SNAPSHOT_UPDATED" -> "Actualización de resultado de certificación";
+            case "ATTEMPT_CREATED" -> "Registro de intento";
+            case "ATTEMPT_UPDATED" -> "Actualización de intento";
+            case "CYCLE_CREATED" -> "Alta de ciclo de certificación";
+            case "CYCLE_UPDATED" -> "Actualización de ciclo de certificación";
+            default -> "Cambio relevante de certificación";
+        };
     }
 
     private Catalogs catalogs(Long organizationId) {

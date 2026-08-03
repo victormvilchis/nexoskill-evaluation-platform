@@ -2,6 +2,9 @@ package com.nexoskill.evaluation.students.infrastructure.persistence;
 
 import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.domain.StudentRecordModule;
+import com.nexoskill.evaluation.students.domain.TalentProfileCode;
+import com.nexoskill.evaluation.students.domain.TalentType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -29,6 +32,30 @@ public class StudentJpaEntity {
 
     @Column(name = "ORGANIZATION_ID", nullable = false)
     private Long organizationId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "RECORD_MODULE", nullable = false, length = 30)
+    private StudentRecordModule recordModule;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TALENT_TYPE", length = 30)
+    private TalentType talentType;
+
+    @Column(name = "ORGANIZATION_HIRED_ON")
+    private LocalDate organizationHiredOn;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "TALENT_PROFILE_CODE", length = 10)
+    private TalentProfileCode talentProfileCode;
+
+    @Column(name = "TALENT_TECHNOLOGY_ID")
+    private Long talentTechnologyId;
+
+    @Column(name = "TALENT_MOVED_AT")
+    private Instant talentMovedAt;
+
+    @Column(name = "TALENT_MOVED_BY")
+    private Long talentMovedBy;
 
     @Column(name = "STUDENT_CODE", nullable = false, length = 80)
     private String studentCode;
@@ -144,6 +171,7 @@ public class StudentJpaEntity {
         StudentJpaEntity entity = new StudentJpaEntity();
         entity.publicId = publicId;
         entity.organizationId = organizationId;
+        entity.recordModule = StudentRecordModule.COLLABORATOR;
         entity.studentCode = studentCode;
         entity.email = email;
         entity.normalizedEmail = normalizedEmail;
@@ -169,6 +197,7 @@ public class StudentJpaEntity {
 
     public StudentEffectiveStatus effectiveStatusOn(LocalDate today) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
+        if (recordModule == StudentRecordModule.TALENT_BANK) return StudentEffectiveStatus.INACTIVE;
         if (admissionDate == null || status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
         if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) {
             return StudentEffectiveStatus.EXPIRED;
@@ -181,7 +210,8 @@ public class StudentJpaEntity {
     }
 
     public boolean canAuthenticateOn(LocalDate today, Instant now) {
-        return status == StudentStatus.ACTIVE
+        return recordModule == StudentRecordModule.COLLABORATOR
+                && status == StudentStatus.ACTIVE
                 && admissionDate != null
                 && validFrom != null && !today.isBefore(validFrom)
                 && expiresAt != null && !today.isAfter(expiresAt)
@@ -239,7 +269,7 @@ public class StudentJpaEntity {
         this.corporateUser = corporateUser;
         this.normalizedCorporateUser = normalizedCorporateUser;
         LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        if (admissionDate == null) {
+        if (recordModule == StudentRecordModule.TALENT_BANK || admissionDate == null) {
             this.status = StudentStatus.INACTIVE;
         } else if (expiresAt != null && today.isAfter(expiresAt)) {
             this.status = StudentStatus.EXPIRED;
@@ -261,6 +291,47 @@ public class StudentJpaEntity {
     public void deactivate(Long actorId, Instant now) {
         this.status = StudentStatus.INACTIVE;
         this.admissionDate = null;
+        touch(actorId, now);
+    }
+
+    public void moveToTalentBank(TalentType type, Long actorId, Instant now) {
+        if (type == null) throw new IllegalArgumentException("El tipo de talento es obligatorio.");
+        this.recordModule = StudentRecordModule.TALENT_BANK;
+        this.talentType = type;
+        this.status = StudentStatus.INACTIVE;
+        this.talentMovedAt = now;
+        this.talentMovedBy = actorId;
+        touch(actorId, now);
+    }
+
+    public void configureTalent(TalentType type, LocalDate organizationHiredOn, TalentProfileCode profileCode,
+            Long technologyId, Long actorId, Instant now) {
+        moveToTalentBank(type, actorId, now);
+        updateTalentMetadata(organizationHiredOn, profileCode, technologyId, actorId, now);
+    }
+
+    public void updateTalentMetadata(LocalDate organizationHiredOn, TalentProfileCode profileCode,
+            Long technologyId, Long actorId, Instant now) {
+        this.organizationHiredOn = organizationHiredOn;
+        this.talentProfileCode = profileCode;
+        this.talentTechnologyId = technologyId;
+        touch(actorId, now);
+    }
+
+    public void convertToCollaborator(LocalDate admissionDate, Long actorId, Instant now) {
+        this.recordModule = StudentRecordModule.COLLABORATOR;
+        this.talentType = null;
+        this.admissionDate = admissionDate;
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        if (admissionDate == null) {
+            this.status = StudentStatus.INACTIVE;
+        } else if (expiresAt != null && today.isAfter(expiresAt)) {
+            this.status = StudentStatus.EXPIRED;
+        } else {
+            this.status = StudentStatus.ACTIVE;
+        }
+        this.talentMovedAt = now;
+        this.talentMovedBy = actorId;
         touch(actorId, now);
     }
 
@@ -315,6 +386,13 @@ public class StudentJpaEntity {
     public Long getId() { return id; }
     public String getPublicId() { return publicId; }
     public Long getOrganizationId() { return organizationId; }
+    public StudentRecordModule getRecordModule() { return recordModule; }
+    public TalentType getTalentType() { return talentType; }
+    public LocalDate getOrganizationHiredOn() { return organizationHiredOn; }
+    public TalentProfileCode getTalentProfileCode() { return talentProfileCode; }
+    public Long getTalentTechnologyId() { return talentTechnologyId; }
+    public Instant getTalentMovedAt() { return talentMovedAt; }
+    public Long getTalentMovedBy() { return talentMovedBy; }
     public String getStudentCode() { return studentCode; }
     public String getEmail() { return email; }
     public String getNormalizedEmail() { return normalizedEmail; }

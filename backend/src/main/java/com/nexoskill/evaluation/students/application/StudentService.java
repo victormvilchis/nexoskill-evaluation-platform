@@ -12,6 +12,8 @@ import com.nexoskill.evaluation.students.domain.StudentEffectiveStatus;
 import com.nexoskill.evaluation.students.domain.StudentSessionRevocationReason;
 import com.nexoskill.evaluation.students.domain.StudentSessionStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.domain.StudentRecordModule;
+import com.nexoskill.evaluation.students.domain.TalentType;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepository;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionJpaEntity;
@@ -78,7 +80,7 @@ public class StudentService {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "updatedAt"));
-        if (!studentRepository.existsByOrganizationId(organizationId)) return PageResult.empty(safePage, safeSize);
+        if (!studentRepository.existsByOrganizationIdAndRecordModule(organizationId, StudentRecordModule.COLLABORATOR)) return PageResult.empty(safePage, safeSize);
         LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
         Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, today, pageable);
@@ -94,6 +96,16 @@ public class StudentService {
 
     @Transactional
     public CreateResult create(TenantContext tenant, CreateCommand command, Actor actor) {
+        return createRecord(tenant, command, actor, true);
+    }
+
+    @Transactional
+    CreateResult createTalentIdentity(TenantContext tenant, CreateCommand command, Actor actor) {
+        return createRecord(tenant, command, actor, false);
+    }
+
+    private CreateResult createRecord(TenantContext tenant, CreateCommand command, Actor actor,
+            boolean recordCollaboratorAudit) {
         OrganizationJpaEntity organization = requireOperationalOrganizationEntity(tenant);
         Long organizationId = organization.getId();
         validateRequired(command);
@@ -147,17 +159,29 @@ public class StudentService {
                     "El correo, el Código a nivel organización o el Usuario corporativo ya está registrado.",
                     Map.of("student", "Verifica los identificadores del colaborador."));
         }
-        audit(actor, "STUDENT_CREATED", student,
-                Map.of("initialStatus", initialStatus.name(), "passwordChangeRequired", true,
-                        "studentCode", student.getStudentCode()), now);
-        audit(actor, "STUDENT_TEMPORARY_PASSWORD_GENERATED", student,
-                Map.of("oneTimeDisplay", true, "passwordChangeRequired", true), now);
+        if (recordCollaboratorAudit) {
+            audit(actor, "STUDENT_CREATED", student,
+                    Map.of("initialStatus", initialStatus.name(), "passwordChangeRequired", true,
+                            "studentCode", student.getStudentCode()), now);
+            audit(actor, "STUDENT_TEMPORARY_PASSWORD_GENERATED", student,
+                    Map.of("oneTimeDisplay", true, "passwordChangeRequired", true), now);
+        }
         return new CreateResult(detail(student, now), temporaryPassword);
     }
 
     @Transactional
     public StudentDetail update(TenantContext tenant, String publicId, UpdateCommand command, Actor actor) {
-        StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
+        return updateRecord(tenant, publicId, command, actor, StudentRecordModule.COLLABORATOR);
+    }
+
+    @Transactional
+    public StudentDetail updateTalentRecord(TenantContext tenant, String publicId, UpdateCommand command, Actor actor) {
+        return updateRecord(tenant, publicId, command, actor, StudentRecordModule.TALENT_BANK);
+    }
+
+    private StudentDetail updateRecord(TenantContext tenant, String publicId, UpdateCommand command, Actor actor,
+            StudentRecordModule module) {
+        StudentJpaEntity student = findScopedForUpdate(tenant, publicId, module);
         validateVersion(student, command.version());
         validateUpdateRequired(command);
         validateDates(command.validFrom(), command.expiresAt());
@@ -257,16 +281,14 @@ public class StudentService {
     public StudentDetail deactivate(TenantContext tenant, String publicId, Actor actor) {
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
         Instant now = clock.instant();
-        if (student.getStatus() == StudentStatus.INACTIVE) {
-            throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El estudiante ya está desactivado.");
-        }
         if (student.getStatus() == StudentStatus.DELETED) {
             throw new BusinessException("STUDENT_STATUS_TRANSITION_INVALID", "El estudiante ya no está disponible.");
         }
-        student.deactivate(actor.userId(), now);
+        student.moveToTalentBank(TalentType.BBVA_EXIT, actor.userId(), now);
         studentRepository.save(student);
         revokeSessions(student.getId(), StudentSessionRevocationReason.DEACTIVATED, now);
-        audit(actor, "STUDENT_DEACTIVATED", student, Map.of(), now);
+        audit(actor, "STUDENT_MOVED_TO_TALENT_BANK", student,
+                Map.of("talentType", TalentType.BBVA_EXIT.name(), "historyPreserved", true), now);
         return detail(student, now);
     }
 
@@ -311,9 +333,16 @@ public class StudentService {
     }
 
     StudentJpaEntity findScopedForUpdate(TenantContext tenant, String publicId) {
+        return findScopedForUpdate(tenant, publicId, StudentRecordModule.COLLABORATOR);
+    }
+
+    StudentJpaEntity findScopedForUpdate(TenantContext tenant, String publicId, StudentRecordModule module) {
         return studentRepository.findByOrganizationIdAndPublicIdForUpdate(requireOrganization(tenant), publicId)
-                .filter(student -> student.getStatus() != StudentStatus.DELETED)
-                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
+                .filter(student -> student.getStatus() != StudentStatus.DELETED
+                        && student.getRecordModule() == module)
+                .orElseThrow(() -> new BusinessException(module == StudentRecordModule.TALENT_BANK
+                        ? "TALENT_NOT_FOUND" : "STUDENT_NOT_FOUND",
+                        module == StudentRecordModule.TALENT_BANK ? "El talento no existe." : "El colaborador no existe."));
     }
 
     StudentJpaEntity findScopedEntity(TenantContext tenant, String publicId) {
@@ -332,8 +361,9 @@ public class StudentService {
 
     private StudentJpaEntity findScoped(TenantContext tenant, String publicId) {
         return studentRepository.findByOrganizationIdAndPublicId(requireOrganization(tenant), publicId)
-                .filter(student -> student.getStatus() != StudentStatus.DELETED)
-                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El estudiante no existe."));
+                .filter(student -> student.getStatus() != StudentStatus.DELETED
+                        && student.getRecordModule() == StudentRecordModule.COLLABORATOR)
+                .orElseThrow(() -> new BusinessException("STUDENT_NOT_FOUND", "El colaborador no existe."));
     }
 
     Long requireOrganization(TenantContext tenant) {
@@ -517,7 +547,8 @@ public class StudentService {
         java.util.HashMap<String, Object> data = new java.util.HashMap<>(extra);
         data.put("studentPublicId", student.getPublicId());
         data.put("organizationId", student.getOrganizationId());
-        auditLogPort.record(actor.userId(), event, "STUDENTS", event, actor.ipAddress(), actor.userAgent(), data, now);
+        auditLogPort.record(actor.userId(), event, "STUDENTS", auditDescription(event),
+                actor.ipAddress(), actor.userAgent(), data, now);
     }
 
     private StudentSummary summary(StudentJpaEntity student, Instant now) {
@@ -538,6 +569,22 @@ public class StudentService {
         return new SessionView(session.getPublicId(), session.getStatus(), session.getIpAddress(), session.getUserAgent(),
                 session.getCreatedAt(), session.getLastActivityAt(), session.getExpiresAt(), session.getRevokedAt(),
                 session.getRevocationReason() == null ? null : session.getRevocationReason().name());
+    }
+
+    private String auditDescription(String event) {
+        return switch (event) {
+            case "STUDENT_CREATED" -> "El colaborador fue registrado.";
+            case "STUDENT_UPDATED" -> "Los datos del colaborador fueron actualizados.";
+            case "STUDENT_ACTIVATED" -> "El colaborador fue activado.";
+            case "STUDENT_MOVED_TO_TALENT_BANK" ->
+                    "El colaborador fue dado de baja de BBVA y trasladado a Talent Bank.";
+            case "STUDENT_PASSWORD_RESET" -> "Se generó una nueva contraseña temporal para el colaborador.";
+            case "STUDENT_SESSION_REVOKED", "STUDENT_SESSIONS_REVOKED" ->
+                    "Se revocó el acceso activo del colaborador.";
+            case "STUDENT_TEMPORARY_PASSWORD_GENERATED" ->
+                    "Se generaron las credenciales temporales del colaborador.";
+            default -> "Se actualizó información relevante del colaborador.";
+        };
     }
 
     private record ResolvedName(String firstName, String lastName, String displayName) {}

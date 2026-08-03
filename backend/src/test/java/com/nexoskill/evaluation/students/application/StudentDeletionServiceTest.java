@@ -15,6 +15,7 @@ import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.students.domain.StudentSessionRevocationReason;
 import com.nexoskill.evaluation.students.domain.StudentSessionStatus;
 import com.nexoskill.evaluation.students.domain.StudentStatus;
+import com.nexoskill.evaluation.students.domain.TalentType;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentJpaEntity;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentRepository;
 import com.nexoskill.evaluation.students.infrastructure.persistence.StudentSessionRepository;
@@ -81,6 +82,22 @@ class StudentDeletionServiceTest {
                 StudentSessionRevocationReason.DELETED, NOW);
         verify(audit).record(eq(1L), eq("STUDENT_DELETED"), eq("STUDENTS"),
                 anyString(), eq("127.0.0.1"), eq("test"), any(), eq(NOW));
+    }
+
+    @Test
+    void doesNotAllowTheCollaboratorEndpointToDeleteATalentBankRecord() {
+        StudentJpaEntity talent = student();
+        talent.moveToTalentBank(TalentType.BBVA_EXIT, 1L, NOW);
+        when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public"))
+                .thenReturn(Optional.of(talent));
+
+        assertThatThrownBy(() -> service.deletePermanently(TENANT, "student-public", true,
+                new StudentService.Actor(1L, "127.0.0.1", "test")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
+
+        verify(students, never()).saveAndFlush(any());
+        verify(sessions, never()).revokeActive(any(), any(), any(), any(), any());
     }
 
     @Test

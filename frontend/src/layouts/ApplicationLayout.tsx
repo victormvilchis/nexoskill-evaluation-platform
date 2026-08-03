@@ -29,7 +29,9 @@ const navigationConfig: NavSection[] = [
     items: [
       { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
       { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-      { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' }
+      { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' },
+      { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'STUDENT_VIEW' },
+      { id: 'permanent-deletions', label: 'Eliminaciones definitivas', to: '/admin/permanent-deletions', icon: 'trash', permission: 'STUDENT_DELETE' }
     ]
   },
   {

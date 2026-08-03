@@ -29,6 +29,12 @@ import { StudentManagementPage } from './pages/StudentManagementPage'
 import { StudentCertificationsPage } from './pages/StudentCertificationsPage'
 import { StudentLoginPage } from './pages/StudentLoginPage'
 import { StudentPortalPage } from './pages/StudentPortalPage'
+import { TalentBankPage } from './pages/TalentBankPage'
+import { TalentTypeSelectionPage } from './pages/TalentTypeSelectionPage'
+import { AcademyTalentEditorPage } from './pages/AcademyTalentEditorPage'
+import { TalentBankDetailPage } from './pages/TalentBankDetailPage'
+import { TalentBankEditRouter } from './pages/TalentBankEditRouter'
+import { PermanentDeletionsPage } from './pages/PermanentDeletionsPage'
 import { StudentChangePasswordPage } from './pages/StudentChangePasswordPage'
 import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute'
 import { PermissionRoute } from './shared/components/PermissionRoute'
@@ -40,6 +46,8 @@ function resolveDocumentSection(pathname: string) {
   if (pathname.startsWith('/student/change-password')) return 'Cambiar contraseña'
   if (pathname.startsWith('/student')) return 'Portal de colaboradores'
   if (pathname.startsWith('/admin/organizations')) return 'Organizaciones'
+  if (pathname.startsWith('/admin/talent-bank')) return 'Talent Bank'
+  if (pathname.startsWith('/admin/permanent-deletions')) return 'Eliminaciones definitivas'
   if (pathname.startsWith('/admin/collaborators')) return 'Colaboradores'
   if (pathname.startsWith('/admin/users')) return 'Usuarios'
   if (pathname.startsWith('/admin/questions')) return 'Preguntas'
@@ -104,6 +112,24 @@ export default function App() {
           <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
             <Route path="/admin/collaborators" element={<AdminStudentsPage />} />
             <Route path="/admin/collaborators/:publicId" element={<StudentEditorPage mode="view" />} />
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
+            <Route path="/admin/talent-bank" element={<TalentBankPage />} />
+            <Route path="/admin/talent-bank/:publicId" element={<TalentBankDetailPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_CREATE" />}>
+            <Route path="/admin/talent-bank/new" element={<TalentTypeSelectionPage />} />
+            <Route path="/admin/talent-bank/new/academy" element={<AcademyTalentEditorPage mode="create" />} />
+            <Route path="/admin/talent-bank/new/prospect" element={<StudentEditorPage mode="create" workspace="talent-bank" />} />
+            <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
+              <Route path="/admin/talent-bank/:publicId/convert" element={<StudentEditorPage mode="edit" workspace="talent-bank" conversion />} />
+            </Route>
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
+            <Route path="/admin/talent-bank/:publicId/edit" element={<TalentBankEditRouter />} />
+          </Route>
+          <Route element={<PermissionRoute permission="STUDENT_DELETE" />}>
+            <Route path="/admin/permanent-deletions" element={<PermanentDeletionsPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CREATE" />}>
             <Route path="/admin/collaborators/new" element={<StudentEditorPage mode="create" />} />

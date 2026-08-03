@@ -186,9 +186,7 @@ public class AdminStudentController {
     @PreAuthorize("hasAuthority('STUDENT_STATUS_CHANGE')")
     public Object deactivate(@PathVariable String publicId,
             @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        StudentService.StudentDetail updated = service.deactivate(effectiveTenant(request, publicId), publicId,
-                actor(actor, request));
-        return enriched(request, publicId, updated);
+        return service.deactivate(effectiveTenant(request, publicId), publicId, actor(actor, request));
     }
 
     @DeleteMapping("/{publicId}")

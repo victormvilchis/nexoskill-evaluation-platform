@@ -1,0 +1,21 @@
+.talent-type-selection { max-width: 920px; margin-inline: auto; }
+.talent-type-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+.talent-type-card { display: grid; gap: .65rem; min-height: 170px; padding: 1.4rem; border: 1px solid var(--border-color, #d9e0e8); border-radius: 16px; background: var(--surface-color, #fff); color: inherit; text-decoration: none; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.talent-type-card:hover { border-color: var(--primary-color, #1f5eff); box-shadow: 0 12px 28px rgb(20 44 74 / 10%); transform: translateY(-2px); }
+.talent-type-card svg { color: var(--primary-color, #1f5eff); }
+.talent-type-card strong { font-size: 1.05rem; }
+.talent-type-card span { color: var(--muted-color, #627087); line-height: 1.45; }
+.talent-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem; }
+.talent-detail-grid > div { display: grid; gap: .3rem; padding: .8rem 0; border-bottom: 1px solid var(--border-color, #e4e9ef); }
+.talent-detail-grid span { color: var(--muted-color, #627087); font-size: .82rem; }
+.talent-cv-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; margin-bottom: 1rem; border: 1px solid var(--border-color, #e1e7ed); border-radius: 12px; }
+.talent-cv-row > div { display: grid; gap: .25rem; }
+.talent-cv-row small, .ns-cell-secondary { display: block; color: var(--muted-color, #627087); }
+.permanent-deletion-warning { border-left: 4px solid #b42318; }
+.permanent-deletion-warning strong { color: #8f1d14; }
+.permanent-deletion-warning p { margin-bottom: 0; }
+.table-action-danger { color: #b42318; }
+.talent-type-academy { background: #edf4ff; color: #2457a5; }
+.talent-type-prospect { background: #f3efff; color: #6546a4; }
+.talent-type-bbva_exit { background: #fff3e7; color: #9a5200; }
+@media (max-width: 760px) { .talent-type-cards, .talent-detail-grid { grid-template-columns: 1fr; } .talent-cv-row { align-items: stretch; flex-direction: column; } }

@@ -4,6 +4,7 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { getStudentExperience, updateStudentExperience } from '../features/students/api/studentImportApi'
 import { createStudent, getStudent, getStudentCatalogs, updateStudent } from '../features/students/api/studentApi'
+import { createProspectTalent, getTalentFoundation, updateFullTalent, convertTalent } from '../features/talent-bank/api/talentBankApi'
 import { StudentExperienceFields } from '../features/students/components/StudentExperienceFields'
 import { StudentTemporaryCredentialsDialog } from '../features/students/components/StudentTemporaryCredentialsDialog'
 import type { StudentExperiencePayload } from '../features/students/types/studentImport'
@@ -19,7 +20,11 @@ import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { StudentCatalogRef, StudentCatalogs, StudentDetail, StudentTemporaryCredentials } from '../shared/types/students'
 
-interface Props { mode: 'create' | 'edit' | 'view' }
+interface Props {
+  mode: 'create' | 'edit' | 'view'
+  workspace?: 'collaborators' | 'talent-bank'
+  conversion?: boolean
+}
 type CertificationFlags = {
   appliesTechnologicalCertification: boolean
   appliesDevelopmentSecurity: boolean
@@ -78,14 +83,18 @@ function hasCertificationData(professionalProfilePublicId: string,
     || Object.values(flags).some(Boolean))
 }
 
-export function StudentEditorPage({ mode }: Props) {
+export function StudentEditorPage({ mode, workspace = 'collaborators', conversion = false }: Props) {
   const { publicId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const toast = useToast()
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const readOnly = mode === 'view'
-  const completeSave = useSaveNavigation('/admin/collaborators')
+  const talentWorkspace = workspace === 'talent-bank'
+  const basePath = talentWorkspace ? '/admin/talent-bank' : '/admin/collaborators'
+  const completeTalentSave = useSaveNavigation(basePath)
+  const completeTalentBankSave = useSaveNavigation('/admin/talent-bank')
+  const completeCollaboratorSave = useSaveNavigation('/admin/collaborators')
   const organizationRequest = useRef(0)
   const [student, setStudent] = useState<StudentDetail | null>(null)
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
@@ -113,6 +122,7 @@ export function StudentEditorPage({ mode }: Props) {
   const [flags, setFlags] = useState<CertificationFlags>(EMPTY_FLAGS)
   const [experience, setExperience] = useState<StudentExperiencePayload>(EMPTY_EXPERIENCE)
   const [confirmingDeactivation, setConfirmingDeactivation] = useState(false)
+  const [confirmingConversion, setConfirmingConversion] = useState(false)
   const [pendingFlagRemoval, setPendingFlagRemoval] = useState<keyof CertificationFlags>()
 
   useEffect(() => {
@@ -142,7 +152,7 @@ export function StudentEditorPage({ mode }: Props) {
     let active = true
     setLoading(true)
     setError(null)
-    Promise.all([getStudent(publicId), getStudentExperience(publicId)])
+    Promise.all([talentWorkspace ? getTalentFoundation(publicId) : getStudent(publicId), getStudentExperience(publicId)])
       .then(async ([detail, experienceValue]) => {
         if (!active) return
         setStudent(detail)
@@ -183,7 +193,7 @@ export function StudentEditorPage({ mode }: Props) {
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [administrator, mode, publicId])
+  }, [administrator, mode, publicId, talentWorkspace])
 
   useEffect(() => {
     if (mode !== 'create' || administrator) return
@@ -260,11 +270,12 @@ export function StudentEditorPage({ mode }: Props) {
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
     if (!email.trim()) errors.email = 'El correo electrónico es obligatorio.'
     if (manualStudentCode && !studentCode.trim()) errors.studentCode = 'El Código a nivel organización es obligatorio.'
-    if (corporateUser.trim() && !admissionDate && corporateUser.trim() !== (student?.corporateUser ?? '').trim()) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
+    if ((!talentWorkspace || conversion) && corporateUser.trim() && !admissionDate && corporateUser.trim() !== (student?.corporateUser ?? '').trim()) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
     if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
     if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
     if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
     if (!expiresAt) errors.expiresAt = 'La fecha de vencimiento es obligatoria.'
+    if (talentWorkspace && conversion && !admissionDate) errors.admissionDate = 'La Fecha de alta es obligatoria para convertir el talento.'
     if (validFrom && expiresAt && expiresAt < validFrom) errors.expiresAt = 'La fecha de vencimiento no puede ser anterior al inicio de vigencia.'
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) focusFirstFieldError(errors)
@@ -273,7 +284,11 @@ export function StudentEditorPage({ mode }: Props) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (readOnly || saving || !validateForm()) return
-    if (mode === 'edit' && student?.admissionDate && !admissionDate) {
+    if (conversion) {
+      setConfirmingConversion(true)
+      return
+    }
+    if (!talentWorkspace && mode === 'edit' && student?.admissionDate && !admissionDate) {
       setConfirmingDeactivation(true)
       return
     }
@@ -289,61 +304,88 @@ export function StudentEditorPage({ mode }: Props) {
     } : {}
     try {
       if (mode === 'create') {
-        const response = await createStudent({
+        const payload = {
           ...(administrator ? { organizationPublicId } : {}), email: email.trim(),
           firstName: firstName.trim(), lastName: lastName.trim(),
           displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-          status: admissionDate ? 'ACTIVE' : 'INACTIVE', validFrom, expiresAt,
-          admissionDate: admissionDate || undefined,
+          status: admissionDate ? 'ACTIVE' as const : 'INACTIVE' as const, validFrom, expiresAt,
+          admissionDate: talentWorkspace ? undefined : (admissionDate || undefined),
           studentCode: manualStudentCode ? studentCode.trim() : undefined,
-          corporateUser: admissionDate && corporateUser.trim() ? corporateUser.trim() : undefined,
+          corporateUser: !talentWorkspace && admissionDate && corporateUser.trim() ? corporateUser.trim() : undefined,
           ...certificationPayload
-        })
-        setTemporaryCredentials({ ...response.temporaryCredentials, studentCode: response.student.studentCode })
+        }
+        let createdPublicId: string
+        if (talentWorkspace) {
+          const response = await createProspectTalent(payload)
+          createdPublicId = response.talent.publicId
+        } else {
+          const response = await createStudent(payload)
+          createdPublicId = response.student.publicId
+          setTemporaryCredentials({ ...response.temporaryCredentials, studentCode: response.student.studentCode })
+        }
         try {
-          await updateStudentExperience(response.student.publicId, cleanExperience(experience))
+          await updateStudentExperience(createdPublicId, cleanExperience(experience))
         } catch {
-          toast.warning('Colaborador creado con una advertencia', 'La cuenta se creó correctamente, pero la experiencia deberá guardarse desde Editar colaborador.')
+          toast.warning(talentWorkspace ? 'Prospecto creado con una advertencia' : 'Colaborador creado con una advertencia', 'El registro se creó correctamente, pero la experiencia deberá guardarse nuevamente desde Editar.')
+          if (talentWorkspace) navigate(basePath, { replace: true })
           return
         }
-        toast.success('Colaborador creado correctamente', 'Guarda las credenciales antes de cerrar esta vista.')
+        toast.success(talentWorkspace ? 'Prospecto registrado correctamente' : 'Colaborador creado correctamente', talentWorkspace ? 'El registro quedó disponible en Talent Bank.' : 'Guarda las credenciales antes de cerrar esta vista.')
+        if (talentWorkspace) navigate(basePath, { replace: true })
       } else if (student && publicId) {
         const admissionChanged = (student.admissionDate ?? '') !== admissionDate
-        await updateStudent(publicId, {
+        const movedToTalentBank = Boolean(student.admissionDate && !admissionDate && !talentWorkspace)
+        const updatePayload = {
           email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
           displayName: `${firstName.trim()} ${lastName.trim()}`.trim(), validFrom, expiresAt,
-          admissionDate: admissionDate || undefined,
+          admissionDate: conversion || !talentWorkspace
+            ? (admissionDate || undefined)
+            : (student.admissionDate ?? undefined),
           studentCode: manualStudentCode ? studentCode.trim() : undefined,
-          corporateUser: admissionDate ? (corporateUser.trim() || undefined) : undefined,
+          corporateUser: conversion || !talentWorkspace
+            ? (admissionDate ? (corporateUser.trim() || undefined) : undefined)
+            : (student.corporateUser ?? undefined),
           ...certificationPayload, version: student.version
-        })
+        }
+        if (talentWorkspace && conversion) await convertTalent(publicId, updatePayload)
+        else if (talentWorkspace) await updateFullTalent(publicId, updatePayload)
+        else await updateStudent(publicId, updatePayload)
         let experienceWarning = false
         try {
           await updateStudentExperience(publicId, cleanExperience(experience))
         } catch {
           experienceWarning = true
         }
-        completeSave({ title: experienceWarning
-          ? 'Colaborador actualizado con una advertencia.'
-          : 'Colaborador actualizado correctamente.', message: experienceWarning
+        const completion = conversion
+          ? completeCollaboratorSave
+          : movedToTalentBank
+            ? completeTalentBankSave
+            : completeTalentSave
+        completion({ title: conversion
+          ? 'El talento se convirtió correctamente en colaborador.'
+          : experienceWarning
+            ? `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado con una advertencia.`
+            : `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado correctamente.`, message: experienceWarning
           ? 'Los datos principales se guardaron, pero la experiencia deberá actualizarse nuevamente.'
-          : admissionChanged
-            ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
-            : undefined })
+          : movedToTalentBank
+            ? 'El colaborador fue dado de baja de BBVA y trasladado a Talent Bank.'
+            : admissionChanged && !talentWorkspace
+              ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
+              : undefined })
       }
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
         const errors = requestError.fieldErrors ?? {}; setError(requestError.message); setFieldErrors(errors); focusFirstFieldError(errors)
-      } else setError('No fue posible guardar al colaborador.')
+      } else setError(talentWorkspace ? 'No fue posible guardar el talento.' : 'No fue posible guardar al colaborador.')
     } finally { setSaving(false) }
   }
 
   if (loading) return <LoadingScreen />
-  if (error && mode !== 'create' && !student) return <main className="content-page"><BackButton fallback="/admin/collaborators" /><div className="error-message" role="alert">{error}</div></main>
+  if (error && mode !== 'create' && !student) return <main className="content-page"><BackButton fallback={basePath} /><div className="error-message" role="alert">{error}</div></main>
   return (
     <main className="content-page editor-page student-editor-foundation">
-      <BackButton fallback="/admin/collaborators" />
-      <header className="page-heading compact ns-redundant-editor-heading"><div><p className="eyebrow">Colaboradores</p><h1>{mode === 'create' ? 'Nuevo colaborador' : mode === 'edit' ? 'Editar colaborador' : 'Ver colaborador'}</h1><p className="muted">La Fecha de alta determina si el colaborador está activo y puede gestionar certificaciones.</p></div></header>
+      <BackButton fallback={basePath} />
+      <header className="page-heading compact ns-redundant-editor-heading"><div><p className="eyebrow">{talentWorkspace ? 'Talent Bank' : 'Colaboradores'}</p><h1>{conversion ? 'Convertir a colaborador' : mode === 'create' ? (talentWorkspace ? 'Nuevo prospecto' : 'Nuevo colaborador') : mode === 'edit' ? (talentWorkspace ? 'Editar talento' : 'Editar colaborador') : (talentWorkspace ? 'Ver talento' : 'Ver colaborador')}</h1><p className="muted">{conversion ? 'Completa la información faltante para incorporar el talento a Colaboradores.' : talentWorkspace ? 'El registro pertenece a la organización, pero no contabiliza en los indicadores de Colaboradores.' : 'La Fecha de alta determina si el colaborador está activo y puede gestionar certificaciones.'}</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <form className="student-foundation-form" onSubmit={handleSubmit} noValidate>
         {administrator && mode === 'create' && <section className="editor-card student-organization-first"><div className="section-heading"><div><p className="eyebrow">Organización</p><h2>Selecciona primero la organización</h2></div></div><div className="foundation-form-grid"><label className="form-field"><span>Organización</span><SelectField name="organizationPublicId" value={organizationPublicId} onChange={(nextValue) => void changeOrganization(nextValue)} disabled={organizationLoading} required ariaInvalid={Boolean(fieldErrors.organizationPublicId)} ariaLabel="Organización" options={[{ value: '', label: 'Seleccionar organización' }, ...organizations.map((item) => ({ value: item.publicId, label: `${item.name} · ${item.code}` }))]} />{field('organizationPublicId')}</label>{organizationLoading && <p className="form-help">Cargando organizaciones comerciales activas…</p>}{!organizationLoading && !organizationPublicId && <p className="form-help">Selecciona una organización para habilitar el resto del formulario.</p>}{organizationPublicId && catalogLoading && <p className="form-help">Consultando la configuración de {selectedOrganization?.name ?? 'la organización'}…</p>}{organizationError && <div className="error-message" role="alert">{organizationError}</div>}{catalogError && <div className="error-message" role="alert">{catalogError}</div>}</div></section>}
@@ -356,23 +398,23 @@ export function StudentEditorPage({ mode }: Props) {
               : <strong className="readonly-value">{mode === 'create' ? 'Se generará automáticamente al guardar' : (studentCode || 'N/A')}</strong>}{field('studentCode')}</label>
             <label className="form-field ns-field-span-3"><span>Usuario corporativo <small>(opcional)</small></span>{readOnly
               ? <strong className="readonly-value">{corporateUser || 'N/A'}</strong>
-              : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate}
+              : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate || (talentWorkspace && !conversion)}
                   onChange={(event) => setCorporateUser(event.target.value)} aria-invalid={Boolean(fieldErrors.corporateUser)} />}{field('corporateUser')}{!readOnly && !admissionDate && <small>Captura una Fecha de alta para habilitar el campo Usuario corporativo.</small>}</label>
             <label className="form-field ns-field-span-6"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
             <label className="form-field ns-field-span-6"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
             <label className="form-field ns-field-span-6"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
             <label className="form-field ns-field-span-4"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <DateField name="validFrom" value={validFrom} onChange={setValidFrom} required ariaInvalid={Boolean(fieldErrors.validFrom)} ariaLabel="Seleccionar inicio de vigencia" />}{field('validFrom')}</label>
             <label className="form-field ns-field-span-4"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <DateField name="expiresAt" value={expiresAt} min={validFrom || undefined} onChange={setExpiresAt} required ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />}{field('expiresAt')}</label>
-            <label className="form-field ns-field-span-4"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <DateField name="admissionDate" value={admissionDate} onChange={setAdmissionDate} ariaInvalid={Boolean(fieldErrors.admissionDate)} ariaLabel="Seleccionar Fecha de alta" />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.</small>}</label>
+            <label className="form-field ns-field-span-4"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <DateField name="admissionDate" value={admissionDate} onChange={setAdmissionDate} disabled={talentWorkspace && !conversion} ariaInvalid={Boolean(fieldErrors.admissionDate)} ariaLabel="Seleccionar Fecha de alta" />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">{talentWorkspace && !conversion ? 'La Fecha de alta se capturará durante la conversión a colaborador.' : 'Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.'}</small>}</label>
             {readOnly && student?.organization && <label className="form-field ns-field-span-6"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
             {readOnly && student && <label className="form-field ns-field-span-6"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Desactivado' : 'Vencido'}</strong></label>}
           </div></section>
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
-            <label className="form-field ns-field-span-6"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={setProfessionalProfilePublicId} disabled={!admissionDate || profileOptions.length === 0} ariaLabel="Perfil" options={[{ value: '', label: 'Seleccionar perfil' }, ...profileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && !admissionDate && <small>El colaborador está inactivo; la información de certificaciones es solo de consulta.</small>}{!readOnly && admissionDate && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
-            <label className="form-field ns-field-span-6"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={setTechnologicalProfilePublicId} disabled={!admissionDate || technologicalProfileOptions.length === 0} ariaLabel="Perfil tecnológico" options={[{ value: '', label: 'Seleccionar perfil tecnológico' }, ...technologicalProfileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && admissionDate && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
+            <label className="form-field ns-field-span-6"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={setProfessionalProfilePublicId} disabled={(!admissionDate && !talentWorkspace) || profileOptions.length === 0} ariaLabel="Perfil" options={[{ value: '', label: 'Seleccionar perfil' }, ...profileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && !admissionDate && <small>El colaborador está inactivo; la información de certificaciones es solo de consulta.</small>}{!readOnly && admissionDate && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
+            <label className="form-field ns-field-span-6"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={setTechnologicalProfilePublicId} disabled={(!admissionDate && !talentWorkspace) || technologicalProfileOptions.length === 0} ariaLabel="Perfil tecnológico" options={[{ value: '', label: 'Seleccionar perfil tecnológico' }, ...technologicalProfileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && admissionDate && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
 
           </div>}</section>}
-          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
+          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate || talentWorkspace ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate && !talentWorkspace} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
         {!readOnly && organizationResolved && (
@@ -381,7 +423,7 @@ export function StudentEditorPage({ mode }: Props) {
               className="secondary-button"
               type="button"
               disabled={saving}
-              onClick={() => navigate('/admin/collaborators')}
+              onClick={() => navigate(basePath)}
             >
               Cancelar
             </button>
@@ -390,17 +432,26 @@ export function StudentEditorPage({ mode }: Props) {
               type="submit"
               disabled={saving || catalogLoading || Boolean(catalogError)}
             >
-              {saving ? 'Guardando…' : mode === 'create' ? 'Crear colaborador' : 'Guardar cambios'}
+              {saving ? 'Guardando…' : conversion ? 'Convertir a colaborador' : mode === 'create' ? (talentWorkspace ? 'Registrar prospecto' : 'Crear colaborador') : 'Guardar cambios'}
             </button>
           </FormActions>
         )}
       </form>
-      {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate('/admin/collaborators', { replace: true }) }} />}
+      {temporaryCredentials && <StudentTemporaryCredentialsDialog title="Colaborador creado correctamente" credentials={temporaryCredentials} onClose={() => { setTemporaryCredentials(undefined); navigate(basePath, { replace: true }) }} />}
+      <ConfirmDialog
+        open={confirmingConversion}
+        title="Convertir a colaborador"
+        description="Este talento dejará de formar parte de Talent Bank y será incorporado al módulo Colaboradores. A partir de ese momento comenzará a contabilizarse en los indicadores correspondientes."
+        confirmLabel="Confirmar conversión"
+        busy={saving}
+        onCancel={() => setConfirmingConversion(false)}
+        onConfirm={() => { setConfirmingConversion(false); void persistStudent() }}
+      />
       <ConfirmDialog
         open={confirmingDeactivation}
         title="Confirmar baja del colaborador"
-        description="Al eliminar la Fecha de alta, el colaborador será dado de baja, quedará inactivo, perderá el acceso a la plataforma y ya no será posible gestionar sus certificaciones."
-        confirmLabel="Confirmar baja"
+        description="Al eliminar la Fecha de alta, el colaborador será dado de baja de BBVA y trasladado a Talent Bank dentro de la misma organización. Conservará su información e historial, perderá el acceso y dejará de contabilizarse en los indicadores operativos."
+        confirmLabel="Dar de baja"
         tone="danger"
         busy={saving}
         onCancel={() => {
