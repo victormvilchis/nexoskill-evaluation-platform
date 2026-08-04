@@ -14,16 +14,18 @@ public interface SpringDataQuestionCategoryRepository extends JpaRepository<Ques
 
 	Optional<QuestionCategoryJpaEntity> findByPublicId(String publicId);
 
-	Optional<QuestionCategoryJpaEntity> findFirstBySourceGlobalIdAndOwnerOrganizationId(Long sourceGlobalId, Long ownerOrganizationId);
+	Optional<QuestionCategoryJpaEntity> findFirstBySourceGlobalIdAndOwnerOrganizationId(Long sourceGlobalId,
+			Long ownerOrganizationId);
 
-	Optional<QuestionCategoryJpaEntity> findFirstByContentScopeAndOwnerOrganizationIdAndCodeIgnoreCase(ContentScope scope, Long ownerOrganizationId, String code);
+	Optional<QuestionCategoryJpaEntity> findFirstByContentScopeAndOwnerOrganizationIdAndCodeIgnoreCase(
+			ContentScope scope, Long ownerOrganizationId, String code);
 
 	List<QuestionCategoryJpaEntity> findAllByPublicIdIn(Collection<String> ids);
 
 	List<QuestionCategoryJpaEntity> findAllByContentScopeOrderByNameAsc(ContentScope scope);
 
-	List<QuestionCategoryJpaEntity> findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(
-			ContentScope scope, Long ownerOrganizationId);
+	List<QuestionCategoryJpaEntity> findAllByContentScopeAndOwnerOrganizationIdOrderByNameAsc(ContentScope scope,
+			Long ownerOrganizationId);
 
 	@Query("""
 			select c from QuestionCategoryJpaEntity c

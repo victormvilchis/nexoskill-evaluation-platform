@@ -8,21 +8,21 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class QuestionTechnologyJpaEntityTest {
-    @Test
-    void createsActiveAndPreservesHistoryWhenInactivated() {
-        Instant createdAt = Instant.parse("2026-07-27T12:00:00Z");
-        QuestionTechnologyJpaEntity technology = QuestionTechnologyJpaEntity.create(
-                "00000000-0000-0000-3000-000000000001", "JAVA", "Java",
-                "Tecnología Java", 10, ContentScope.GLOBAL, null, 1L, createdAt);
+	@Test
+	void createsActiveAndPreservesHistoryWhenInactivated() {
+		Instant createdAt = Instant.parse("2026-07-27T12:00:00Z");
+		QuestionTechnologyJpaEntity technology = QuestionTechnologyJpaEntity.create(
+				"00000000-0000-0000-3000-000000000001", "JAVA", "Java", "Tecnología Java", 10, ContentScope.GLOBAL,
+				null, 1L, createdAt);
 
-        assertThat(technology.getStatus()).isEqualTo(QuestionTechnologyStatus.ACTIVE);
-        assertThat(technology.getCode()).isEqualTo("JAVA");
-        assertThat(technology.getContentScope()).isEqualTo(ContentScope.GLOBAL);
-        assertThat(technology.getOwnerOrganizationId()).isNull();
+		assertThat(technology.getStatus()).isEqualTo(QuestionTechnologyStatus.ACTIVE);
+		assertThat(technology.getCode()).isEqualTo("JAVA");
+		assertThat(technology.getContentScope()).isEqualTo(ContentScope.GLOBAL);
+		assertThat(technology.getOwnerOrganizationId()).isNull();
 
-        technology.changeStatus(QuestionTechnologyStatus.INACTIVE, 2L, createdAt.plusSeconds(60));
+		technology.changeStatus(QuestionTechnologyStatus.INACTIVE, 2L, createdAt.plusSeconds(60));
 
-        assertThat(technology.getStatus()).isEqualTo(QuestionTechnologyStatus.INACTIVE);
-        assertThat(technology.getUpdatedBy()).isEqualTo(2L);
-    }
+		assertThat(technology.getStatus()).isEqualTo(QuestionTechnologyStatus.INACTIVE);
+		assertThat(technology.getUpdatedBy()).isEqualTo(2L);
+	}
 }

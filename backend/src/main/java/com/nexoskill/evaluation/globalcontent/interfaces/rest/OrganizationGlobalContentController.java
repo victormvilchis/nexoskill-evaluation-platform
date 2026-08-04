@@ -13,22 +13,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/global-content")
 public class OrganizationGlobalContentController {
-    private final OrganizationContentGrantService grants;
-    private final TenantContextResolver tenantContextResolver;
+	private final OrganizationContentGrantService grants;
+	private final TenantContextResolver tenantContextResolver;
 
-    public OrganizationGlobalContentController(OrganizationContentGrantService grants,
-            TenantContextResolver tenantContextResolver) {
-        this.grants = grants;
-        this.tenantContextResolver = tenantContextResolver;
-    }
+	public OrganizationGlobalContentController(OrganizationContentGrantService grants,
+			TenantContextResolver tenantContextResolver) {
+		this.grants = grants;
+		this.tenantContextResolver = tenantContextResolver;
+	}
 
-    @GetMapping("/available")
-    @PreAuthorize("hasAuthority('GLOBAL_CONTENT_USE')")
-    public List<GrantView> available(HttpServletRequest request) {
-        var tenant = tenantContextResolver.resolve(request);
-        if (tenant.globalScope()) {
-            return List.of();
-        }
-        return grants.list(tenant.organizationPublicId());
-    }
+	@GetMapping("/available")
+	@PreAuthorize("hasAuthority('GLOBAL_CONTENT_USE')")
+	public List<GrantView> available(HttpServletRequest request) {
+		var tenant = tenantContextResolver.resolve(request);
+		if (tenant.globalScope()) {
+			return List.of();
+		}
+		return grants.list(tenant.organizationPublicId());
+	}
 }

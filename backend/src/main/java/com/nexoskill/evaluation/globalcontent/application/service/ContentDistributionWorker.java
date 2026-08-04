@@ -8,14 +8,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ContentDistributionWorker {
-    private final OrganizationContentGrantService grants;
+	private final OrganizationContentGrantService grants;
 
-    public ContentDistributionWorker(OrganizationContentGrantService grants) {
-        this.grants = grants;
-    }
+	public ContentDistributionWorker(OrganizationContentGrantService grants) {
+		this.grants = grants;
+	}
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public GrantOutcome process(GrantCommand command, Long actorUserId) {
-        return grants.grantInternal(command, actorUserId);
-    }
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public GrantOutcome process(GrantCommand command, Long actorUserId) {
+		return grants.grantInternal(command, actorUserId);
+	}
 }

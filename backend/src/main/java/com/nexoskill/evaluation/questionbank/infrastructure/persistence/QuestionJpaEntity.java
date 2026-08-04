@@ -11,332 +11,447 @@ import java.util.*;
 @Entity
 @Table(name = "QUESTION")
 public class QuestionJpaEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "QUESTION_ID")
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "QUESTION_ID")
+	private Long id;
 
-    @Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
-    private String publicId;
+	@Column(name = "PUBLIC_ID", nullable = false, unique = true, length = 36)
+	private String publicId;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "TYPE_CODE", nullable = false)
-    private QuestionTypeJpaEntity type;
+	@ManyToOne(fetch = FetchType.EAGER, optional = false)
+	@JoinColumn(name = "TYPE_CODE", nullable = false)
+	private QuestionTypeJpaEntity type;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "DIFFICULTY_CODE", nullable = false)
-    private QuestionDifficultyJpaEntity difficulty;
+	@ManyToOne(fetch = FetchType.EAGER, optional = false)
+	@JoinColumn(name = "DIFFICULTY_CODE", nullable = false)
+	private QuestionDifficultyJpaEntity difficulty;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "TECHNOLOGY_ID")
-    private QuestionTechnologyJpaEntity technology;
+	@ManyToOne(fetch = FetchType.EAGER)
+	@JoinColumn(name = "TECHNOLOGY_ID")
+	private QuestionTechnologyJpaEntity technology;
 
-    @Column(name = "LEVEL_CODE", length = 30)
-    private String levelCode;
+	@Column(name = "LEVEL_CODE", length = 30)
+	private String levelCode;
 
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(name = "QUESTION_CATEGORY_RELATION",
-            joinColumns = @JoinColumn(name = "QUESTION_ID"),
-            inverseJoinColumns = @JoinColumn(name = "CATEGORY_ID"))
-    @OrderBy("name ASC")
-    private Set<QuestionCategoryJpaEntity> categories = new LinkedHashSet<>();
+	@ManyToMany(fetch = FetchType.EAGER)
+	@JoinTable(name = "QUESTION_CATEGORY_RELATION", joinColumns = @JoinColumn(name = "QUESTION_ID"), inverseJoinColumns = @JoinColumn(name = "CATEGORY_ID"))
+	@OrderBy("name ASC")
+	private Set<QuestionCategoryJpaEntity> categories = new LinkedHashSet<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "STATUS", nullable = false, length = 30)
-    private QuestionStatus status;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "STATUS", nullable = false, length = 30)
+	private QuestionStatus status;
 
-    @Lob
-    @Column(name = "STATEMENT_TEXT", nullable = false)
-    private String statement;
+	@Lob
+	@Column(name = "STATEMENT_TEXT", nullable = false)
+	private String statement;
 
-    @Lob
-    @Column(name = "EXPLANATION_TEXT")
-    private String explanation;
+	@Lob
+	@Column(name = "EXPLANATION_TEXT")
+	private String explanation;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "PROMPT_MEDIA_ID")
-    private QuestionMediaJpaEntity promptMedia;
+	@ManyToOne(fetch = FetchType.EAGER)
+	@JoinColumn(name = "PROMPT_MEDIA_ID")
+	private QuestionMediaJpaEntity promptMedia;
 
-    @Column(name = "CODE_LANGUAGE", length = 40)
-    private String codeLanguage;
+	@Column(name = "CODE_LANGUAGE", length = 40)
+	private String codeLanguage;
 
-    @Lob
-    @Column(name = "CODE_CONTENT")
-    private String codeContent;
+	@Lob
+	@Column(name = "CODE_CONTENT")
+	private String codeContent;
 
-    @Lob
-    @Column(name = "ACCEPTED_ANSWERS_JSON")
-    private String acceptedAnswersJson;
+	@Lob
+	@Column(name = "ACCEPTED_ANSWERS_JSON")
+	private String acceptedAnswersJson;
 
-    @Column(name = "ANSWER_CASE_SENSITIVE", nullable = false)
-    private Integer caseSensitive;
+	@Column(name = "ANSWER_CASE_SENSITIVE", nullable = false)
+	private Integer caseSensitive;
 
-    @Column(name = "MANUAL_REVIEW", nullable = false)
-    private Integer manualReview;
+	@Column(name = "MANUAL_REVIEW", nullable = false)
+	private Integer manualReview;
 
-    @Column(name = "NUMERIC_MIN")
-    private BigDecimal numericMin;
+	@Column(name = "NUMERIC_MIN")
+	private BigDecimal numericMin;
 
-    @Column(name = "NUMERIC_MAX")
-    private BigDecimal numericMax;
+	@Column(name = "NUMERIC_MAX")
+	private BigDecimal numericMax;
 
-    @Column(name = "NUMERIC_TOLERANCE")
-    private BigDecimal numericTolerance;
+	@Column(name = "NUMERIC_TOLERANCE")
+	private BigDecimal numericTolerance;
 
-    @Column(name = "RESPONSE_MAX_LENGTH")
-    private Integer responseMaxLength;
+	@Column(name = "RESPONSE_MAX_LENGTH")
+	private Integer responseMaxLength;
 
-    @Column(name = "CREATED_BY", nullable = false)
-    private Long createdBy;
+	@Column(name = "CREATED_BY", nullable = false)
+	private Long createdBy;
 
-    @Column(name = "CREATED_AT", nullable = false)
-    private Instant createdAt;
+	@Column(name = "CREATED_AT", nullable = false)
+	private Instant createdAt;
 
-    @Column(name = "UPDATED_BY")
-    private Long updatedBy;
+	@Column(name = "UPDATED_BY")
+	private Long updatedBy;
 
-    @Column(name = "UPDATED_AT")
-    private Instant updatedAt;
+	@Column(name = "UPDATED_AT")
+	private Instant updatedAt;
 
-    @Column(name = "DELETED_AT")
-    private Instant deletedAt;
+	@Column(name = "DELETED_AT")
+	private Instant deletedAt;
 
-    @Column(name = "DELETED_BY")
-    private Long deletedBy;
+	@Column(name = "DELETED_BY")
+	private Long deletedBy;
 
-    @Column(name = "DELETE_REASON", length = 500)
-    private String deleteReason;
+	@Column(name = "DELETE_REASON", length = 500)
+	private String deleteReason;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "CONTENT_SCOPE", nullable = false, length = 20)
-    private ContentScope contentScope;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "CONTENT_SCOPE", nullable = false, length = 20)
+	private ContentScope contentScope;
 
-    @Column(name = "OWNER_ORGANIZATION_ID")
-    private Long ownerOrganizationId;
+	@Column(name = "OWNER_ORGANIZATION_ID")
+	private Long ownerOrganizationId;
 
-    @Column(name = "SOURCE_GLOBAL_ID")
-    private Long sourceGlobalId;
+	@Column(name = "SOURCE_GLOBAL_ID")
+	private Long sourceGlobalId;
 
-    @Column(name = "SOURCE_GLOBAL_VERSION")
-    private Long sourceGlobalVersion;
+	@Column(name = "SOURCE_GLOBAL_VERSION")
+	private Long sourceGlobalVersion;
 
-    @Column(name = "SOURCE_ORGANIZATION_ID")
-    private Long sourceOrganizationId;
+	@Column(name = "SOURCE_ORGANIZATION_ID")
+	private Long sourceOrganizationId;
 
-    @Column(name = "SOURCE_ORGANIZATION_QUESTION_ID")
-    private Long sourceOrganizationQuestionId;
+	@Column(name = "SOURCE_ORGANIZATION_QUESTION_ID")
+	private Long sourceOrganizationQuestionId;
 
-    @Column(name = "SOURCE_ORGANIZATION_VERSION")
-    private Long sourceOrganizationVersion;
+	@Column(name = "SOURCE_ORGANIZATION_VERSION")
+	private Long sourceOrganizationVersion;
 
-    @Column(name = "CLONED_TO_GLOBAL_AT")
-    private Instant clonedToGlobalAt;
+	@Column(name = "CLONED_TO_GLOBAL_AT")
+	private Instant clonedToGlobalAt;
 
-    @Column(name = "CLONED_TO_GLOBAL_BY")
-    private Long clonedToGlobalBy;
+	@Column(name = "CLONED_TO_GLOBAL_BY")
+	private Long clonedToGlobalBy;
 
-    @Column(name = "IS_CUSTOMIZED", nullable = false)
-    private Integer customized;
+	@Column(name = "IS_CUSTOMIZED", nullable = false)
+	private Integer customized;
 
-    @Column(name = "LAST_SYNCHRONIZED_AT")
-    private Instant lastSynchronizedAt;
+	@Column(name = "LAST_SYNCHRONIZED_AT")
+	private Instant lastSynchronizedAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "SYNC_STATUS", nullable = false, length = 20)
-    private SyncStatus syncStatus;
+	@Enumerated(EnumType.STRING)
+	@Column(name = "SYNC_STATUS", nullable = false, length = 20)
+	private SyncStatus syncStatus;
 
-    @Version
-    @Column(name = "VERSION_NO", nullable = false)
-    private long version;
+	@Version
+	@Column(name = "VERSION_NO", nullable = false)
+	private long version;
 
-    @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @OrderBy("optionOrder ASC")
-    private List<QuestionOptionJpaEntity> options = new ArrayList<>();
+	@OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+	@OrderBy("optionOrder ASC")
+	private List<QuestionOptionJpaEntity> options = new ArrayList<>();
 
-    protected QuestionJpaEntity() {
-    }
+	protected QuestionJpaEntity() {
+	}
 
-    public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
-            QuestionDifficultyJpaEntity difficulty, Set<QuestionCategoryJpaEntity> cats, String statement,
-            String explanation, QuestionMediaJpaEntity prompt, String lang, String code, String answers, boolean cs,
-            boolean manual, BigDecimal min, BigDecimal max, BigDecimal tolerance, Integer maxLength, Long actor,
-            Instant now) {
-        return create(id, type, difficulty, null, null, cats, statement, explanation, prompt, lang, code, answers,
-                cs, manual, min, max, tolerance, maxLength, actor, now);
-    }
+	public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
+			QuestionDifficultyJpaEntity difficulty, Set<QuestionCategoryJpaEntity> cats, String statement,
+			String explanation, QuestionMediaJpaEntity prompt, String lang, String code, String answers, boolean cs,
+			boolean manual, BigDecimal min, BigDecimal max, BigDecimal tolerance, Integer maxLength, Long actor,
+			Instant now) {
+		return create(id, type, difficulty, null, null, cats, statement, explanation, prompt, lang, code, answers, cs,
+				manual, min, max, tolerance, maxLength, actor, now);
+	}
 
-    public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
-            QuestionDifficultyJpaEntity difficulty, QuestionTechnologyJpaEntity technology, String levelCode,
-            Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
-            String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
-            BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
-        var entity = new QuestionJpaEntity();
-        entity.publicId = id;
-        entity.status = QuestionStatus.ACTIVE;
-        entity.createdBy = actor;
-        entity.createdAt = now;
-        entity.contentScope = ContentScope.GLOBAL;
-        entity.customized = 0;
-        entity.syncStatus = SyncStatus.NOT_LINKED;
-        entity.apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code,
-                answers, cs, manual, min, max, tolerance, maxLength, actor, now);
-        return entity;
-    }
+	public static QuestionJpaEntity create(String id, QuestionTypeJpaEntity type,
+			QuestionDifficultyJpaEntity difficulty, QuestionTechnologyJpaEntity technology, String levelCode,
+			Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
+			String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
+			BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
+		var entity = new QuestionJpaEntity();
+		entity.publicId = id;
+		entity.status = QuestionStatus.ACTIVE;
+		entity.createdBy = actor;
+		entity.createdAt = now;
+		entity.contentScope = ContentScope.GLOBAL;
+		entity.customized = 0;
+		entity.syncStatus = SyncStatus.NOT_LINKED;
+		entity.apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code, answers,
+				cs, manual, min, max, tolerance, maxLength, actor, now);
+		return entity;
+	}
 
-    public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
-            Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
-            String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
-            BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
-        apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code, answers,
-                cs, manual, min, max, tolerance, maxLength, actor, now);
-    }
+	public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
+			Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
+			String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
+			BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
+		apply(type, difficulty, technology, levelCode, cats, statement, explanation, prompt, lang, code, answers, cs,
+				manual, min, max, tolerance, maxLength, actor, now);
+	}
 
-    public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
-            QuestionTechnologyJpaEntity technology, String levelCode,
-            Set<QuestionCategoryJpaEntity> cats, String statement, String explanation, QuestionMediaJpaEntity prompt,
-            String lang, String code, String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max,
-            BigDecimal tolerance, Integer maxLength, Long actor, Instant now) {
-        this.type = type;
-        this.difficulty = difficulty;
-        this.technology = technology;
-        this.levelCode = normalizeLevel(levelCode);
-        this.categories.clear();
-        this.categories.addAll(cats);
-        this.statement = statement;
-        this.explanation = explanation;
-        this.promptMedia = prompt;
-        this.codeLanguage = lang;
-        this.codeContent = code;
-        this.acceptedAnswersJson = answers;
-        this.caseSensitive = cs ? 1 : 0;
-        this.manualReview = manual ? 1 : 0;
-        this.numericMin = min;
-        this.numericMax = max;
-        this.numericTolerance = tolerance;
-        this.responseMaxLength = maxLength;
-        this.updatedBy = actor;
-        this.updatedAt = now;
-    }
+	public void apply(QuestionTypeJpaEntity type, QuestionDifficultyJpaEntity difficulty,
+			QuestionTechnologyJpaEntity technology, String levelCode, Set<QuestionCategoryJpaEntity> cats,
+			String statement, String explanation, QuestionMediaJpaEntity prompt, String lang, String code,
+			String answers, boolean cs, boolean manual, BigDecimal min, BigDecimal max, BigDecimal tolerance,
+			Integer maxLength, Long actor, Instant now) {
+		this.type = type;
+		this.difficulty = difficulty;
+		this.technology = technology;
+		this.levelCode = normalizeLevel(levelCode);
+		this.categories.clear();
+		this.categories.addAll(cats);
+		this.statement = statement;
+		this.explanation = explanation;
+		this.promptMedia = prompt;
+		this.codeLanguage = lang;
+		this.codeContent = code;
+		this.acceptedAnswersJson = answers;
+		this.caseSensitive = cs ? 1 : 0;
+		this.manualReview = manual ? 1 : 0;
+		this.numericMin = min;
+		this.numericMax = max;
+		this.numericTolerance = tolerance;
+		this.responseMaxLength = maxLength;
+		this.updatedBy = actor;
+		this.updatedAt = now;
+	}
 
-    public void addOption(QuestionOptionJpaEntity option) {
-        options.add(option);
-    }
+	public void addOption(QuestionOptionJpaEntity option) {
+		options.add(option);
+	}
 
-    public void clearOptions() {
-        options.clear();
-    }
+	public void clearOptions() {
+		options.clear();
+	}
 
-    public void changeStatus(QuestionStatus nextStatus, Long actor, Instant now) {
-        if (status == QuestionStatus.DELETED) {
-            throw new IllegalStateException("A deleted question must be restored before changing its status.");
-        }
-        status = nextStatus;
-        updatedBy = actor;
-        updatedAt = now;
-    }
+	public void changeStatus(QuestionStatus nextStatus, Long actor, Instant now) {
+		if (status == QuestionStatus.DELETED) {
+			throw new IllegalStateException("A deleted question must be restored before changing its status.");
+		}
+		status = nextStatus;
+		updatedBy = actor;
+		updatedAt = now;
+	}
 
-    public void softDelete(Long actor, Instant now, String reason) {
-        status = QuestionStatus.DELETED;
-        deletedAt = now;
-        deletedBy = actor;
-        deleteReason = reason;
-        updatedBy = actor;
-        updatedAt = now;
-    }
+	public void softDelete(Long actor, Instant now, String reason) {
+		status = QuestionStatus.DELETED;
+		deletedAt = now;
+		deletedBy = actor;
+		deleteReason = reason;
+		updatedBy = actor;
+		updatedAt = now;
+	}
 
-    public void restore(Long actor, Instant now) {
-        status = QuestionStatus.ARCHIVED;
-        deletedAt = null;
-        deletedBy = null;
-        deleteReason = null;
-        updatedBy = actor;
-        updatedAt = now;
-    }
+	public void restore(Long actor, Instant now) {
+		status = QuestionStatus.ARCHIVED;
+		deletedAt = null;
+		deletedBy = null;
+		deleteReason = null;
+		updatedBy = actor;
+		updatedAt = now;
+	}
 
-    public void assignOwnership(ContentScope scope, Long organizationId) {
-        if (scope == null || organizationId == null) {
-            throw new IllegalArgumentException("El contenido requiere una organización propietaria.");
-        }
-        this.contentScope = scope;
-        this.ownerOrganizationId = organizationId;
-    }
+	public void assignOwnership(ContentScope scope, Long organizationId) {
+		if (scope == null || organizationId == null) {
+			throw new IllegalArgumentException("El contenido requiere una organización propietaria.");
+		}
+		this.contentScope = scope;
+		this.ownerOrganizationId = organizationId;
+	}
 
-    public void linkToGlobalSource(Long globalQuestionId, long globalVersion, Instant now) {
-        if (contentScope != ContentScope.ORGANIZATION || globalQuestionId == null) {
-            throw new IllegalStateException("La referencia global solo puede asignarse a una pregunta organizacional.");
-        }
-        sourceGlobalId = globalQuestionId;
-        sourceGlobalVersion = globalVersion;
-        customized = 0;
-        syncStatus = SyncStatus.SYNCHRONIZED;
-        lastSynchronizedAt = now;
-    }
+	public void linkToGlobalSource(Long globalQuestionId, long globalVersion, Instant now) {
+		if (contentScope != ContentScope.ORGANIZATION || globalQuestionId == null) {
+			throw new IllegalStateException("La referencia global solo puede asignarse a una pregunta organizacional.");
+		}
+		sourceGlobalId = globalQuestionId;
+		sourceGlobalVersion = globalVersion;
+		customized = 0;
+		syncStatus = SyncStatus.SYNCHRONIZED;
+		lastSynchronizedAt = now;
+	}
 
-    public void markClonedFromOrganization(Long organizationId, Long sourceQuestionId,
-            Long sourceVersion, Long actorId, Instant now) {
-        if (contentScope != ContentScope.GLOBAL) {
-            throw new IllegalStateException("La trazabilidad de promoción solo puede asignarse a una pregunta GLOBAL.");
-        }
-        this.sourceOrganizationId = organizationId;
-        this.sourceOrganizationQuestionId = sourceQuestionId;
-        this.sourceOrganizationVersion = sourceVersion;
-        this.clonedToGlobalAt = now;
-        this.clonedToGlobalBy = actorId;
-        this.updatedBy = actorId;
-        this.updatedAt = now;
-    }
+	public void markClonedFromOrganization(Long organizationId, Long sourceQuestionId, Long sourceVersion, Long actorId,
+			Instant now) {
+		if (contentScope != ContentScope.GLOBAL) {
+			throw new IllegalStateException("La trazabilidad de promoción solo puede asignarse a una pregunta GLOBAL.");
+		}
+		this.sourceOrganizationId = organizationId;
+		this.sourceOrganizationQuestionId = sourceQuestionId;
+		this.sourceOrganizationVersion = sourceVersion;
+		this.clonedToGlobalAt = now;
+		this.clonedToGlobalBy = actorId;
+		this.updatedBy = actorId;
+		this.updatedAt = now;
+	}
 
-    private static String normalizeLevel(String value) {
-        if (value == null || value.isBlank()) return null;
-        String normalized = value.trim().toUpperCase(Locale.ROOT);
-        return normalized.length() <= 30 ? normalized : normalized.substring(0, 30);
-    }
+	private static String normalizeLevel(String value) {
+		if (value == null || value.isBlank())
+			return null;
+		String normalized = value.trim().toUpperCase(Locale.ROOT);
+		return normalized.length() <= 30 ? normalized : normalized.substring(0, 30);
+	}
 
-    public void markCustomized(Instant now) {
-        if (sourceGlobalId != null) {
-            customized = 1;
-            syncStatus = SyncStatus.DIVERGED;
-            lastSynchronizedAt = now;
-        }
-    }
+	public void markCustomized(Instant now) {
+		if (sourceGlobalId != null) {
+			customized = 1;
+			syncStatus = SyncStatus.DIVERGED;
+			lastSynchronizedAt = now;
+		}
+	}
 
-    public Long getId() { return id; }
-    public String getPublicId() { return publicId; }
-    public QuestionTypeJpaEntity getType() { return type; }
-    public QuestionDifficultyJpaEntity getDifficulty() { return difficulty; }
-    public QuestionTechnologyJpaEntity getTechnology() { return technology; }
-    public String getLevelCode() { return levelCode; }
-    public Set<QuestionCategoryJpaEntity> getCategories() { return Set.copyOf(categories); }
-    public QuestionStatus getStatus() { return status; }
-    public String getStatement() { return statement; }
-    public String getExplanation() { return explanation; }
-    public String getCodeLanguage() { return codeLanguage; }
-    public String getCodeContent() { return codeContent; }
-    public String getAcceptedAnswersJson() { return acceptedAnswersJson; }
-    public QuestionMediaJpaEntity getPromptMedia() { return promptMedia; }
-    public boolean isCaseSensitive() { return Integer.valueOf(1).equals(caseSensitive); }
-    public boolean isManualReview() { return Integer.valueOf(1).equals(manualReview); }
-    public BigDecimal getNumericMin() { return numericMin; }
-    public BigDecimal getNumericMax() { return numericMax; }
-    public BigDecimal getNumericTolerance() { return numericTolerance; }
-    public Integer getResponseMaxLength() { return responseMaxLength; }
-    public List<QuestionOptionJpaEntity> getOptions() { return List.copyOf(options); }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
-    public Instant getDeletedAt() { return deletedAt; }
-    public Long getDeletedBy() { return deletedBy; }
-    public String getDeleteReason() { return deleteReason; }
-    public ContentScope getContentScope() { return contentScope; }
-    public Long getOwnerOrganizationId() { return ownerOrganizationId; }
-    public Long getSourceGlobalId() { return sourceGlobalId; }
-    public Long getSourceGlobalVersion() { return sourceGlobalVersion; }
-    public Long getSourceOrganizationId() { return sourceOrganizationId; }
-    public Long getSourceOrganizationQuestionId() { return sourceOrganizationQuestionId; }
-    public Long getSourceOrganizationVersion() { return sourceOrganizationVersion; }
-    public Instant getClonedToGlobalAt() { return clonedToGlobalAt; }
-    public Long getClonedToGlobalBy() { return clonedToGlobalBy; }
-    public boolean isCustomized() { return Integer.valueOf(1).equals(customized); }
-    public SyncStatus getSyncStatus() { return syncStatus; }
-    public Long getCreatedBy() { return createdBy; }
-    public long getVersion() { return version; }
+	public Long getId() {
+		return id;
+	}
+
+	public String getPublicId() {
+		return publicId;
+	}
+
+	public QuestionTypeJpaEntity getType() {
+		return type;
+	}
+
+	public QuestionDifficultyJpaEntity getDifficulty() {
+		return difficulty;
+	}
+
+	public QuestionTechnologyJpaEntity getTechnology() {
+		return technology;
+	}
+
+	public String getLevelCode() {
+		return levelCode;
+	}
+
+	public Set<QuestionCategoryJpaEntity> getCategories() {
+		return Set.copyOf(categories);
+	}
+
+	public QuestionStatus getStatus() {
+		return status;
+	}
+
+	public String getStatement() {
+		return statement;
+	}
+
+	public String getExplanation() {
+		return explanation;
+	}
+
+	public String getCodeLanguage() {
+		return codeLanguage;
+	}
+
+	public String getCodeContent() {
+		return codeContent;
+	}
+
+	public String getAcceptedAnswersJson() {
+		return acceptedAnswersJson;
+	}
+
+	public QuestionMediaJpaEntity getPromptMedia() {
+		return promptMedia;
+	}
+
+	public boolean isCaseSensitive() {
+		return Integer.valueOf(1).equals(caseSensitive);
+	}
+
+	public boolean isManualReview() {
+		return Integer.valueOf(1).equals(manualReview);
+	}
+
+	public BigDecimal getNumericMin() {
+		return numericMin;
+	}
+
+	public BigDecimal getNumericMax() {
+		return numericMax;
+	}
+
+	public BigDecimal getNumericTolerance() {
+		return numericTolerance;
+	}
+
+	public Integer getResponseMaxLength() {
+		return responseMaxLength;
+	}
+
+	public List<QuestionOptionJpaEntity> getOptions() {
+		return List.copyOf(options);
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getUpdatedAt() {
+		return updatedAt;
+	}
+
+	public Instant getDeletedAt() {
+		return deletedAt;
+	}
+
+	public Long getDeletedBy() {
+		return deletedBy;
+	}
+
+	public String getDeleteReason() {
+		return deleteReason;
+	}
+
+	public ContentScope getContentScope() {
+		return contentScope;
+	}
+
+	public Long getOwnerOrganizationId() {
+		return ownerOrganizationId;
+	}
+
+	public Long getSourceGlobalId() {
+		return sourceGlobalId;
+	}
+
+	public Long getSourceGlobalVersion() {
+		return sourceGlobalVersion;
+	}
+
+	public Long getSourceOrganizationId() {
+		return sourceOrganizationId;
+	}
+
+	public Long getSourceOrganizationQuestionId() {
+		return sourceOrganizationQuestionId;
+	}
+
+	public Long getSourceOrganizationVersion() {
+		return sourceOrganizationVersion;
+	}
+
+	public Instant getClonedToGlobalAt() {
+		return clonedToGlobalAt;
+	}
+
+	public Long getClonedToGlobalBy() {
+		return clonedToGlobalBy;
+	}
+
+	public boolean isCustomized() {
+		return Integer.valueOf(1).equals(customized);
+	}
+
+	public SyncStatus getSyncStatus() {
+		return syncStatus;
+	}
+
+	public Long getCreatedBy() {
+		return createdBy;
+	}
+
+	public long getVersion() {
+		return version;
+	}
 }

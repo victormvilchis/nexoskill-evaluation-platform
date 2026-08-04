@@ -14,7 +14,7 @@ import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
-import type { TalentCatalogs, TalentPage, TalentProfileCode, TalentSummary, TalentType } from '../shared/types/talentBank'
+import type { TalentCatalogs, TalentPage, TalentSummary, TalentType } from '../shared/types/talentBank'
 
 const TYPES: Array<{ value: TalentType | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'Todos los tipos' },
@@ -165,12 +165,12 @@ export function TalentBankPage() {
             <td className="ns-primary-cell"><strong>{talent.displayName}</strong><small>{talent.email}</small></td>
             {administrator && <td>{talent.organization.name}<small className="ns-cell-secondary">{talent.organization.code}</small></td>}
             <td><span className={`status-badge talent-type-${talent.talentType.toLowerCase()}`}>{TYPE_LABELS[talent.talentType]}</span></td>
-            <td>{talent.profileCode ?? 'N/A'}</td><td>{talent.technology?.name ?? 'N/A'}</td>
+            <td>{talent.profileCode ?? 'N/A'}</td><td>{talent.talentType === 'BBVA_EXIT' ? (talent.currentTechnologyExpertise || 'N/A') : (talent.technology?.name ?? 'N/A')}</td>
             <td>{talent.hasCv ? 'Disponible' : 'N/A'}</td>
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/talent-bank/${talent.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/talent-bank/${talent.publicId}/edit`} />}
-              {permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE') && talent.talentType !== 'BBVA_EXIT' && <TableActionLink icon="chevronRight" label="Convertir a colaborador" to={`/admin/talent-bank/${talent.publicId}/convert`} tone="primary" />}
+              {permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE') && <TableActionLink icon="chevronRight" label="Convertir a colaborador" to={`/admin/talent-bank/${talent.publicId}/convert`} tone="primary" />}
               {permissions.has('STUDENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(talent)} />}
             </TableActions></td>
           </tr>)}

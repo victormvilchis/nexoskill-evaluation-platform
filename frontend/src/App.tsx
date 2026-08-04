@@ -188,7 +188,6 @@ export default function App() {
           <Route element={<PermissionRoute permission="CATALOG_MANAGE" />}>
             <Route path="/admin/catalogs/:type/new" element={<CatalogItemsPage />} />
             <Route path="/admin/catalogs/:type/:id/edit" element={<CatalogItemsPage />} />
-            <Route path="/admin/catalogs/:type/:id/manage" element={<CatalogItemsPage />} />
           </Route>
           <Route path="/admin/question-categories" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />
           <Route path="/admin/question-technologies" element={<Navigate to="/admin/catalogs/TECHNOLOGIES" replace />} />

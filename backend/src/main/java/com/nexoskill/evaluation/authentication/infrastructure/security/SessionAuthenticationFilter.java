@@ -124,9 +124,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 		}
 
 		OrganizationJpaEntity organization = validateOrganization(user, now, session, response, request);
-		if ((user.hasRole("MANAGER") || user.hasRole("SUPERVISOR")) && organization == null) return false;
-		UserAccessStatus accessStatus = organization == null
-				? user.getAccess().effectiveStatusAt(now) : UserAccessStatus.ACTIVE;
+		if ((user.hasRole("MANAGER") || user.hasRole("SUPERVISOR")) && organization == null)
+			return false;
+		UserAccessStatus accessStatus = organization == null ? user.getAccess().effectiveStatusAt(now)
+				: UserAccessStatus.ACTIVE;
 		if (organization == null && accessStatus == UserAccessStatus.EXPIRED) {
 			revoke(session, now, response);
 			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ACCESS_EXPIRED",
@@ -154,9 +155,8 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 				user.getFirstName(), user.getLastName(), user.getDisplayName(),
 				user.getRoles().stream().map(role -> role.code())
 						.collect(java.util.stream.Collectors.toUnmodifiableSet()),
-				user.permissions(), user.getLastLoginAt(), accessStatus, accessStartsAt,
-				accessExpiresAt, user.isPasswordChangeRequired(), user.getPasswordChangedAt(),
-				user.getTemporaryPasswordExpiresAt());
+				user.permissions(), user.getLastLoginAt(), accessStatus, accessStartsAt, accessExpiresAt,
+				user.isPasswordChangeRequired(), user.getPasswordChangedAt(), user.getTemporaryPasswordExpiresAt());
 		List<SimpleGrantedAuthority> authorities = java.util.stream.Stream
 				.concat(principal.roles().stream().map(role -> "ROLE_" + role), principal.permissions().stream())
 				.map(SimpleGrantedAuthority::new).toList();
@@ -173,8 +173,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
 	private OrganizationJpaEntity validateOrganization(UserAccount user, Instant now, AuthSession session,
 			HttpServletResponse response, HttpServletRequest request) throws IOException {
-		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR")) return null;
-		OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.getId()).orElse(null);
+		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR"))
+			return null;
+		OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.getId())
+				.orElse(null);
 		if (organization == null) {
 			revoke(session, now, response);
 			reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_INACTIVE",

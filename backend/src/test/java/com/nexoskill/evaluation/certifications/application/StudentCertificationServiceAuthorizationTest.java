@@ -27,81 +27,74 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class StudentCertificationServiceAuthorizationTest {
-    private static final Instant NOW = Instant.parse("2026-07-29T20:00:00Z");
+	private static final Instant NOW = Instant.parse("2026-07-29T20:00:00Z");
 
-    @Test
-    void administratorCanResolveStudentScopeFromGlobalContext() {
-        AuditLogPort audit = mock(AuditLogPort.class);
-        StudentRepository students = mock(StudentRepository.class);
-        when(students.findByPublicId("student-public")).thenReturn(java.util.Optional.empty());
-        StudentCertificationService service = new StudentCertificationService(
-                students, mock(OrganizationRepository.class),
-                mock(NamedParameterJdbcTemplate.class), audit, Clock.fixed(NOW, ZoneOffset.UTC));
-        AuthenticatedUser administrator = new AuthenticatedUser(1L, "admin-public", "admin@nexoskill.local",
-                "Admin", "Global", "Admin Global", Set.of("ADMINISTRATOR"),
-                Set.of("STUDENT_CERTIFICATION_MANAGE"), NOW, UserAccessStatus.ACTIVE,
-                null, null, false, NOW, null);
-        TenantContext tenant = TenantContext.global(1L, "global-public", "GLOBAL");
+	@Test
+	void administratorCanResolveStudentScopeFromGlobalContext() {
+		AuditLogPort audit = mock(AuditLogPort.class);
+		StudentRepository students = mock(StudentRepository.class);
+		when(students.findByPublicId("student-public")).thenReturn(java.util.Optional.empty());
+		StudentCertificationService service = new StudentCertificationService(students,
+				mock(OrganizationRepository.class), mock(NamedParameterJdbcTemplate.class), audit,
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AuthenticatedUser administrator = new AuthenticatedUser(1L, "admin-public", "admin@nexoskill.local", "Admin",
+				"Global", "Admin Global", Set.of("ADMINISTRATOR"), Set.of("STUDENT_CERTIFICATION_MANAGE"), NOW,
+				UserAccessStatus.ACTIVE, null, null, false, NOW, null);
+		TenantContext tenant = TenantContext.global(1L, "global-public", "GLOBAL");
 
-        assertThatThrownBy(() -> service.get(tenant, "student-public", administrator))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
+		assertThatThrownBy(() -> service.get(tenant, "student-public", administrator)).isInstanceOfSatisfying(
+				BusinessException.class, exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
 
-        verify(students).findByPublicId("student-public");
-    }
+		verify(students).findByPublicId("student-public");
+	}
 
-    @Test
-    void bindsNullableCertificationDatesAsOracleDates() {
-        MapSqlParameterSource parameters = new MapSqlParameterSource();
-        StudentCertificationService.addDateParameter(parameters, "applicationDate", null);
-        assertThat(parameters.getValue("applicationDate")).isNull();
-        assertThat(parameters.getSqlType("applicationDate")).isEqualTo(Types.DATE);
+	@Test
+	void bindsNullableCertificationDatesAsOracleDates() {
+		MapSqlParameterSource parameters = new MapSqlParameterSource();
+		StudentCertificationService.addDateParameter(parameters, "applicationDate", null);
+		assertThat(parameters.getValue("applicationDate")).isNull();
+		assertThat(parameters.getSqlType("applicationDate")).isEqualTo(Types.DATE);
 
-        LocalDate deadline = LocalDate.of(2025, 12, 15);
-        StudentCertificationService.addDateParameter(parameters, "deadlineDate", deadline);
-        assertThat(parameters.getValue("deadlineDate")).isEqualTo(java.sql.Date.valueOf(deadline));
-        assertThat(parameters.getSqlType("deadlineDate")).isEqualTo(Types.DATE);
-    }
-    @Test
-    void requiresApplicationDateOnlyForExamManagedCertifications() {
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.TECHNOLOGICAL, true)).isTrue();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.DEVELOPMENT_SECURITY, true)).isTrue();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.NORMATIVE_TESTING, true)).isTrue();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.ONE, true)).isFalse();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.AGILE, true)).isFalse();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.JIRA, true)).isFalse();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.TECHNOLOGICAL, false)).isFalse();
-        assertThat(StudentCertificationService.requiresApplicationDate(
-                CertificationType.TECHNOLOGICAL, null)).isFalse();
-    }
-    @Test
-    void summarizesManualResultsWithoutInventingExamDataForNonExpiringCertifications() {
-        CertificationModels.CycleCommand approved = new CertificationModels.CycleCommand(
-                null, CertificationType.TECHNOLOGICAL, null, null, true,
-                CertificationTrackingStatus.APPROVED, null, LocalDate.of(2025, 11, 26), true,
-                null, null, null, true, null, java.util.List.of());
-        CertificationModels.CycleCommand failed = new CertificationModels.CycleCommand(
-                null, CertificationType.DEVELOPMENT_SECURITY, null, null, false,
-                CertificationTrackingStatus.NOT_APPROVED, null, LocalDate.of(2026, 5, 18), false,
-                null, null, null, true, null, java.util.List.of());
-        CertificationModels.CycleCommand nonExpiring = new CertificationModels.CycleCommand(
-                null, CertificationType.JIRA, null, null, false,
-                CertificationTrackingStatus.APPROVED, null, null, true,
-                null, null, null, true, null, java.util.List.of());
+		LocalDate deadline = LocalDate.of(2025, 12, 15);
+		StudentCertificationService.addDateParameter(parameters, "deadlineDate", deadline);
+		assertThat(parameters.getValue("deadlineDate")).isEqualTo(java.sql.Date.valueOf(deadline));
+		assertThat(parameters.getSqlType("deadlineDate")).isEqualTo(Types.DATE);
+	}
 
-        assertThat(StudentCertificationService.manualExamStatus(CertificationType.TECHNOLOGICAL, approved))
-                .isEqualTo(CertificationExamStatus.PASSED);
-        assertThat(StudentCertificationService.manualExamStatus(CertificationType.DEVELOPMENT_SECURITY, failed))
-                .isEqualTo(CertificationExamStatus.FAILED);
-        assertThat(StudentCertificationService.manualExamStatus(CertificationType.JIRA, nonExpiring))
-                .isEqualTo(CertificationExamStatus.NOT_SCHEDULED);
-    }
+	@Test
+	void requiresApplicationDateOnlyForExamManagedCertifications() {
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.TECHNOLOGICAL, true)).isTrue();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.DEVELOPMENT_SECURITY, true))
+				.isTrue();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.NORMATIVE_TESTING, true))
+				.isTrue();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.ONE, true)).isFalse();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.AGILE, true)).isFalse();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.JIRA, true)).isFalse();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.TECHNOLOGICAL, false))
+				.isFalse();
+		assertThat(StudentCertificationService.requiresApplicationDate(CertificationType.TECHNOLOGICAL, null))
+				.isFalse();
+	}
+
+	@Test
+	void summarizesManualResultsWithoutInventingExamDataForNonExpiringCertifications() {
+		CertificationModels.CycleCommand approved = new CertificationModels.CycleCommand(null,
+				CertificationType.TECHNOLOGICAL, null, null, true, CertificationTrackingStatus.APPROVED, null,
+				LocalDate.of(2025, 11, 26), true, null, null, null, true, null, java.util.List.of());
+		CertificationModels.CycleCommand failed = new CertificationModels.CycleCommand(null,
+				CertificationType.DEVELOPMENT_SECURITY, null, null, false, CertificationTrackingStatus.NOT_APPROVED,
+				null, LocalDate.of(2026, 5, 18), false, null, null, null, true, null, java.util.List.of());
+		CertificationModels.CycleCommand nonExpiring = new CertificationModels.CycleCommand(null,
+				CertificationType.JIRA, null, null, false, CertificationTrackingStatus.APPROVED, null, null, true, null,
+				null, null, true, null, java.util.List.of());
+
+		assertThat(StudentCertificationService.manualExamStatus(CertificationType.TECHNOLOGICAL, approved))
+				.isEqualTo(CertificationExamStatus.PASSED);
+		assertThat(StudentCertificationService.manualExamStatus(CertificationType.DEVELOPMENT_SECURITY, failed))
+				.isEqualTo(CertificationExamStatus.FAILED);
+		assertThat(StudentCertificationService.manualExamStatus(CertificationType.JIRA, nonExpiring))
+				.isEqualTo(CertificationExamStatus.NOT_SCHEDULED);
+	}
 
 }

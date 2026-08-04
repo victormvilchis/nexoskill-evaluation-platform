@@ -23,95 +23,83 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/forms")
 public class AdminFormController {
-    private static final Map<String, String> ALLOWED_SORTS = Map.of(
-            "title", "title", "code", "code", "status", "status",
-            "createdAt", "createdAt", "updatedAt", "updatedAt");
+	private static final Map<String, String> ALLOWED_SORTS = Map.of("title", "title", "code", "code", "status",
+			"status", "createdAt", "createdAt", "updatedAt", "updatedAt");
 
-    private final FormService service;
+	private final FormService service;
 
-    public AdminFormController(FormService service) {
-        this.service = service;
-    }
+	public AdminFormController(FormService service) {
+		this.service = service;
+	}
 
-    @GetMapping
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public PagedResponse<FormModels.FormSummary> list(
-            @RequestParam(required = false) String query,
-            @RequestParam(defaultValue = "ACTIVE") String status,
-            @RequestParam(required = false) String mode,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "updatedAt") String sort,
-            @RequestParam(defaultValue = "DESC") String direction) {
-        var pageable = PaginationParameters.of(page, size, sort, direction, ALLOWED_SORTS,
-                "updatedAt", Sort.Direction.DESC, "id");
-        return PagedResponse.from(service.list(query, status, mode, pageable), item -> item);
-    }
+	@GetMapping
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public PagedResponse<FormModels.FormSummary> list(@RequestParam(required = false) String query,
+			@RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(required = false) String mode,
+			@RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
+			@RequestParam(defaultValue = "updatedAt") String sort,
+			@RequestParam(defaultValue = "DESC") String direction) {
+		var pageable = PaginationParameters.of(page, size, sort, direction, ALLOWED_SORTS, "updatedAt",
+				Sort.Direction.DESC, "id");
+		return PagedResponse.from(service.list(query, status, mode, pageable), item -> item);
+	}
 
+	@GetMapping("/organizations")
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public java.util.List<FormModels.OrganizationOptionView> organizations() {
+		return service.availableOrganizations();
+	}
 
-    @GetMapping("/organizations")
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public java.util.List<FormModels.OrganizationOptionView> organizations() {
-        return service.availableOrganizations();
-    }
+	@GetMapping("/content-options/questions")
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public FormModels.QuestionOptionPage questionOptions(@RequestParam(required = false) String scope,
+			@RequestParam(required = false) String organizationPublicId, @RequestParam(required = false) String query,
+			@RequestParam(required = false) String categoryPublicId, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "10") int size) {
+		PaginationParameters.validate(page, size);
+		return service.questionOptions(scope, organizationPublicId, query, categoryPublicId, page, size);
+	}
 
-    @GetMapping("/content-options/questions")
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public FormModels.QuestionOptionPage questionOptions(
-            @RequestParam(required = false) String scope,
-            @RequestParam(required = false) String organizationPublicId,
-            @RequestParam(required = false) String query,
-            @RequestParam(required = false) String categoryPublicId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        PaginationParameters.validate(page, size);
-        return service.questionOptions(scope, organizationPublicId, query, categoryPublicId, page, size);
-    }
+	@GetMapping("/content-options/categories")
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public java.util.List<FormModels.CategoryOptionView> categoryOptions(@RequestParam(required = false) String scope,
+			@RequestParam(required = false) String organizationPublicId) {
+		return service.categoryOptions(scope, organizationPublicId);
+	}
 
-    @GetMapping("/content-options/categories")
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public java.util.List<FormModels.CategoryOptionView> categoryOptions(
-            @RequestParam(required = false) String scope,
-            @RequestParam(required = false) String organizationPublicId) {
-        return service.categoryOptions(scope, organizationPublicId);
-    }
+	@GetMapping("/{publicId}")
+	@PreAuthorize("hasAuthority('FORM_VIEW')")
+	public FormModels.FormDetail get(@PathVariable String publicId) {
+		return service.get(publicId);
+	}
 
-    @GetMapping("/{publicId}")
-    @PreAuthorize("hasAuthority('FORM_VIEW')")
-    public FormModels.FormDetail get(@PathVariable String publicId) {
-        return service.get(publicId);
-    }
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	@PreAuthorize("hasAuthority('FORM_CREATE')")
+	public FormModels.FormDetail create(@RequestBody FormModels.FormCommand command,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return service.create(command, actor.internalId());
+	}
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('FORM_CREATE')")
-    public FormModels.FormDetail create(@RequestBody FormModels.FormCommand command,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return service.create(command, actor.internalId());
-    }
+	@PutMapping("/{publicId}")
+	@PreAuthorize("hasAuthority('FORM_UPDATE')")
+	public FormModels.FormDetail update(@PathVariable String publicId, @RequestBody FormModels.FormCommand command,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return service.update(publicId, command, actor.internalId());
+	}
 
-    @PutMapping("/{publicId}")
-    @PreAuthorize("hasAuthority('FORM_UPDATE')")
-    public FormModels.FormDetail update(@PathVariable String publicId,
-            @RequestBody FormModels.FormCommand command,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return service.update(publicId, command, actor.internalId());
-    }
+	@PostMapping("/{publicId}/clone")
+	@ResponseStatus(HttpStatus.CREATED)
+	@PreAuthorize("hasAuthority('FORM_CREATE')")
+	public FormModels.FormDetail clone(@PathVariable String publicId, @RequestBody FormModels.CloneCommand command,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return service.clone(publicId, command, actor.internalId());
+	}
 
-
-    @PostMapping("/{publicId}/clone")
-    @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('FORM_CREATE')")
-    public FormModels.FormDetail clone(@PathVariable String publicId,
-            @RequestBody FormModels.CloneCommand command,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return service.clone(publicId, command, actor.internalId());
-    }
-
-    @PostMapping("/{publicId}/status/{status}")
-    @PreAuthorize("hasAuthority('FORM_STATUS_CHANGE')")
-    public FormModels.FormDetail status(@PathVariable String publicId, @PathVariable String status,
-            @AuthenticationPrincipal AuthenticatedUser actor) {
-        return service.changeStatus(publicId, status, actor.internalId());
-    }
+	@PostMapping("/{publicId}/status/{status}")
+	@PreAuthorize("hasAuthority('FORM_STATUS_CHANGE')")
+	public FormModels.FormDetail status(@PathVariable String publicId, @PathVariable String status,
+			@AuthenticationPrincipal AuthenticatedUser actor) {
+		return service.changeStatus(publicId, status, actor.internalId());
+	}
 }

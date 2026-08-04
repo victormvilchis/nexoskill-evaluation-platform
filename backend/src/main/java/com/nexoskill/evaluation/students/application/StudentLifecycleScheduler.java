@@ -17,25 +17,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class StudentLifecycleScheduler {
-    private final StudentRepository studentRepository;
-    private final StudentSessionRepository sessionRepository;
-    private final AuditLogPort audit;
-    private final Clock clock;
+	private final StudentRepository studentRepository;
+	private final StudentSessionRepository sessionRepository;
+	private final AuditLogPort audit;
+	private final Clock clock;
 
-    public StudentLifecycleScheduler(StudentRepository studentRepository, StudentSessionRepository sessionRepository,
-            AuditLogPort audit, Clock clock) {
-        this.studentRepository = studentRepository;
-        this.sessionRepository = sessionRepository;
-        this.audit = audit;
-        this.clock = clock;
-    }
+	public StudentLifecycleScheduler(StudentRepository studentRepository, StudentSessionRepository sessionRepository,
+			AuditLogPort audit, Clock clock) {
+		this.studentRepository = studentRepository;
+		this.sessionRepository = sessionRepository;
+		this.audit = audit;
+		this.clock = clock;
+	}
 
-    @Scheduled(fixedDelayString = "${app.students.lifecycle-check-delay:PT5M}")
-    @Transactional
-    public void revokeInvalidSessions() {
-        Instant now = clock.instant();
-        sessionRepository.expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
-                StudentSessionRevocationReason.EXPIRED, now);
-    }
+	@Scheduled(fixedDelayString = "${app.students.lifecycle-check-delay:PT5M}")
+	@Transactional
+	public void revokeInvalidSessions() {
+		Instant now = clock.instant();
+		sessionRepository.expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
+				StudentSessionRevocationReason.EXPIRED, now);
+	}
 
 }

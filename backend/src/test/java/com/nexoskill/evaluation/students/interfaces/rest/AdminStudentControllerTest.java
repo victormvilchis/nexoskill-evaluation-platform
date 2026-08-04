@@ -18,29 +18,21 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AdminStudentControllerTest {
-    @Test
-    void shouldReturnOkAndAnEmptyPageWhenTheOrganizationHasNoStudents() throws Exception {
-        StudentService service = mock(StudentService.class);
-        TenantContextResolver tenantResolver = mock(TenantContextResolver.class);
-        TenantContext tenant = TenantContext.organization(20L, "org-public", "ACME", false);
-        when(tenantResolver.resolve(any())).thenReturn(tenant);
-        when(service.search(any(), any(), any(), anyBoolean(), anyInt(), anyInt()))
-                .thenReturn(new StudentService.PageResult(List.of(), 0, 10, 0, 0));
+	@Test
+	void shouldReturnOkAndAnEmptyPageWhenTheOrganizationHasNoStudents() throws Exception {
+		StudentService service = mock(StudentService.class);
+		TenantContextResolver tenantResolver = mock(TenantContextResolver.class);
+		TenantContext tenant = TenantContext.organization(20L, "org-public", "ACME", false);
+		when(tenantResolver.resolve(any())).thenReturn(tenant);
+		when(service.search(any(), any(), any(), anyBoolean(), anyInt(), anyInt()))
+				.thenReturn(new StudentService.PageResult(List.of(), 0, 10, 0, 0));
 
-        MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new AdminStudentController(service, tenantResolver))
-                .build();
+		MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new AdminStudentController(service, tenantResolver)).build();
 
-        mockMvc.perform(get("/api/v1/admin/students")
-                        .param("status", "ACTIVE")
-                        .param("page", "0")
-                        .param("size", "10"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.content.length()").value(0))
-                .andExpect(jsonPath("$.totalElements").value(0))
-                .andExpect(jsonPath("$.totalPages").value(0))
-                .andExpect(jsonPath("$.page").value(0))
-                .andExpect(jsonPath("$.size").value(10));
-    }
+		mockMvc.perform(get("/api/v1/admin/students").param("status", "ACTIVE").param("page", "0").param("size", "10"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.content").isArray())
+				.andExpect(jsonPath("$.content.length()").value(0)).andExpect(jsonPath("$.totalElements").value(0))
+				.andExpect(jsonPath("$.totalPages").value(0)).andExpect(jsonPath("$.page").value(0))
+				.andExpect(jsonPath("$.size").value(10));
+	}
 }

@@ -12,17 +12,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/question-tags")
 public class AdminQuestionTagController {
-    private final QuestionBankPort questionBank;
+	private final QuestionBankPort questionBank;
 
-    public AdminQuestionTagController(QuestionBankPort questionBank) {
-        this.questionBank = questionBank;
-    }
+	public AdminQuestionTagController(QuestionBankPort questionBank) {
+		this.questionBank = questionBank;
+	}
 
-    @GetMapping("/suggestions")
-    @PreAuthorize("hasAuthority('QUESTION_VIEW')")
-    public List<QuestionTagView> suggestions(
-            @RequestParam(defaultValue = "") String query,
-            @RequestParam(defaultValue = "8") int limit) {
-        return questionBank.suggestTags(query, Math.min(Math.max(limit, 1), 10));
-    }
+	@GetMapping("/suggestions")
+	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
+	public List<QuestionTagView> suggestions(@RequestParam(defaultValue = "") String query,
+			@RequestParam(defaultValue = "8") int limit) {
+		return questionBank.suggestTags(query, Math.min(Math.max(limit, 1), 10));
+	}
 }

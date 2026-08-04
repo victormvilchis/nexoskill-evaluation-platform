@@ -86,9 +86,10 @@ public class LoginService {
 		if (organization == null) {
 			expiresAt = user.getAccess().capSessionExpiration(expiresAt);
 		} else if (organization.getExpiresOn() != null) {
-			Instant organizationExpiration = organization.getExpiresOn().plusDays(1)
-					.atStartOfDay(ZoneOffset.UTC).toInstant();
-			if (organizationExpiration.isBefore(expiresAt)) expiresAt = organizationExpiration;
+			Instant organizationExpiration = organization.getExpiresOn().plusDays(1).atStartOfDay(ZoneOffset.UTC)
+					.toInstant();
+			if (organizationExpiration.isBefore(expiresAt))
+				expiresAt = organizationExpiration;
 		}
 		expiresAt = user.capSessionExpirationForPassword(expiresAt);
 		AuthSessionScope scope = user.isPasswordChangeRequired() ? AuthSessionScope.PASSWORD_CHANGE
@@ -106,7 +107,8 @@ public class LoginService {
 		return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now, organization));
 	}
 
-	private void validateAccountState(UserAccount user, LoginCommand command, Instant now, boolean organizationControlsAccess) {
+	private void validateAccountState(UserAccount user, LoginCommand command, Instant now,
+			boolean organizationControlsAccess) {
 		if (user.getStatus() == UserStatus.DELETED) {
 			recordFailure(user.getId(), command, "ACCOUNT_DELETED", now);
 			throw AuthenticationException.accountDeleted();

@@ -21,31 +21,32 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/questions/{questionPublicId}/availability")
 public class QuestionAvailabilityController {
-    private final QuestionAvailabilityService service;
-    private final TenantContextResolver tenantResolver;
+	private final QuestionAvailabilityService service;
+	private final TenantContextResolver tenantResolver;
 
-    public QuestionAvailabilityController(QuestionAvailabilityService service, TenantContextResolver tenantResolver) {
-        this.service = service;
-        this.tenantResolver = tenantResolver;
-    }
+	public QuestionAvailabilityController(QuestionAvailabilityService service, TenantContextResolver tenantResolver) {
+		this.service = service;
+		this.tenantResolver = tenantResolver;
+	}
 
-    @GetMapping
-    @PreAuthorize("hasAuthority('QUESTION_VIEW')")
-    public QuestionAvailabilityService.AvailabilityView get(@PathVariable String questionPublicId,
-            HttpServletRequest request) {
-        return service.get(questionPublicId, tenantResolver.resolve(request));
-    }
+	@GetMapping
+	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
+	public QuestionAvailabilityService.AvailabilityView get(@PathVariable String questionPublicId,
+			HttpServletRequest request) {
+		return service.get(questionPublicId, tenantResolver.resolve(request));
+	}
 
-    @PutMapping
-    @PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('QUESTION_UPDATE')")
-    public QuestionAvailabilityService.AvailabilityView update(@PathVariable String questionPublicId,
-            @Valid @RequestBody UpdateRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
-            HttpServletRequest request) {
-        return service.update(questionPublicId,
-                new QuestionAvailabilityService.UpdateCommand(body.mode(), body.organizationPublicIds()),
-                tenantResolver.resolve(request), new QuestionAvailabilityService.Actor(actor.internalId(),
-                        ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
-    }
+	@PutMapping
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('QUESTION_UPDATE')")
+	public QuestionAvailabilityService.AvailabilityView update(@PathVariable String questionPublicId,
+			@Valid @RequestBody UpdateRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
+			HttpServletRequest request) {
+		return service.update(questionPublicId,
+				new QuestionAvailabilityService.UpdateCommand(body.mode(), body.organizationPublicIds()),
+				tenantResolver.resolve(request), new QuestionAvailabilityService.Actor(actor.internalId(),
+						ClientRequestInfo.ipAddress(request), ClientRequestInfo.userAgent(request)));
+	}
 
-    public record UpdateRequest(@NotNull QuestionAvailabilityMode mode, List<String> organizationPublicIds) {}
+	public record UpdateRequest(@NotNull QuestionAvailabilityMode mode, List<String> organizationPublicIds) {
+	}
 }

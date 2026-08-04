@@ -19,6 +19,7 @@ public record CurrentUser(String publicId, String email, String firstName, Strin
 				user.getAccess().startsAt(), user.getAccess().expiresAt(), user.isPasswordChangeRequired(),
 				user.getPasswordChangedAt(), user.getTemporaryPasswordExpiresAt());
 	}
+
 	public static CurrentUser from(UserAccount user, Instant now, OrganizationJpaEntity organization) {
 		if (organization == null || organization.isGlobal()) {
 			return from(user, now);

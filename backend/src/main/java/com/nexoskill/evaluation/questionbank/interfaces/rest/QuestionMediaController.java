@@ -22,28 +22,28 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/v1/question-media")
 public class QuestionMediaController {
-    private final QuestionMediaService service;
-    private final TenantContextResolver tenantResolver;
+	private final QuestionMediaService service;
+	private final TenantContextResolver tenantResolver;
 
-    public QuestionMediaController(QuestionMediaService service, TenantContextResolver tenantResolver) {
-        this.service = service;
-        this.tenantResolver = tenantResolver;
-    }
+	public QuestionMediaController(QuestionMediaService service, TenantContextResolver tenantResolver) {
+		this.service = service;
+		this.tenantResolver = tenantResolver;
+	}
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAuthority('QUESTION_MEDIA_MANAGE')")
-    public QuestionMediaView upload(@RequestPart("file") MultipartFile file,
-            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) throws IOException {
-        return service.upload(file.getOriginalFilename(), file.getContentType(), file.getBytes(), actor.internalId(),
-                tenantResolver.resolve(request));
-    }
+	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	@PreAuthorize("hasAuthority('QUESTION_MEDIA_MANAGE')")
+	public QuestionMediaView upload(@RequestPart("file") MultipartFile file,
+			@AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) throws IOException {
+		return service.upload(file.getOriginalFilename(), file.getContentType(), file.getBytes(), actor.internalId(),
+				tenantResolver.resolve(request));
+	}
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('QUESTION_VIEW')")
-    public ResponseEntity<byte[]> get(@PathVariable String id,
-            @AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
-        var download = service.download(id, actor.internalId(), tenantResolver.resolve(request));
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType(download.media().contentType()))
-                .cacheControl(CacheControl.noCache()).body(download.content());
-    }
+	@GetMapping("/{id}")
+	@PreAuthorize("hasAuthority('QUESTION_VIEW')")
+	public ResponseEntity<byte[]> get(@PathVariable String id, @AuthenticationPrincipal AuthenticatedUser actor,
+			HttpServletRequest request) {
+		var download = service.download(id, actor.internalId(), tenantResolver.resolve(request));
+		return ResponseEntity.ok().contentType(MediaType.parseMediaType(download.media().contentType()))
+				.cacheControl(CacheControl.noCache()).body(download.content());
+	}
 }

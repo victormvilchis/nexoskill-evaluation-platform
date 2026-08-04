@@ -1,0 +1,95 @@
+debug: false
+
+spring:
+  application:
+    name: evaluation-platform-backend
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
+    username: ${DATABASE_USERNAME:EVALUATION_APP}
+    password: ${DATABASE_PASSWORD:EvaluationApp123!}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 30000
+      validation-timeout: 5000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    clean-disabled: true
+
+  servlet:
+    multipart:
+      max-file-size: ${APP_STUDENT_IMPORT_MAX_FILE_SIZE:50MB}
+      max-request-size: ${APP_STUDENT_IMPORT_MAX_REQUEST_SIZE:52MB}
+
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+server:
+  port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  students:
+    lifecycle-check-delay: ${APP_STUDENT_LIFECYCLE_CHECK_DELAY:PT5M}
+  security:
+    cookie-name: ${APP_SESSION_COOKIE:EVSESSION}
+    student-cookie-name: ${APP_STUDENT_SESSION_COOKIE:EVSTUDENT}
+    session-duration: ${APP_SESSION_DURATION:PT8H}
+    cookie-secure: ${APP_COOKIE_SECURE:false}
+    allowed-origins:
+      - http://localhost
+      - http://127.0.0.1
+      - http://localhost:5173
+      - http://127.0.0.1:5173
+    max-failed-attempts: ${APP_MAX_FAILED_ATTEMPTS:5}
+    lock-duration: ${APP_LOCK_DURATION:PT15M}
+    temporary-password-duration: ${APP_TEMP_PASSWORD_DURATION:P7D}
+    password-history-size: ${APP_PASSWORD_HISTORY_SIZE:5}
+  seed:
+    enabled: ${APP_SEED_ENABLED:false}
+    admin-email: ${APP_SEED_ADMIN_EMAIL:admin@nexoskill.local}
+    admin-password: ${APP_SEED_ADMIN_PASSWORD:}
+    user-email: ${APP_SEED_USER_EMAIL:usuario@nexoskill.local}
+    user-password: ${APP_SEED_USER_PASSWORD:}
+
+  storage:
+    question-media-root: ${QUESTION_MEDIA_ROOT:./storage/question-media}
+
+logging:
+  level:
+    root: INFO
+    com.nexoskill.evaluation: INFO
+    org.springframework: INFO
+    org.springframework.boot.autoconfigure: WARN
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN

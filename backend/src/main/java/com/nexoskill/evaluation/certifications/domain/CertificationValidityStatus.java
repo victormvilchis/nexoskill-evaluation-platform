@@ -1,8 +1,5 @@
 package com.nexoskill.evaluation.certifications.domain;
 
 public enum CertificationValidityStatus {
-    NOT_OBTAINED,
-    VALID,
-    EXPIRING_SOON,
-    EXPIRED
+	NOT_OBTAINED, VALID, EXPIRING_SOON, EXPIRED
 }

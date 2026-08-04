@@ -1,0 +1,17 @@
+app:
+  seed:
+    enabled: true
+    admin-email: ${APP_SEED_ADMIN_EMAIL:admin@nexoskill.local}
+    admin-password: ${APP_SEED_ADMIN_PASSWORD:Admin123!}
+    user-email: ${APP_SEED_USER_EMAIL:usuario@nexoskill.local}
+    user-password: ${APP_SEED_USER_PASSWORD:Usuario123!}
+
+logging:
+  level:
+    root: INFO
+    com.nexoskill.evaluation: INFO
+    org.springframework: INFO
+    org.springframework.boot.autoconfigure: WARN
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN

@@ -1,0 +1,106 @@
+{
+  "groups": [
+    {
+      "name": "app",
+      "type": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties"
+    },
+    {
+      "name": "app.security",
+      "type": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties",
+      "sourceMethod": "getSecurity()"
+    },
+    {
+      "name": "app.seed",
+      "type": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties",
+      "sourceMethod": "getSeed()"
+    }
+  ],
+  "properties": [
+    {
+      "name": "app.security.allowed-origins",
+      "type": "java.util.List<java.lang.String>",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security"
+    },
+    {
+      "name": "app.security.cookie-name",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": "EVSESSION"
+    },
+    {
+      "name": "app.security.cookie-secure",
+      "type": "java.lang.Boolean",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": false
+    },
+    {
+      "name": "app.security.lock-duration",
+      "type": "java.time.Duration",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": "15m"
+    },
+    {
+      "name": "app.security.max-failed-attempts",
+      "type": "java.lang.Integer",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": 5
+    },
+    {
+      "name": "app.security.password-history-size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": 5
+    },
+    {
+      "name": "app.security.session-duration",
+      "type": "java.time.Duration",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": "8h"
+    },
+    {
+      "name": "app.security.student-cookie-name",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": "EVSTUDENT"
+    },
+    {
+      "name": "app.security.temporary-password-duration",
+      "type": "java.time.Duration",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Security",
+      "defaultValue": "7d"
+    },
+    {
+      "name": "app.seed.admin-email",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed"
+    },
+    {
+      "name": "app.seed.admin-password",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed"
+    },
+    {
+      "name": "app.seed.enabled",
+      "type": "java.lang.Boolean",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed",
+      "defaultValue": false
+    },
+    {
+      "name": "app.seed.user-email",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed"
+    },
+    {
+      "name": "app.seed.user-password",
+      "type": "java.lang.String",
+      "sourceType": "com.nexoskill.evaluation.shared.infrastructure.config.AppProperties$Seed"
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}

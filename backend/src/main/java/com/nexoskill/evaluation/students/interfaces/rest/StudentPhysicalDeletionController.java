@@ -24,34 +24,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/admin/permanent-deletions")
 @PreAuthorize("hasAuthority('STUDENT_DELETE')")
 public class StudentPhysicalDeletionController {
-    private final StudentPhysicalDeletionService service;
-    private final TenantContextResolver tenantResolver;
+	private final StudentPhysicalDeletionService service;
+	private final TenantContextResolver tenantResolver;
 
-    public StudentPhysicalDeletionController(StudentPhysicalDeletionService service,
-            TenantContextResolver tenantResolver) {
-        this.service = service;
-        this.tenantResolver = tenantResolver;
-    }
+	public StudentPhysicalDeletionController(StudentPhysicalDeletionService service,
+			TenantContextResolver tenantResolver) {
+		this.service = service;
+		this.tenantResolver = tenantResolver;
+	}
 
-    @GetMapping
-    public StudentPhysicalDeletionService.PageResult search(HttpServletRequest request,
-            @RequestParam(required = false) String query,
-            @RequestParam(defaultValue = "ALL") String module,
-            @RequestParam(required = false) String organizationPublicId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        PaginationParameters.validate(page, size);
-        return service.search(tenantResolver.resolve(request), query, module, organizationPublicId, page, size);
-    }
+	@GetMapping
+	public StudentPhysicalDeletionService.PageResult search(HttpServletRequest request,
+			@RequestParam(required = false) String query, @RequestParam(defaultValue = "ALL") String module,
+			@RequestParam(required = false) String organizationPublicId, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "10") int size) {
+		PaginationParameters.validate(page, size);
+		return service.search(tenantResolver.resolve(request), query, module, organizationPublicId, page, size);
+	}
 
-    @PostMapping("/{publicId}")
-    public StudentPhysicalDeletionService.DeletionResult delete(@PathVariable String publicId,
-            @Valid @RequestBody ConfirmRequest body,
-            @AuthenticationPrincipal AuthenticatedUser user, HttpServletRequest request) {
-        return service.delete(tenantResolver.resolve(request), publicId, Boolean.TRUE.equals(body.confirmed()),
-                new StudentService.Actor(user.internalId(), ClientRequestInfo.ipAddress(request),
-                        ClientRequestInfo.userAgent(request)));
-    }
+	@PostMapping("/{publicId}")
+	public StudentPhysicalDeletionService.DeletionResult delete(@PathVariable String publicId,
+			@Valid @RequestBody ConfirmRequest body, @AuthenticationPrincipal AuthenticatedUser user,
+			HttpServletRequest request) {
+		return service.delete(tenantResolver.resolve(request), publicId, Boolean.TRUE.equals(body.confirmed()),
+				new StudentService.Actor(user.internalId(), ClientRequestInfo.ipAddress(request),
+						ClientRequestInfo.userAgent(request)));
+	}
 
-    public record ConfirmRequest(@NotNull @AssertTrue Boolean confirmed) {}
+	public record ConfirmRequest(@NotNull @AssertTrue Boolean confirmed) {
+	}
 }

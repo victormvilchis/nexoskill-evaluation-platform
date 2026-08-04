@@ -28,6 +28,7 @@ export interface TalentSummary {
   talentType: TalentType
   profileCode: TalentProfileCode | null
   technology: TalentTechnologyRef | null
+  currentTechnologyExpertise: string | null
   organizationHiredOn: string | null
   validFrom: string
   expiresAt: string

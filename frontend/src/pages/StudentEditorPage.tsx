@@ -4,7 +4,7 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { getStudentExperience, updateStudentExperience } from '../features/students/api/studentImportApi'
 import { createStudent, getStudent, getStudentCatalogs, updateStudent } from '../features/students/api/studentApi'
-import { createProspectTalent, getTalentFoundation, updateFullTalent, convertTalent, uploadTalentCv } from '../features/talent-bank/api/talentBankApi'
+import { createProspectTalent, downloadTalentCv, getTalentCv, getTalentFoundation, updateFullTalent, convertTalent, uploadTalentCv, viewTalentCv } from '../features/talent-bank/api/talentBankApi'
 import { TalentCvUploadField } from '../features/talent-bank/components/TalentCvUploadField'
 import { StudentExperienceFields } from '../features/students/components/StudentExperienceFields'
 import { StudentTemporaryCredentialsDialog } from '../features/students/components/StudentTemporaryCredentialsDialog'
@@ -20,6 +20,7 @@ import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { StudentCatalogRef, StudentCatalogs, StudentDetail, StudentTemporaryCredentials } from '../shared/types/students'
+import type { TalentCvMetadata } from '../shared/types/talentBank'
 
 interface Props {
   mode: 'create' | 'edit' | 'view'
@@ -119,6 +120,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   const [expiresAt, setExpiresAt] = useState('2999-12-31')
   const [admissionDate, setAdmissionDate] = useState('')
   const [cvFile, setCvFile] = useState<File>()
+  const [currentCv, setCurrentCv] = useState<TalentCvMetadata | null>(null)
   const [professionalProfilePublicId, setProfessionalProfilePublicId] = useState('')
   const [technologicalProfilePublicId, setTechnologicalProfilePublicId] = useState('')
   const [flags, setFlags] = useState<CertificationFlags>(EMPTY_FLAGS)
@@ -154,11 +156,16 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
     let active = true
     setLoading(true)
     setError(null)
-    Promise.all([talentWorkspace ? getTalentFoundation(publicId) : getStudent(publicId), getStudentExperience(publicId)])
-      .then(async ([detail, experienceValue]) => {
+    Promise.all([
+      talentWorkspace ? getTalentFoundation(publicId) : getStudent(publicId),
+      getStudentExperience(publicId),
+      talentWorkspace ? getTalentCv(publicId) : Promise.resolve(null)
+    ])
+      .then(async ([detail, experienceValue, cvMetadata]) => {
         if (!active) return
         setStudent(detail)
         setExperience(experienceValue)
+        setCurrentCv(cvMetadata)
         setOrganizationPublicId(detail.organization?.publicId ?? '')
         setStudentCode(detail.studentCode)
         setCorporateUser(detail.corporateUser ?? '')
@@ -267,6 +274,16 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       element?.focus(); element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 0)
   }
+  async function viewCurrentCv() {
+    if (!publicId) return
+    try { await viewTalentCv(publicId) }
+    catch (requestError) { toast.error('No fue posible ver el CV.', requestError instanceof Error ? requestError.message : undefined) }
+  }
+  async function downloadCurrentCv() {
+    if (!publicId) return
+    try { await downloadTalentCv(publicId) }
+    catch (requestError) { toast.error('No fue posible descargar el CV.', requestError instanceof Error ? requestError.message : undefined) }
+  }
   function validateForm() {
     const errors: Record<string, string> = {}
     if (administrator && mode === 'create' && !organizationPublicId) errors.organizationPublicId = 'Debes seleccionar una organización.'
@@ -347,10 +364,21 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
             : (student.corporateUser ?? undefined),
           ...certificationPayload, version: student.version
         }
+        let cvWarning = false
+        let cvUpdated = false
         if (talentWorkspace && conversion) await convertTalent(publicId, updatePayload)
         else if (talentWorkspace) {
           await updateFullTalent(publicId, updatePayload)
-          if (cvFile) await uploadTalentCv(publicId, cvFile)
+          if (cvFile) {
+            try {
+              const metadata = await uploadTalentCv(publicId, cvFile)
+              setCurrentCv(metadata)
+              setCvFile(undefined)
+              cvUpdated = true
+            } catch {
+              cvWarning = true
+            }
+          }
         } else await updateStudent(publicId, updatePayload)
         let experienceWarning = false
         try {
@@ -363,17 +391,22 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
           : movedToTalentBank
             ? completeTalentBankSave
             : completeTalentSave
+        const saveWarning = experienceWarning || cvWarning
         completion({ title: conversion
-          ? 'El talento se convirtió correctamente en colaborador.'
-          : experienceWarning
+          ? 'La persona se convirtió correctamente en colaborador.'
+          : saveWarning
             ? `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado con una advertencia.`
-            : `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado correctamente.`, message: experienceWarning
-          ? 'Los datos principales se guardaron, pero la experiencia deberá actualizarse nuevamente.'
-          : movedToTalentBank
-            ? 'El colaborador fue dado de baja y trasladado a Talent Bank.'
-            : admissionChanged && !talentWorkspace
-              ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
-              : undefined })
+            : cvUpdated
+              ? 'El CV se actualizó correctamente.'
+              : `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado correctamente.`, message: cvWarning
+          ? 'Los datos principales se guardaron, pero el CV deberá actualizarse nuevamente.'
+          : experienceWarning
+            ? 'Los datos principales se guardaron, pero la experiencia deberá actualizarse nuevamente.'
+            : movedToTalentBank
+              ? 'El colaborador fue dado de baja y trasladado a Talent Bank.'
+              : admissionChanged && !talentWorkspace
+                ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
+                : undefined })
       }
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
@@ -414,7 +447,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
 
           </div>}</section>}
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate || talentWorkspace ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate && !talentWorkspace} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
-          {talentWorkspace && !conversion && !readOnly && <section className="editor-card"><div className="section-heading"><div><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} disabled={saving} onChange={setCvFile} /></section>}
+          {talentWorkspace && !conversion && !readOnly && <section className="editor-card"><div className="section-heading"><div><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} currentCv={currentCv} disabled={saving} onChange={setCvFile} onViewCurrent={viewCurrentCv} onDownloadCurrent={downloadCurrentCv} /></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
         {!readOnly && organizationResolved && (
@@ -441,7 +474,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       <ConfirmDialog
         open={confirmingConversion}
         title="Convertir a colaborador"
-        description="Este talento dejará de formar parte de Talent Bank y será incorporado al módulo Colaboradores. A partir de ese momento comenzará a contabilizarse en los indicadores correspondientes."
+        description="Esta persona dejará de formar parte de Talent Bank y será incorporada al módulo Colaboradores. A partir de ese momento volverá a participar en los procesos e indicadores correspondientes. ¿Deseas continuar?"
         confirmLabel="Confirmar conversión"
         busy={saving}
         onCancel={() => setConfirmingConversion(false)}

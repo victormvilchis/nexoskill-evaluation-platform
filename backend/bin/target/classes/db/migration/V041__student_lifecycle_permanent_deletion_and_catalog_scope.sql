@@ -1,0 +1,232 @@
+-- Ciclo de vida definitivo de estudiantes, permiso de eliminación permanente
+-- y alcance organizacional para los catálogos utilizados por certificaciones.
+-- No elimina estudiantes ni ejecuta purgas automáticas.
+
+UPDATE STUDENT
+   SET STATUS = 'INACTIVE',
+       UPDATED_AT = SYSTIMESTAMP
+ WHERE STATUS IN ('SUSPENDED', 'ARCHIVED');
+
+-- La restricción anterior no admite EXPIRED; se retira antes de migrar esos registros.
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM USER_CONSTRAINTS
+     WHERE TABLE_NAME = 'STUDENT'
+       AND CONSTRAINT_NAME = 'CK_STUDENT_STATUS';
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'ALTER TABLE STUDENT DROP CONSTRAINT CK_STUDENT_STATUS';
+    END IF;
+END;
+/
+
+UPDATE STUDENT
+   SET STATUS = 'EXPIRED',
+       UPDATED_AT = SYSTIMESTAMP
+ WHERE STATUS = 'ACTIVE'
+   AND EXPIRES_AT IS NOT NULL
+   AND EXPIRES_AT <= SYSTIMESTAMP;
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM USER_CONSTRAINTS
+     WHERE TABLE_NAME = 'STUDENT'
+       AND CONSTRAINT_NAME = 'CK_STUDENT_STATUS';
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE q'[ALTER TABLE STUDENT ADD CONSTRAINT CK_STUDENT_STATUS
+            CHECK (STATUS IN ('ACTIVE','INACTIVE','EXPIRED','DELETED'))]';
+    END IF;
+END;
+/
+
+MERGE INTO APP_PERMISSION target
+USING (
+    SELECT 'STUDENT_DELETE' code,
+           'Eliminar permanentemente estudiantes' name,
+           'Eliminación física, definitiva y transaccional de estudiantes' description
+      FROM DUAL
+) source
+ON (target.PERMISSION_CODE = source.code)
+WHEN NOT MATCHED THEN INSERT (PERMISSION_CODE, PERMISSION_NAME, MODULE_CODE, DESCRIPTION)
+VALUES (source.code, source.name, 'STUDENTS', source.description);
+
+-- Conserva la matriz vigente: reciben el permiso quienes ya podían cambiar el estado.
+INSERT INTO APP_ROLE_PERMISSION (ROLE_ID, PERMISSION_ID)
+SELECT DISTINCT current_permission.ROLE_ID, delete_permission.PERMISSION_ID
+  FROM APP_ROLE_PERMISSION current_permission
+  JOIN APP_PERMISSION status_permission
+    ON status_permission.PERMISSION_ID = current_permission.PERMISSION_ID
+   AND status_permission.PERMISSION_CODE = 'STUDENT_STATUS_CHANGE'
+ CROSS JOIN APP_PERMISSION delete_permission
+ WHERE delete_permission.PERMISSION_CODE = 'STUDENT_DELETE'
+   AND NOT EXISTS (
+       SELECT 1
+         FROM APP_ROLE_PERMISSION existing
+        WHERE existing.ROLE_ID = current_permission.ROLE_ID
+          AND existing.PERMISSION_ID = delete_permission.PERMISSION_ID
+   );
+
+DECLARE
+    PROCEDURE add_column_if_missing(p_table VARCHAR2, p_column VARCHAR2, p_definition VARCHAR2) IS
+        v_count NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_count
+          FROM USER_TAB_COLUMNS
+         WHERE TABLE_NAME = UPPER(p_table)
+           AND COLUMN_NAME = UPPER(p_column);
+        IF v_count = 0 THEN
+            EXECUTE IMMEDIATE 'ALTER TABLE ' || p_table || ' ADD (' || p_definition || ')';
+        END IF;
+    END;
+BEGIN
+    add_column_if_missing('CERTIFICATION_PROFILE_CATALOG', 'CONTENT_SCOPE',
+        'CONTENT_SCOPE VARCHAR2(20 CHAR) DEFAULT ''GLOBAL'' NOT NULL');
+    add_column_if_missing('CERTIFICATION_PROFILE_CATALOG', 'OWNER_ORGANIZATION_ID',
+        'OWNER_ORGANIZATION_ID NUMBER');
+    add_column_if_missing('TECHNOLOGICAL_PROFILE_CATALOG', 'CONTENT_SCOPE',
+        'CONTENT_SCOPE VARCHAR2(20 CHAR) DEFAULT ''GLOBAL'' NOT NULL');
+    add_column_if_missing('TECHNOLOGICAL_PROFILE_CATALOG', 'OWNER_ORGANIZATION_ID',
+        'OWNER_ORGANIZATION_ID NUMBER');
+    add_column_if_missing('QUESTION_TECHNOLOGY', 'CONTENT_SCOPE',
+        'CONTENT_SCOPE VARCHAR2(20 CHAR) DEFAULT ''GLOBAL'' NOT NULL');
+    add_column_if_missing('QUESTION_TECHNOLOGY', 'OWNER_ORGANIZATION_ID',
+        'OWNER_ORGANIZATION_ID NUMBER');
+END;
+/
+
+UPDATE CERTIFICATION_PROFILE_CATALOG
+   SET CONTENT_SCOPE = 'GLOBAL', OWNER_ORGANIZATION_ID = NULL
+ WHERE CONTENT_SCOPE IS NULL;
+UPDATE TECHNOLOGICAL_PROFILE_CATALOG
+   SET CONTENT_SCOPE = 'GLOBAL', OWNER_ORGANIZATION_ID = NULL
+ WHERE CONTENT_SCOPE IS NULL;
+UPDATE QUESTION_TECHNOLOGY
+   SET CONTENT_SCOPE = 'GLOBAL', OWNER_ORGANIZATION_ID = NULL
+ WHERE CONTENT_SCOPE IS NULL;
+
+DECLARE
+    PROCEDURE drop_unique_if_unreferenced(p_table VARCHAR2, p_name VARCHAR2) IS
+        v_constraint_count NUMBER;
+        v_reference_count NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_constraint_count
+          FROM USER_CONSTRAINTS
+         WHERE TABLE_NAME = UPPER(p_table)
+           AND CONSTRAINT_NAME = UPPER(p_name)
+           AND CONSTRAINT_TYPE IN ('P', 'U');
+
+        IF v_constraint_count = 0 THEN
+            RETURN;
+        END IF;
+
+        SELECT COUNT(*) INTO v_reference_count
+          FROM USER_CONSTRAINTS
+         WHERE CONSTRAINT_TYPE = 'R'
+           AND R_CONSTRAINT_NAME = UPPER(p_name)
+           AND STATUS = 'ENABLED';
+
+        -- Oracle no permite retirar una clave única mientras existan claves foráneas
+        -- habilitadas que la referencien (ORA-02273). Los catálogos legados que todavía
+        -- relacionan PROFILE_CODE conservan temporalmente esa unicidad global; los demás
+        -- catálogos migran a la unicidad por alcance y propietario definida más abajo.
+        IF v_reference_count = 0 THEN
+            EXECUTE IMMEDIATE 'ALTER TABLE ' || p_table || ' DROP CONSTRAINT ' || p_name;
+        END IF;
+    END;
+
+    PROCEDURE add_constraint_if_missing(p_table VARCHAR2, p_name VARCHAR2, p_sql VARCHAR2) IS
+        v_count NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_count
+          FROM USER_CONSTRAINTS
+         WHERE TABLE_NAME = UPPER(p_table)
+           AND CONSTRAINT_NAME = UPPER(p_name);
+        IF v_count = 0 THEN
+            EXECUTE IMMEDIATE p_sql;
+        END IF;
+    END;
+BEGIN
+    -- Los códigos dejan de ser globalmente únicos cuando no existe una dependencia
+    -- referencial legada que obligue a conservar temporalmente la clave original.
+    drop_unique_if_unreferenced('CERTIFICATION_PROFILE_CATALOG', 'UK_CERT_PROFILE_CODE');
+    drop_unique_if_unreferenced('TECHNOLOGICAL_PROFILE_CATALOG', 'UK_TECH_PROFILE_CODE');
+    drop_unique_if_unreferenced('QUESTION_TECHNOLOGY', 'UK_QUESTION_TECH_CODE');
+
+    add_constraint_if_missing('CERTIFICATION_PROFILE_CATALOG', 'CK_CERT_PROFILE_SCOPE',
+        'ALTER TABLE CERTIFICATION_PROFILE_CATALOG ADD CONSTRAINT CK_CERT_PROFILE_SCOPE CHECK ((CONTENT_SCOPE = ''GLOBAL'' AND OWNER_ORGANIZATION_ID IS NULL) OR (CONTENT_SCOPE = ''ORGANIZATION'' AND OWNER_ORGANIZATION_ID IS NOT NULL))');
+    add_constraint_if_missing('TECHNOLOGICAL_PROFILE_CATALOG', 'CK_TECH_PROFILE_SCOPE',
+        'ALTER TABLE TECHNOLOGICAL_PROFILE_CATALOG ADD CONSTRAINT CK_TECH_PROFILE_SCOPE CHECK ((CONTENT_SCOPE = ''GLOBAL'' AND OWNER_ORGANIZATION_ID IS NULL) OR (CONTENT_SCOPE = ''ORGANIZATION'' AND OWNER_ORGANIZATION_ID IS NOT NULL))');
+    add_constraint_if_missing('QUESTION_TECHNOLOGY', 'CK_QUESTION_TECH_SCOPE',
+        'ALTER TABLE QUESTION_TECHNOLOGY ADD CONSTRAINT CK_QUESTION_TECH_SCOPE CHECK ((CONTENT_SCOPE = ''GLOBAL'' AND OWNER_ORGANIZATION_ID IS NULL) OR (CONTENT_SCOPE = ''ORGANIZATION'' AND OWNER_ORGANIZATION_ID IS NOT NULL))');
+
+    add_constraint_if_missing('CERTIFICATION_PROFILE_CATALOG', 'FK_CERT_PROFILE_OWNER_ORG',
+        'ALTER TABLE CERTIFICATION_PROFILE_CATALOG ADD CONSTRAINT FK_CERT_PROFILE_OWNER_ORG FOREIGN KEY (OWNER_ORGANIZATION_ID) REFERENCES ORGANIZATION (ORGANIZATION_ID)');
+    add_constraint_if_missing('TECHNOLOGICAL_PROFILE_CATALOG', 'FK_TECH_PROFILE_OWNER_ORG',
+        'ALTER TABLE TECHNOLOGICAL_PROFILE_CATALOG ADD CONSTRAINT FK_TECH_PROFILE_OWNER_ORG FOREIGN KEY (OWNER_ORGANIZATION_ID) REFERENCES ORGANIZATION (ORGANIZATION_ID)');
+    add_constraint_if_missing('QUESTION_TECHNOLOGY', 'FK_QUESTION_TECH_OWNER_ORG',
+        'ALTER TABLE QUESTION_TECHNOLOGY ADD CONSTRAINT FK_QUESTION_TECH_OWNER_ORG FOREIGN KEY (OWNER_ORGANIZATION_ID) REFERENCES ORGANIZATION (ORGANIZATION_ID)');
+END;
+/
+
+DECLARE
+    PROCEDURE create_index_if_columns_missing(
+        p_table VARCHAR2,
+        p_first_column VARCHAR2,
+        p_second_column VARCHAR2,
+        p_name VARCHAR2,
+        p_sql VARCHAR2
+    ) IS
+        v_count NUMBER;
+    BEGIN
+        SELECT COUNT(*) INTO v_count
+          FROM (
+                SELECT INDEX_NAME
+                  FROM USER_IND_COLUMNS
+                 WHERE TABLE_NAME = UPPER(p_table)
+                 GROUP BY INDEX_NAME
+                HAVING MAX(CASE WHEN COLUMN_POSITION = 1 AND COLUMN_NAME = UPPER(p_first_column) THEN 1 ELSE 0 END) = 1
+                   AND MAX(CASE WHEN COLUMN_POSITION = 2 AND COLUMN_NAME = UPPER(p_second_column) THEN 1 ELSE 0 END) = 1
+          );
+        IF v_count = 0 THEN
+            BEGIN
+                EXECUTE IMMEDIATE p_sql;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF SQLCODE NOT IN (-1408, -955) THEN RAISE; END IF;
+            END;
+        END IF;
+    END;
+BEGIN
+    create_index_if_columns_missing('CERTIFICATION_PROFILE_CATALOG', 'CONTENT_SCOPE', 'OWNER_ORGANIZATION_ID',
+        'IX_CERT_PROFILE_SCOPE_OWNER',
+        'CREATE INDEX IX_CERT_PROFILE_SCOPE_OWNER ON CERTIFICATION_PROFILE_CATALOG (CONTENT_SCOPE, OWNER_ORGANIZATION_ID, STATUS, PROFILE_NAME)');
+    create_index_if_columns_missing('TECHNOLOGICAL_PROFILE_CATALOG', 'CONTENT_SCOPE', 'OWNER_ORGANIZATION_ID',
+        'IX_TECH_PROFILE_SCOPE_OWNER',
+        'CREATE INDEX IX_TECH_PROFILE_SCOPE_OWNER ON TECHNOLOGICAL_PROFILE_CATALOG (CONTENT_SCOPE, OWNER_ORGANIZATION_ID, STATUS, PROFILE_NAME)');
+    create_index_if_columns_missing('QUESTION_TECHNOLOGY', 'CONTENT_SCOPE', 'OWNER_ORGANIZATION_ID',
+        'IX_QUESTION_TECH_SCOPE_OWNER',
+        'CREATE INDEX IX_QUESTION_TECH_SCOPE_OWNER ON QUESTION_TECHNOLOGY (CONTENT_SCOPE, OWNER_ORGANIZATION_ID, STATUS, TECHNOLOGY_NAME)');
+END;
+/
+
+-- Unicidad por propietario. NVL permite distinguir el catálogo GLOBAL de cada organización.
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE UNIQUE INDEX UK_CERT_PROFILE_SCOPE_CODE ON CERTIFICATION_PROFILE_CATALOG (CONTENT_SCOPE, NVL(OWNER_ORGANIZATION_ID, -1), PROFILE_CODE)';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE NOT IN (-955, -1408) THEN RAISE; END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE UNIQUE INDEX UK_TECH_PROFILE_SCOPE_CODE ON TECHNOLOGICAL_PROFILE_CATALOG (CONTENT_SCOPE, NVL(OWNER_ORGANIZATION_ID, -1), PROFILE_CODE)';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE NOT IN (-955, -1408) THEN RAISE; END IF;
+END;
+/
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE UNIQUE INDEX UK_QUESTION_TECH_SCOPE_CODE ON QUESTION_TECHNOLOGY (CONTENT_SCOPE, NVL(OWNER_ORGANIZATION_ID, -1), TECHNOLOGY_CODE)';
+EXCEPTION WHEN OTHERS THEN IF SQLCODE NOT IN (-955, -1408) THEN RAISE; END IF;
+END;
+/
+
+COMMIT;

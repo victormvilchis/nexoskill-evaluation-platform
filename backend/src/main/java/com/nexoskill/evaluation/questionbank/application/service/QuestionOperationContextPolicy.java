@@ -13,32 +13,32 @@ import org.springframework.stereotype.Component;
 @Component
 public class QuestionOperationContextPolicy {
 
-    public OperationContext resolve(TenantContext tenant, ContentScope scope, Long ownerOrganizationId) {
-        if (tenant == null || scope == null) {
-            throw new BusinessException("QUESTION_CONTEXT_NOT_RESOLVED",
-                    "No fue posible determinar el contexto autorizado para la operación sobre la pregunta.");
-        }
-        boolean ownerOrganization = scope == ContentScope.ORGANIZATION
-                && tenant.hasOrganization()
-                && Objects.equals(ownerOrganizationId, tenant.organizationId());
-        return new OperationContext(tenant, scope, ownerOrganizationId, ownerOrganization);
-    }
+	public OperationContext resolve(TenantContext tenant, ContentScope scope, Long ownerOrganizationId) {
+		if (tenant == null || scope == null) {
+			throw new BusinessException("QUESTION_CONTEXT_NOT_RESOLVED",
+					"No fue posible determinar el contexto autorizado para la operación sobre la pregunta.");
+		}
+		boolean ownerOrganization = scope == ContentScope.ORGANIZATION && tenant.hasOrganization()
+				&& Objects.equals(ownerOrganizationId, tenant.organizationId());
+		return new OperationContext(tenant, scope, ownerOrganizationId, ownerOrganization);
+	}
 
-    public void assertCanManage(TenantContext tenant, ContentScope scope, Long ownerOrganizationId) {
-        OperationContext context = resolve(tenant, scope, ownerOrganizationId);
-        if (context.tenant().globalAdministrator()) {
-            return;
-        }
-        if (context.scope() == ContentScope.GLOBAL) {
-            throw new BusinessException("QUESTION_GLOBAL_MANAGEMENT_FORBIDDEN",
-                    "Solo el Administrador global puede modificar una pregunta GLOBAL.");
-        }
-        if (!context.ownerOrganization()) {
-            throw new BusinessException("QUESTION_OPERATION_FORBIDDEN",
-                    "No tienes permisos para modificar una pregunta de otra organización.");
-        }
-    }
+	public void assertCanManage(TenantContext tenant, ContentScope scope, Long ownerOrganizationId) {
+		OperationContext context = resolve(tenant, scope, ownerOrganizationId);
+		if (context.tenant().globalAdministrator()) {
+			return;
+		}
+		if (context.scope() == ContentScope.GLOBAL) {
+			throw new BusinessException("QUESTION_GLOBAL_MANAGEMENT_FORBIDDEN",
+					"Solo el Administrador global puede modificar una pregunta GLOBAL.");
+		}
+		if (!context.ownerOrganization()) {
+			throw new BusinessException("QUESTION_OPERATION_FORBIDDEN",
+					"No tienes permisos para modificar una pregunta de otra organización.");
+		}
+	}
 
-    public record OperationContext(TenantContext tenant, ContentScope scope,
-            Long ownerOrganizationId, boolean ownerOrganization) {}
+	public record OperationContext(TenantContext tenant, ContentScope scope, Long ownerOrganizationId,
+			boolean ownerOrganization) {
+	}
 }

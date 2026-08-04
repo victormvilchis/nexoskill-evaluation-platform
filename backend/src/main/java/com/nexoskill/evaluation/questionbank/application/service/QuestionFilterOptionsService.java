@@ -8,14 +8,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class QuestionFilterOptionsService {
-    private final QuestionGovernanceSearchRepository repository;
+	private final QuestionGovernanceSearchRepository repository;
 
-    public QuestionFilterOptionsService(QuestionGovernanceSearchRepository repository) {
-        this.repository = repository;
-    }
+	public QuestionFilterOptionsService(QuestionGovernanceSearchRepository repository) {
+		this.repository = repository;
+	}
 
-    @Transactional(readOnly = true)
-    public List<Integer> creationYears(TenantContext tenant) {
-        return repository.creationYears(tenant);
-    }
+	@Transactional(readOnly = true)
+	public List<Integer> creationYears(TenantContext tenant) {
+		return repository.creationYears(tenant);
+	}
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
-import { createAcademyTalent, getTalent, getTalentCatalogs, updateAcademyTalent, uploadTalentCv } from '../features/talent-bank/api/talentBankApi'
+import { createAcademyTalent, downloadTalentCv, getTalent, getTalentCatalogs, getTalentCv, updateAcademyTalent, uploadTalentCv, viewTalentCv } from '../features/talent-bank/api/talentBankApi'
 import { TalentCvUploadField } from '../features/talent-bank/components/TalentCvUploadField'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
@@ -13,7 +13,7 @@ import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { SelectField } from '../shared/components/SelectField'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
-import type { TalentCatalogs, TalentProfileCode, TalentSummary } from '../shared/types/talentBank'
+import type { TalentCatalogs, TalentCvMetadata, TalentProfileCode, TalentSummary } from '../shared/types/talentBank'
 
 interface Props { mode: 'create' | 'edit' }
 function today() { return new Date().toISOString().slice(0, 10) }
@@ -39,6 +39,7 @@ export function AcademyTalentEditorPage({ mode }: Props) {
   const [profileCode, setProfileCode] = useState<TalentProfileCode>('JR')
   const [technologyPublicId, setTechnologyPublicId] = useState('')
   const [cvFile, setCvFile] = useState<File>()
+  const [currentCv, setCurrentCv] = useState<TalentCvMetadata | null>(null)
   const [loading, setLoading] = useState(mode === 'edit')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
@@ -67,24 +68,37 @@ export function AcademyTalentEditorPage({ mode }: Props) {
   useEffect(() => {
     if (mode !== 'edit' || !publicId) return
     let active = true
-    getTalent(publicId).then(async (detail) => {
+    Promise.all([getTalent(publicId), getTalentCv(publicId)]).then(async ([detail, cvMetadata]) => {
       if (detail.talentType !== 'ACADEMY') throw new Error('Este registro no corresponde a Academia.')
       const catalogResult = await getTalentCatalogs(administrator ? detail.organization.publicId : undefined)
       if (!active) return
-      setTalent(detail); setCatalogs(catalogResult); setOrganizationPublicId(detail.organization.publicId)
+      setTalent(detail); setCurrentCv(cvMetadata); setCatalogs(catalogResult); setOrganizationPublicId(detail.organization.publicId)
       setStudentCode(detail.studentCode); setEmail(detail.email); setFirstName(detail.firstName); setLastName(detail.lastName)
       setValidFrom(detail.validFrom); setExpiresAt(detail.expiresAt); setOrganizationHiredOn(detail.organizationHiredOn ?? '')
       setProfileCode((detail.profileCode ?? 'JR') as TalentProfileCode); setTechnologyPublicId(detail.technology?.publicId ?? '')
     }).catch((requestError) => { if (active) setError(requestError instanceof ApiRequestError ? requestError.message : String(requestError)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [mode, publicId])
+  }, [administrator, mode, publicId])
 
   async function selectOrganization(value: string) {
     setOrganizationPublicId(value); setCatalogs(undefined); setTechnologyPublicId('')
     if (!value) return
     try { setCatalogs(await getTalentCatalogs(value)) }
     catch (requestError) { setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible cargar los catálogos.') }
+  }
+
+
+  async function viewCurrentCv() {
+    if (!publicId) return
+    try { await viewTalentCv(publicId) }
+    catch (requestError) { toast.error('No fue posible ver el CV.', requestError instanceof Error ? requestError.message : undefined) }
+  }
+
+  async function downloadCurrentCv() {
+    if (!publicId) return
+    try { await downloadTalentCv(publicId) }
+    catch (requestError) { toast.error('No fue posible descargar el CV.', requestError instanceof Error ? requestError.message : undefined) }
   }
 
   const manualCode = Boolean(catalogs?.organization.manualStudentCode)
@@ -129,13 +143,22 @@ export function AcademyTalentEditorPage({ mode }: Props) {
       } else if (publicId && talent) {
         await updateAcademyTalent(publicId, { ...payload, version: talent.version })
         let cvWarning = false
+        let cvUpdated = false
         if (cvFile) {
-          try { await uploadTalentCv(publicId, cvFile) }
-          catch { cvWarning = true }
+          try {
+            const metadata = await uploadTalentCv(publicId, cvFile)
+            setCurrentCv(metadata)
+            setCvFile(undefined)
+            cvUpdated = true
+          } catch { cvWarning = true }
         }
         completeSave({
-          title: cvWarning ? 'Talento actualizado con una advertencia.' : 'Talento actualizado correctamente.',
-          message: cvWarning ? 'Los datos se guardaron, pero el CV deberá cargarse nuevamente desde el detalle.' : undefined
+          title: cvWarning
+            ? 'Talento actualizado con una advertencia.'
+            : cvUpdated
+              ? 'El CV se actualizó correctamente.'
+              : 'Talento actualizado correctamente.',
+          message: cvWarning ? 'Los datos se guardaron, pero el CV deberá cargarse nuevamente.' : undefined
         })
       }
     } catch (requestError) {
@@ -160,7 +183,7 @@ export function AcademyTalentEditorPage({ mode }: Props) {
           <label className="form-field ns-field-span-4"><span>Perfil</span><SelectField name="profileCode" value={profileCode} onChange={(value) => setProfileCode(value as TalentProfileCode)} options={(catalogs?.profiles ?? []).map((value) => ({ value, label: value }))} /></label>
           <label className="form-field ns-field-span-8"><span>Tecnología</span><SelectField name="technologyPublicId" value={technologyPublicId} onChange={setTechnologyPublicId} options={[{ value: '', label: 'Seleccionar tecnología' }, ...(catalogs?.technologies ?? []).map((item) => ({ value: item.publicId, label: item.name }))]} />{fieldErrors.technologyPublicId && <small className="field-error">{fieldErrors.technologyPublicId}</small>}</label>
         </div></section>
-        <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Documentación</p><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} disabled={saving} onChange={setCvFile} /></section>
+        <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Documentación</p><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} currentCv={currentCv} disabled={saving} onChange={setCvFile} onViewCurrent={viewCurrentCv} onDownloadCurrent={downloadCurrentCv} /></section>
         <FormActions sticky><button type="button" className="secondary-button" disabled={saving} onClick={() => navigate('/admin/talent-bank')}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Guardando…' : mode === 'create' ? 'Registrar talento' : 'Guardar cambios'}</button></FormActions>
       </>}
     </form>

@@ -77,7 +77,7 @@ export function TalentBankDetailPage() {
         <div><span>Organización</span><strong>{talent.organization.name} · {talent.organization.code}</strong></div>
         <div><span>Tipo</span><strong>{typeLabels[talent.talentType]}</strong></div>
         <div><span>Perfil</span><strong>{talent.profileCode ?? 'N/A'}</strong></div>
-        <div><span>Tecnología</span><strong>{talent.technology?.name ?? 'N/A'}</strong></div>
+        <div><span>{talent.talentType === 'BBVA_EXIT' ? 'Tecnología actual - Expertise' : 'Tecnología'}</span><strong>{talent.talentType === 'BBVA_EXIT' ? (talent.currentTechnologyExpertise || 'N/A') : (talent.technology?.name ?? 'N/A')}</strong></div>
         <div><span>Fecha de contratación</span><strong>{formatDate(talent.organizationHiredOn)}</strong></div>
         <div><span>Fecha de alta previa</span><strong>{formatDate(talent.admissionDate)}</strong></div>
         <div><span>Ingreso a Talent Bank</span><strong>{talent.movedAt ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(talent.movedAt)) : 'N/A'}</strong></div>
@@ -96,6 +96,5 @@ export function TalentBankDetailPage() {
       </tbody></table></div>
       <TablePagination compact currentPage={history.page} pageSize={history.size} totalElements={history.totalElements} totalPages={history.totalPages} isLoading={historyLoading} onPageChange={setHistoryPage} onPageSizeChange={(nextSize) => { setHistorySize(nextSize); setHistoryPage(0) }} />
     </section>
-    <BackButton fallback="/admin/talent-bank" label="Regresar" />
   </main>
 }

@@ -100,9 +100,10 @@ public class StudentAuthenticationService {
 		String rawToken = tokenGenerator.generate();
 		Instant expiresAt = now.plus(properties.getSecurity().getSessionDuration());
 		if (organization.getExpiresOn() != null) {
-			Instant organizationExpiration = organization.getExpiresOn().plusDays(1)
-					.atStartOfDay(ZoneOffset.UTC).toInstant();
-			if (organizationExpiration.isBefore(expiresAt)) expiresAt = organizationExpiration;
+			Instant organizationExpiration = organization.getExpiresOn().plusDays(1).atStartOfDay(ZoneOffset.UTC)
+					.toInstant();
+			if (organizationExpiration.isBefore(expiresAt))
+				expiresAt = organizationExpiration;
 		}
 		if (student.isPasswordChangeRequired() && student.getTemporaryPasswordExpiresAt() != null
 				&& student.getTemporaryPasswordExpiresAt().isBefore(expiresAt)) {
@@ -164,8 +165,8 @@ public class StudentAuthenticationService {
 		return new AuthenticatedStudent(student.getId(), student.getPublicId(), organization.getId(),
 				organization.getPublicId(), organization.getCode(), organization.getName(), student.getStudentCode(),
 				student.getEmail(), student.getFirstName(), student.getLastName(), student.getDisplayName(),
-				student.effectiveStatusOn(LocalDate.now(clock)), organization.getValidFrom(), organization.getExpiresOn(),
-				student.getLastLoginAt(), student.isPasswordChangeRequired());
+				student.effectiveStatusOn(LocalDate.now(clock)), organization.getValidFrom(),
+				organization.getExpiresOn(), student.getLastLoginAt(), student.isPasswordChangeRequired());
 	}
 
 	private BusinessException invalidLogin(LoginCommand command, StudentJpaEntity student, String reason, Instant now) {

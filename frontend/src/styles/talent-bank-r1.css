@@ -29,3 +29,9 @@
 .talent-cv-dropzone > div span, .talent-cv-upload-field > small { color: var(--muted-color, #627087); }
 .talent-cv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
 @media (max-width: 680px) { .talent-cv-dropzone { grid-template-columns: auto minmax(0, 1fr); } .talent-cv-select-button { grid-column: 1 / -1; justify-self: stretch; text-align: center; } }
+.talent-cv-current { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; border: 1px solid var(--border-color, #e1e7ed); border-radius: 12px; background: #fff; }
+.talent-cv-current > div:first-child { display: grid; gap: .2rem; min-width: 0; }
+.talent-cv-current strong, .talent-cv-current small { overflow-wrap: anywhere; }
+.talent-cv-current-label { color: var(--muted-color, #627087); font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.talent-cv-empty { margin: 0; padding: .8rem 1rem; border: 1px solid var(--border-color, #e1e7ed); border-radius: 12px; background: #f8fafc; }
+@media (max-width: 680px) { .talent-cv-current { align-items: stretch; flex-direction: column; } }

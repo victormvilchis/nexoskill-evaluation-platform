@@ -14,43 +14,54 @@ import java.math.BigDecimal;
 @Entity
 @Table(name = "FORM_QUESTION")
 public class FormQuestionJpaEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "FORM_QUESTION_ID")
-    private Long id;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "FORM_QUESTION_ID")
+	private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "SECTION_ID", nullable = false)
-    private FormSectionJpaEntity section;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "SECTION_ID", nullable = false)
+	private FormSectionJpaEntity section;
 
-    @Column(name = "QUESTION_ID", nullable = false)
-    private Long questionId;
+	@Column(name = "QUESTION_ID", nullable = false)
+	private Long questionId;
 
-    @Column(name = "QUESTION_ORDER", nullable = false)
-    private Integer questionOrder;
+	@Column(name = "QUESTION_ORDER", nullable = false)
+	private Integer questionOrder;
 
-    @Column(name = "POINTS", nullable = false, precision = 8, scale = 2)
-    private BigDecimal points;
+	@Column(name = "POINTS", nullable = false, precision = 8, scale = 2)
+	private BigDecimal points;
 
-    @Column(name = "REQUIRED", nullable = false)
-    private Integer required;
+	@Column(name = "REQUIRED", nullable = false)
+	private Integer required;
 
-    protected FormQuestionJpaEntity() {
-    }
+	protected FormQuestionJpaEntity() {
+	}
 
-    static FormQuestionJpaEntity create(FormSectionJpaEntity section, Long questionId, int order,
-            BigDecimal points, boolean required) {
-        FormQuestionJpaEntity entity = new FormQuestionJpaEntity();
-        entity.section = section;
-        entity.questionId = questionId;
-        entity.questionOrder = order;
-        entity.points = points == null ? BigDecimal.ONE : points;
-        entity.required = required ? 1 : 0;
-        return entity;
-    }
+	static FormQuestionJpaEntity create(FormSectionJpaEntity section, Long questionId, int order, BigDecimal points,
+			boolean required) {
+		FormQuestionJpaEntity entity = new FormQuestionJpaEntity();
+		entity.section = section;
+		entity.questionId = questionId;
+		entity.questionOrder = order;
+		entity.points = points == null ? BigDecimal.ONE : points;
+		entity.required = required ? 1 : 0;
+		return entity;
+	}
 
-    public Long getQuestionId() { return questionId; }
-    public Integer getQuestionOrder() { return questionOrder; }
-    public BigDecimal getPoints() { return points; }
-    public boolean isRequired() { return Integer.valueOf(1).equals(required); }
+	public Long getQuestionId() {
+		return questionId;
+	}
+
+	public Integer getQuestionOrder() {
+		return questionOrder;
+	}
+
+	public BigDecimal getPoints() {
+		return points;
+	}
+
+	public boolean isRequired() {
+		return Integer.valueOf(1).equals(required);
+	}
 }

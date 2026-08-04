@@ -15,88 +15,87 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long> {
-    Optional<StudentJpaEntity> findByPublicId(String publicId);
+	Optional<StudentJpaEntity> findByPublicId(String publicId);
 
-    Optional<StudentJpaEntity> findByOrganizationIdAndPublicId(Long organizationId, String publicId);
+	Optional<StudentJpaEntity> findByOrganizationIdAndPublicId(Long organizationId, String publicId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.publicId = :publicId")
-    Optional<StudentJpaEntity> findByOrganizationIdAndPublicIdForUpdate(@Param("organizationId") Long organizationId,
-            @Param("publicId") String publicId);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.publicId = :publicId")
+	Optional<StudentJpaEntity> findByOrganizationIdAndPublicIdForUpdate(@Param("organizationId") Long organizationId,
+			@Param("publicId") String publicId);
 
-    Optional<StudentJpaEntity> findByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
+	Optional<StudentJpaEntity> findByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
 
-    boolean existsByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
+	boolean existsByOrganizationIdAndNormalizedEmail(Long organizationId, String normalizedEmail);
 
-    boolean existsByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
+	boolean existsByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
 
-    Optional<StudentJpaEntity> findByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
+	Optional<StudentJpaEntity> findByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
 
-    Optional<StudentJpaEntity> findByNormalizedCorporateUser(String normalizedCorporateUser);
+	Optional<StudentJpaEntity> findByNormalizedCorporateUser(String normalizedCorporateUser);
 
+	boolean existsByOrganizationIdAndRecordModule(Long organizationId, StudentRecordModule recordModule);
 
-    boolean existsByOrganizationIdAndRecordModule(Long organizationId, StudentRecordModule recordModule);
+	@Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status")
+	long countByOrganizationIdAndStatusNot(@Param("organizationId") Long organizationId,
+			@Param("status") StudentStatus status);
 
-    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status")
-    long countByOrganizationIdAndStatusNot(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
+	@Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is not null")
+	long countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(@Param("organizationId") Long organizationId,
+			@Param("status") StudentStatus status);
 
-    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is not null")
-    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNotNull(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
+	@Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is null")
+	long countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(@Param("organizationId") Long organizationId,
+			@Param("status") StudentStatus status);
 
-    @Query("select count(s) from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.status <> :status and s.admissionDate is null")
-    long countByOrganizationIdAndStatusNotAndAdmissionDateIsNull(@Param("organizationId") Long organizationId, @Param("status") StudentStatus status);
+	@Query("""
+			select count(s) from StudentJpaEntity s
+			where s.organizationId = :organizationId
+			  and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
+			  and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
+			  and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
+			""")
+	long countExpiredByOrganizationId(@Param("organizationId") Long organizationId, @Param("today") LocalDate today);
 
-    @Query("""
-        select count(s) from StudentJpaEntity s
-        where s.organizationId = :organizationId
-          and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
-          and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
-          and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
-        """)
-    long countExpiredByOrganizationId(@Param("organizationId") Long organizationId,
-            @Param("today") LocalDate today);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.normalizedEmail = :normalizedEmail")
+	Optional<StudentJpaEntity> findForLogin(@Param("organizationId") Long organizationId,
+			@Param("normalizedEmail") String normalizedEmail);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from StudentJpaEntity s where s.organizationId = :organizationId and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR and s.normalizedEmail = :normalizedEmail")
-    Optional<StudentJpaEntity> findForLogin(@Param("organizationId") Long organizationId,
-            @Param("normalizedEmail") String normalizedEmail);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select s from StudentJpaEntity s where s.id = :id")
+	Optional<StudentJpaEntity> findByIdForUpdate(@Param("id") Long id);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from StudentJpaEntity s where s.id = :id")
-    Optional<StudentJpaEntity> findByIdForUpdate(@Param("id") Long id);
+	@Query("""
+			select s.id from StudentJpaEntity s
+			where s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
+			  and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+			  and 1 = 0
+			""")
+	List<Long> findExpiredActiveStudentIds(@Param("now") LocalDate now);
 
-    @Query("""
-        select s.id from StudentJpaEntity s
-        where s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
-          and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-          and 1 = 0
-        """)
-    List<Long> findExpiredActiveStudentIds(@Param("now") LocalDate now);
-
-    @Query("""
-        select s from StudentJpaEntity s
-        where s.organizationId = :organizationId
-          and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
-          and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
-          and (
-               :status is null
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
-                   and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.admissionDate is not null)
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED and 1 = 0)
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
-                   and (s.status in (com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE,
-                                    com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED)
-                        or s.admissionDate is null))
-          )
-          and (:query is null
-               or lower(s.displayName) like lower(concat('%', :query, '%'))
-               or lower(s.email) like lower(concat('%', :query, '%'))
-               or lower(s.studentCode) like lower(concat('%', :query, '%'))
-               or lower(s.corporateUser) like lower(concat('%', :query, '%')))
-        """)
-    Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId,
-            @Param("query") String query,
-            @Param("status") StudentEffectiveStatus status,
-            Pageable pageable);
+	@Query("""
+			select s from StudentJpaEntity s
+			where s.organizationId = :organizationId
+			  and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
+			  and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
+			  and (
+			       :status is null
+			       or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
+			           and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
+			           and s.admissionDate is not null)
+			       or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED and 1 = 0)
+			       or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
+			           and (s.status in (com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE,
+			                            com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED)
+			                or s.admissionDate is null))
+			  )
+			  and (:query is null
+			       or lower(s.displayName) like lower(concat('%', :query, '%'))
+			       or lower(s.email) like lower(concat('%', :query, '%'))
+			       or lower(s.studentCode) like lower(concat('%', :query, '%'))
+			       or lower(s.corporateUser) like lower(concat('%', :query, '%')))
+			""")
+	Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId, @Param("query") String query,
+			@Param("status") StudentEffectiveStatus status, Pageable pageable);
 }

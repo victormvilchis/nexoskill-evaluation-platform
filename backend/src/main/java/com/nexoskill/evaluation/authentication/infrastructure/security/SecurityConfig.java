@@ -44,7 +44,8 @@ public class SecurityConfig {
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 					response.getWriter().write(
 							"{\"code\":\"UNAUTHORIZED\"," + "\"message\":\"La sesión no es válida o ha vencido.\"}");
-				}).accessDeniedHandler(accessDeniedHandler)).addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class)
+				}).accessDeniedHandler(accessDeniedHandler))
+				.addFilterBefore(originFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(sessionFilter, OriginProtectionFilter.class)
 				.addFilterAfter(studentSessionFilter, SessionAuthenticationFilter.class).build();
 	}

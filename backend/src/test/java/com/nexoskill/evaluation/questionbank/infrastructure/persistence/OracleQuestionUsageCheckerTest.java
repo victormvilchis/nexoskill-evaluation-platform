@@ -13,35 +13,34 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class OracleQuestionUsageCheckerTest {
 
-    @Test
-    void reportsQuestionUsedWhenAnActiveDependencyExists() {
-        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.queryForObject(any(String.class), anyMap(), eq(Integer.class))).thenReturn(2);
+	@Test
+	void reportsQuestionUsedWhenAnActiveDependencyExists() {
+		NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+		when(jdbc.queryForObject(any(String.class), anyMap(), eq(Integer.class))).thenReturn(2);
 
-        assertThat(new OracleQuestionUsageChecker(jdbc).isUsedByActiveExam(10L)).isTrue();
-    }
+		assertThat(new OracleQuestionUsageChecker(jdbc).isUsedByActiveExam(10L)).isTrue();
+	}
 
-    @Test
-    void removesOnlyDirectFormAndCollectionRelations() {
-        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.update(eq("DELETE FROM FORM_QUESTION WHERE QUESTION_ID = :questionId"), anyMap()))
-                .thenReturn(2);
-        when(jdbc.update(eq("DELETE FROM COLLECTION_QUESTION_RELATION WHERE QUESTION_ID = :questionId"), anyMap()))
-                .thenReturn(1);
+	@Test
+	void removesOnlyDirectFormAndCollectionRelations() {
+		NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+		when(jdbc.update(eq("DELETE FROM FORM_QUESTION WHERE QUESTION_ID = :questionId"), anyMap())).thenReturn(2);
+		when(jdbc.update(eq("DELETE FROM COLLECTION_QUESTION_RELATION WHERE QUESTION_ID = :questionId"), anyMap()))
+				.thenReturn(1);
 
-        var result = new OracleQuestionUsageChecker(jdbc).detachFromForms(10L);
+		var result = new OracleQuestionUsageChecker(jdbc).detachFromForms(10L);
 
-        assertThat(result.fixedFormRelations()).isEqualTo(2);
-        assertThat(result.collectionRelations()).isEqualTo(1);
-        verify(jdbc).update(eq("DELETE FROM FORM_QUESTION WHERE QUESTION_ID = :questionId"), anyMap());
-        verify(jdbc).update(eq("DELETE FROM COLLECTION_QUESTION_RELATION WHERE QUESTION_ID = :questionId"), anyMap());
-    }
+		assertThat(result.fixedFormRelations()).isEqualTo(2);
+		assertThat(result.collectionRelations()).isEqualTo(1);
+		verify(jdbc).update(eq("DELETE FROM FORM_QUESTION WHERE QUESTION_ID = :questionId"), anyMap());
+		verify(jdbc).update(eq("DELETE FROM COLLECTION_QUESTION_RELATION WHERE QUESTION_ID = :questionId"), anyMap());
+	}
 
-    @Test
-    void reportsQuestionAvailableWhenNoActiveDependencyExists() {
-        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.queryForObject(any(String.class), anyMap(), eq(Integer.class))).thenReturn(0);
+	@Test
+	void reportsQuestionAvailableWhenNoActiveDependencyExists() {
+		NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+		when(jdbc.queryForObject(any(String.class), anyMap(), eq(Integer.class))).thenReturn(0);
 
-        assertThat(new OracleQuestionUsageChecker(jdbc).isUsedByActiveExam(10L)).isFalse();
-    }
+		assertThat(new OracleQuestionUsageChecker(jdbc).isUsedByActiveExam(10L)).isFalse();
+	}
 }

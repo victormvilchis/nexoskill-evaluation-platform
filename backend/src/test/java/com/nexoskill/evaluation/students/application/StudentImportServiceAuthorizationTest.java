@@ -11,42 +11,39 @@ import org.junit.jupiter.api.Test;
 
 class StudentImportServiceAuthorizationTest {
 
-    @Test
-    void allowsGlobalAdministratorWithSelectedCommercialOrganization() {
-        AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
-        TenantContext organization = TenantContext.organization(10L, "org-public", "ORG", true);
+	@Test
+	void allowsGlobalAdministratorWithSelectedCommercialOrganization() {
+		AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
+		TenantContext organization = TenantContext.organization(10L, "org-public", "ORG", true);
 
-        assertSame(administrator, StudentImportService.certificationImportActor(administrator, organization));
-    }
+		assertSame(administrator, StudentImportService.certificationImportActor(administrator, organization));
+	}
 
-    @Test
-    void leavesOrganizationOperatorUnchanged() {
-        AuthenticatedUser supervisor = actor(Set.of("SUPERVISOR"));
+	@Test
+	void leavesOrganizationOperatorUnchanged() {
+		AuthenticatedUser supervisor = actor(Set.of("SUPERVISOR"));
 
-        assertSame(supervisor, StudentImportService.certificationImportActor(
-                supervisor, TenantContext.organization(10L, "org-public", "ORG", false)));
-    }
+		assertSame(supervisor, StudentImportService.certificationImportActor(supervisor,
+				TenantContext.organization(10L, "org-public", "ORG", false)));
+	}
 
-    @Test
-    void rejectsGlobalAdministratorWithoutSelectedOrganization() {
-        AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
+	@Test
+	void rejectsGlobalAdministratorWithoutSelectedOrganization() {
+		AuthenticatedUser administrator = actor(Set.of("ADMINISTRATOR"));
 
-        assertThrows(BusinessException.class,
-                () -> StudentImportService.certificationImportActor(administrator, null));
-    }
+		assertThrows(BusinessException.class, () -> StudentImportService.certificationImportActor(administrator, null));
+	}
 
-    @Test
-    void rejectsOrganizationOperatorWhenTenantIsGlobal() {
-        AuthenticatedUser supervisor = actor(Set.of("SUPERVISOR"));
+	@Test
+	void rejectsOrganizationOperatorWhenTenantIsGlobal() {
+		AuthenticatedUser supervisor = actor(Set.of("SUPERVISOR"));
 
-        assertThrows(BusinessException.class,
-                () -> StudentImportService.certificationImportActor(supervisor,
-                        TenantContext.global(1L, "global-public", "GLOBAL")));
-    }
+		assertThrows(BusinessException.class, () -> StudentImportService.certificationImportActor(supervisor,
+				TenantContext.global(1L, "global-public", "GLOBAL")));
+	}
 
-    private AuthenticatedUser actor(Set<String> roles) {
-        return new AuthenticatedUser(7L, "actor-public", "actor@nexoskill.local", "Actor", "Prueba",
-                "Actor Prueba", roles, Set.of("STUDENT_CREATE", "STUDENT_UPDATE"), null,
-                null, null, null, false, null, null);
-    }
+	private AuthenticatedUser actor(Set<String> roles) {
+		return new AuthenticatedUser(7L, "actor-public", "actor@nexoskill.local", "Actor", "Prueba", "Actor Prueba",
+				roles, Set.of("STUDENT_CREATE", "STUDENT_UPDATE"), null, null, null, null, false, null, null);
+	}
 }

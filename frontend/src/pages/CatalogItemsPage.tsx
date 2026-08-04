@@ -21,6 +21,7 @@ import type {
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
@@ -33,7 +34,7 @@ import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import { useAuth } from '../features/authentication/context/AuthContext'
 
-type DialogMode = 'create' | 'view' | 'edit' | 'manage'
+type DialogMode = 'create' | 'view' | 'edit'
 type StatusFilter = ManagedCatalogStatus | 'ALL'
 
 const catalogTypes = new Set<CatalogType>([
@@ -52,7 +53,6 @@ function formatDate(value?: string) {
 function getDialogMode(pathname: string, id?: string): DialogMode | undefined {
   if (pathname.endsWith('/new')) return 'create'
   if (pathname.endsWith('/edit')) return 'edit'
-  if (pathname.endsWith('/manage')) return 'manage'
   if (id) return 'view'
   return undefined
 }
@@ -83,7 +83,8 @@ export function CatalogItemsPage() {
   const [error, setError] = useState<string>()
   const [reloadKey, setReloadKey] = useState(0)
   const [selected, setSelected] = useState<CatalogItem>()
-  const [dependencies, setDependencies] = useState<CatalogDependencies>()
+  const [statusCandidate, setStatusCandidate] = useState<{ item: CatalogItem; action: 'activate' | 'deactivate' }>()
+  const [deleteCandidate, setDeleteCandidate] = useState<CatalogItem>()
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<CatalogPayload>({ code: '', name: '', description: '', displayOrder: 0 })
   const debouncedQuery = useDebouncedValue(query, 250)
@@ -129,7 +130,6 @@ export function CatalogItemsPage() {
 
         if (mode === 'create') {
           setSelected(undefined)
-          setDependencies(undefined)
           setForm({
             code: '',
             name: '',
@@ -159,7 +159,6 @@ export function CatalogItemsPage() {
           })
         } else {
           setSelected(undefined)
-          setDependencies(undefined)
         }
       })
       .catch((requestError: unknown) => {
@@ -174,31 +173,6 @@ export function CatalogItemsPage() {
 
     return () => controller.abort()
   }, [globalAdministrator, listPath, mode, navigate, organizationPublicId, params.id, reloadKey, status, toast, type, validType])
-
-  useEffect(() => {
-    if (mode !== 'manage' || !selected) {
-      setDependencies(undefined)
-      return
-    }
-
-    let active = true
-    setDependencies(undefined)
-    getCatalogDependencies(type, selected.id)
-      .then((value) => {
-        if (active) setDependencies(value)
-      })
-      .catch((requestError: unknown) => {
-        if (!active) return
-        toast.error(
-          'No fue posible cargar las dependencias',
-          requestError instanceof ApiRequestError ? requestError.message : undefined
-        )
-      })
-
-    return () => {
-      active = false
-    }
-  }, [mode, selected, toast, type])
 
   const filtered = useMemo(() => {
     const term = debouncedQuery.trim().toLocaleLowerCase('es-MX')
@@ -277,7 +251,6 @@ export function CatalogItemsPage() {
 
       toast.success(selected ? 'Registro actualizado correctamente' : 'Registro creado correctamente')
       setSelected(undefined)
-      setDependencies(undefined)
       reload()
       navigate(listPath, { replace: true })
     } catch (requestError) {
@@ -290,17 +263,22 @@ export function CatalogItemsPage() {
     }
   }
 
-  async function changeStatus(action: 'activate' | 'deactivate') {
-    if (!selected || busy) return
+  async function confirmStatusChange() {
+    if (!statusCandidate || busy) return
 
     setBusy(true)
     try {
-      await changeCatalogItemStatus(type, selected.id, action, selected.version)
-      toast.success(action === 'activate' ? 'Registro activado correctamente' : 'Registro inactivado correctamente')
-      setSelected(undefined)
-      setDependencies(undefined)
+      await changeCatalogItemStatus(
+        type,
+        statusCandidate.item.id,
+        statusCandidate.action,
+        statusCandidate.item.version
+      )
+      toast.success(statusCandidate.action === 'activate'
+        ? 'Registro activado correctamente.'
+        : 'El registro fue inactivado y ya no estará disponible para nuevas asignaciones.')
+      setStatusCandidate(undefined)
       reload()
-      navigate(listPath, { replace: true })
     } catch (requestError) {
       toast.error('No fue posible cambiar el estado', requestError instanceof ApiRequestError ? requestError.message : undefined)
     } finally {
@@ -308,17 +286,36 @@ export function CatalogItemsPage() {
     }
   }
 
-  async function remove() {
-    if (!selected || busy) return
+  async function requestDelete(item: CatalogItem) {
+    if (busy) return
 
     setBusy(true)
     try {
-      await deleteCatalogItem(type, selected.id, selected.version)
-      toast.success('Registro eliminado correctamente')
-      setSelected(undefined)
-      setDependencies(undefined)
+      const dependencyResult: CatalogDependencies = await getCatalogDependencies(type, item.id)
+      if (!dependencyResult.deletable || dependencyResult.total > 0) {
+        toast.error(
+          'No es posible eliminar este registro porque actualmente está siendo utilizado. Puedes inactivarlo para evitar que esté disponible en nuevos registros.',
+          dependencyResult.details.join(' ') || undefined
+        )
+        return
+      }
+      setDeleteCandidate(item)
+    } catch (requestError) {
+      toast.error('No fue posible validar el uso del registro', requestError instanceof ApiRequestError ? requestError.message : undefined)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteCandidate || busy) return
+
+    setBusy(true)
+    try {
+      await deleteCatalogItem(type, deleteCandidate.id, deleteCandidate.version)
+      toast.success('El registro fue eliminado definitivamente.')
+      setDeleteCandidate(undefined)
       reload()
-      navigate(listPath, { replace: true })
     } catch (requestError) {
       toast.error('No fue posible eliminar el registro', requestError instanceof ApiRequestError ? requestError.message : undefined)
     } finally {
@@ -403,7 +400,9 @@ export function CatalogItemsPage() {
                     <TableActions>
                       <TableActionButton label="Ver" icon="eye" onClick={() => open('view', item)} />
                       {canManage && <TableActionButton label="Editar" icon="edit" tone="primary" onClick={() => open('edit', item)} />}
-                      {canManage && <TableActionButton label="Administrar" icon="archive" onClick={() => open('manage', item)} />}
+                      {canManage && item.status === 'ACTIVE' && <TableActionButton label="Inactivar" icon="archive" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'deactivate' })} />}
+                      {canManage && item.status === 'INACTIVE' && <TableActionButton label="Activar" icon="restore" tone="primary" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'activate' })} />}
+                      {canManage && <TableActionButton label="Eliminar" icon="trash" tone="danger" disabled={busy} onClick={() => void requestDelete(item)} />}
                     </TableActions>
                   </td>
                 </tr>
@@ -428,7 +427,7 @@ export function CatalogItemsPage() {
           <section className="ns-resource-dialog catalog-dialog" role="dialog" aria-modal="true" aria-labelledby="catalog-dialog-title">
             <header>
               <div>
-                <p className="eyebrow">{mode === 'create' ? 'Nuevo registro' : mode === 'edit' ? 'Editar' : mode === 'manage' ? 'Administrar' : 'Ver'}</p>
+                <p className="eyebrow">{mode === 'create' ? 'Nuevo registro' : mode === 'edit' ? 'Editar' : 'Ver'}</p>
                 <h2 id="catalog-dialog-title">{selected?.name ?? summary?.name}</h2>
               </div>
               <button aria-label="Cerrar" className="ns-dialog-close" disabled={busy} type="button" onClick={close}>
@@ -511,39 +510,32 @@ export function CatalogItemsPage() {
               </>
             )}
 
-            {mode === 'manage' && selected && canManage && (
-              <>
-                <div className="catalog-management-summary">
-                  <div><span>Estado actual</span><strong>{selected.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</strong></div>
-                  <div><span>Dependencias</span><strong>{dependencies?.total ?? selected.dependencyCount}</strong></div>
-                </div>
-                {dependencies?.details.map((detail) => <p className="catalog-dependency-detail" key={detail}>{detail}</p>)}
-                <section className="catalog-action-panel">
-                  <h3>{selected.status === 'ACTIVE' ? 'Inactivar registro' : 'Reactivar registro'}</h3>
-                  <p>{selected.status === 'ACTIVE'
-                    ? 'Dejará de aparecer en nuevos formularios. Las relaciones históricas se conservarán.'
-                    : 'Volverá a estar disponible en los selectores operativos.'}</p>
-                  <button className="secondary-button" disabled={busy} type="button" onClick={() => void changeStatus(selected.status === 'ACTIVE' ? 'deactivate' : 'activate')}>
-                    {selected.status === 'ACTIVE' ? 'Inactivar' : 'Activar'}
-                  </button>
-                </section>
-                {selected.status === 'INACTIVE' && (
-                  <section className="catalog-action-panel catalog-danger-panel">
-                    <h3>Eliminar registro</h3>
-                    <p>{dependencies?.deletable
-                      ? 'El registro nunca ha sido utilizado y puede eliminarse de forma segura.'
-                      : 'No es posible eliminarlo porque mantiene relaciones históricas.'}</p>
-                    <button className="danger-button" disabled={busy || !dependencies?.deletable} type="button" onClick={() => void remove()}>
-                      Eliminar definitivamente
-                    </button>
-                  </section>
-                )}
-                <footer><button className="secondary-button" disabled={busy} type="button" onClick={close}>Volver</button></footer>
-              </>
-            )}
           </section>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(statusCandidate)}
+        title={statusCandidate?.action === 'activate' ? 'Activar registro' : 'Inactivar registro'}
+        description={statusCandidate?.action === 'activate'
+          ? 'Este registro volverá a estar disponible para nuevas asignaciones. ¿Deseas continuar?'
+          : 'Este registro dejará de estar disponible para nuevas asignaciones, pero se conservará en los registros donde ya está siendo utilizado. ¿Deseas continuar?'}
+        confirmLabel={statusCandidate?.action === 'activate' ? 'Confirmar activación' : 'Confirmar inactivación'}
+        busy={busy}
+        onCancel={() => setStatusCandidate(undefined)}
+        onConfirm={() => void confirmStatusChange()}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteCandidate)}
+        title="Eliminar registro"
+        description="Esta acción eliminará permanentemente el registro del catálogo. ¿Deseas continuar?"
+        confirmLabel="Confirmar eliminación"
+        tone="danger"
+        busy={busy}
+        onCancel={() => setDeleteCandidate(undefined)}
+        onConfirm={() => void confirmDelete()}
+      />
     </main>
   )
 }

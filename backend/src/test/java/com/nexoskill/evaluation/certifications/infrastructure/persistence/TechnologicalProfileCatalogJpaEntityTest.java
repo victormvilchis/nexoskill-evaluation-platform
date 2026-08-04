@@ -7,20 +7,20 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class TechnologicalProfileCatalogJpaEntityTest {
-    @Test
-    void usesOnlyActiveAndInactiveOperationalStates() {
-        Instant now = Instant.parse("2026-07-27T12:00:00Z");
-        TechnologicalProfileCatalogJpaEntity profile = TechnologicalProfileCatalogJpaEntity.create(
-                "00000000-0000-0000-4000-000000000001", "DEVELOPER", "Desarrollador",
-                null, 10, ContentScope.GLOBAL, null, 1L, now);
+	@Test
+	void usesOnlyActiveAndInactiveOperationalStates() {
+		Instant now = Instant.parse("2026-07-27T12:00:00Z");
+		TechnologicalProfileCatalogJpaEntity profile = TechnologicalProfileCatalogJpaEntity.create(
+				"00000000-0000-0000-4000-000000000001", "DEVELOPER", "Desarrollador", null, 10, ContentScope.GLOBAL,
+				null, 1L, now);
 
-        assertThat(profile.getStatus()).isEqualTo("ACTIVE");
-        assertThat(profile.getContentScope()).isEqualTo(ContentScope.GLOBAL);
-        assertThat(profile.getOwnerOrganizationId()).isNull();
+		assertThat(profile.getStatus()).isEqualTo("ACTIVE");
+		assertThat(profile.getContentScope()).isEqualTo(ContentScope.GLOBAL);
+		assertThat(profile.getOwnerOrganizationId()).isNull();
 
-        profile.changeStatus("INACTIVE", 2L, now.plusSeconds(60));
+		profile.changeStatus("INACTIVE", 2L, now.plusSeconds(60));
 
-        assertThat(profile.getStatus()).isEqualTo("INACTIVE");
-        assertThat(profile.getUpdatedBy()).isEqualTo(2L);
-    }
+		assertThat(profile.getStatus()).isEqualTo("INACTIVE");
+		assertThat(profile.getUpdatedBy()).isEqualTo(2L);
+	}
 }
