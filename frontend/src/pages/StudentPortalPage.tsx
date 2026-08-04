@@ -24,7 +24,6 @@ export function StudentPortalPage() {
           <div><dt>Organización</dt><dd>{student.organizationName}</dd></div>
           <div><dt>Código</dt><dd>{student.studentCode}</dd></div>
           <div><dt>Correo</dt><dd>{student.email}</dd></div>
-          <div><dt>Vigencia</dt><dd>{student.expiresAt ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'long' }).format(new Date(student.expiresAt)) : 'Sin vencimiento'}</dd></div>
         </dl>
       </section>
     </main>

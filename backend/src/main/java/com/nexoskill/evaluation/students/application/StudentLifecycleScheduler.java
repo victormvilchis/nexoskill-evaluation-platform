@@ -34,23 +34,8 @@ public class StudentLifecycleScheduler {
     @Transactional
     public void revokeInvalidSessions() {
         Instant now = clock.instant();
-        LocalDate today = LocalDate.now(clock);
         sessionRepository.expireElapsedSessions(StudentSessionStatus.ACTIVE, StudentSessionStatus.EXPIRED,
                 StudentSessionRevocationReason.EXPIRED, now);
-        for (Long studentId : studentRepository.findExpiredActiveStudentIds(today)) {
-            StudentJpaEntity student = studentRepository.findByIdForUpdate(studentId).orElse(null);
-            if (student == null || student.getStatus() != StudentStatus.ACTIVE
-                    || student.getExpiresAt() == null || !student.getExpiresAt().isBefore(today)) {
-                continue;
-            }
-            student.expire(student.getUpdatedBy(), now);
-            studentRepository.save(student);
-            sessionRepository.revokeActive(studentId, StudentSessionStatus.ACTIVE, StudentSessionStatus.REVOKED,
-                    StudentSessionRevocationReason.EXPIRED, now);
-            audit.record(null, "STUDENT_EXPIRED", "STUDENTS",
-                    "La vigencia del estudiante expiró y sus sesiones activas fueron revocadas.",
-                    null, null, Map.of("studentPublicId", student.getPublicId(),
-                            "organizationId", student.getOrganizationId()), now);
-        }
     }
+
 }

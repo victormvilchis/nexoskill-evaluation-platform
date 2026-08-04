@@ -112,6 +112,21 @@ export interface FormPayload {
   sections?: never[]
 }
 
+export interface FormQuestionAnswerOption {
+  publicId: string
+  order: number
+  text?: string
+  matchText?: string
+  correct: boolean
+  feedback?: string
+}
+
+export interface FormOrganizationOption {
+  publicId: string
+  code: string
+  name: string
+}
+
 export interface FormQuestionOption {
   publicId: string
   statement: string
@@ -124,6 +139,12 @@ export interface FormQuestionOption {
   categoryNames: string[]
   contentScope: FormContentScope
   organizationName: string
+  explanation?: string
+  codeLanguage?: string
+  codeContent?: string
+  acceptedAnswersJson?: string
+  options: FormQuestionAnswerOption[]
+  defaultPoints: number
 }
 
 export interface FormQuestionOptionPage {

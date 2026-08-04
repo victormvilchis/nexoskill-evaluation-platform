@@ -3,20 +3,19 @@ import { searchOrganizations } from '../features/organizations/api/organizationA
 import { createUser, getRoles } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
-import { DateTimeField } from '../shared/components/DateField'
 import { SelectField } from '../shared/components/SelectField'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import type { InternalRoleCode, RoleOption } from '../shared/types/users'
 
-function defaultStartDate() {
-  const now = new Date()
-  const offset = now.getTimezoneOffset() * 60_000
-  return new Date(now.getTime() - offset).toISOString().slice(0, 16)
+function startOfDate(value: string) {
+  return new Date(`${value}T00:00:00`).toISOString()
 }
 
-function toInstant(value: string) {
-  return new Date(value).toISOString()
+function dayAfter(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+  date.setDate(date.getDate() + 1)
+  return date.toISOString()
 }
 
 export function CreateUserPage() {
@@ -29,9 +28,6 @@ export function CreateUserPage() {
   const [displayName, setDisplayName] = useState('')
   const [roleCode, setRoleCode] = useState<InternalRoleCode>('MANAGER')
   const [organizationPublicId, setOrganizationPublicId] = useState('')
-  const [startsAt, setStartsAt] = useState(defaultStartDate)
-  const [expiresAt, setExpiresAt] = useState('')
-  const [withoutExpiration, setWithoutExpiration] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -82,6 +78,7 @@ export function CreateUserPage() {
   }, [roleCode, globalOrganization, customerOrganizations, organizationPublicId])
 
   const organizationRequired = true
+  const selectedOrganization = organizations.find((organization) => organization.publicId === organizationPublicId)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -92,13 +89,6 @@ export function CreateUserPage() {
     const localErrors: Record<string, string> = {}
     if (organizationRequired && !organizationPublicId) {
       localErrors.organizationPublicId = 'Selecciona una organización.'
-    }
-    if (!startsAt) localErrors.startsAt = 'La fecha de inicio es obligatoria.'
-    if (!withoutExpiration && !expiresAt) {
-      localErrors.expiresAt = 'Selecciona un vencimiento o marca acceso sin vencimiento.'
-    }
-    if (!withoutExpiration && startsAt && expiresAt && new Date(expiresAt) <= new Date(startsAt)) {
-      localErrors.expiresAt = 'El vencimiento debe ser posterior al inicio.'
     }
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors)
@@ -114,8 +104,8 @@ export function CreateUserPage() {
         displayName: displayName.trim() || undefined,
         roleCode,
         organizationPublicId,
-        startsAt: toInstant(startsAt),
-        expiresAt: withoutExpiration ? null : toInstant(expiresAt)
+        startsAt: startOfDate(new Date().toISOString().slice(0, 10)),
+        expiresAt: selectedOrganization?.expiresOn ? dayAfter(selectedOrganization.expiresOn) : null
       })
       completeSave({
         title: 'Usuario creado correctamente.',
@@ -143,14 +133,6 @@ export function CreateUserPage() {
   return (
     <main className="content-page resource-page create-user-page">
       <BackButton fallback="/admin/users" />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Usuarios</p>
-          <h1>Crear usuario interno</h1>
-          <p className="muted">La plataforma generará una contraseña temporal segura y la mostrará una sola vez.</p>
-        </div>
-      </header>
-
       <form className="entity-form internal-user-form" onSubmit={(event) => void handleSubmit(event)}>
         <section className="form-section form-wide">
           <div className="form-section-heading"><span className="form-section-number">1</span><div><h2>Datos generales</h2><p>Información de identificación y contacto.</p></div></div>
@@ -186,18 +168,6 @@ export function CreateUserPage() {
           </div>
         </section>
 
-        <section className="form-section form-wide">
-          <div className="form-section-heading"><span className="form-section-number">3</span><div><h2>Vigencia</h2><p>Define el periodo de acceso del usuario.</p></div></div>
-          <div className="internal-user-validity-grid">
-            <label className="form-field"><span>Inicio de vigencia</span><DateTimeField value={startsAt} onChange={setStartsAt} required ariaInvalid={Boolean(fieldErrors.startsAt)} ariaLabel="Seleccionar inicio de vigencia" />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
-            <label className="form-field"><span>Vencimiento</span><DateTimeField value={expiresAt} onChange={setExpiresAt} disabled={withoutExpiration} required={!withoutExpiration} ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
-            <label className="internal-user-expiration-check">
-              <span className="internal-user-expiration-label">Vigencia indefinida</span>
-              <span className="checkbox-row"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</span>
-              <small>Deshabilita la fecha y hora de vencimiento sin modificar el inicio de vigencia.</small>
-            </label>
-          </div>
-        </section>
 
         <div className="password-policy form-wide">
           <strong>Contraseña temporal automática</strong>

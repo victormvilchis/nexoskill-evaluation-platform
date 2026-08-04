@@ -430,7 +430,7 @@ public class TalentBankService {
         return switch (eventType == null ? "" : eventType) {
             case "TALENT_ACADEMY_CREATED" -> "Alta en Academia";
             case "TALENT_PROSPECT_CREATED" -> "Alta de prospecto";
-            case "STUDENT_MOVED_TO_TALENT_BANK" -> "Baja de BBVA";
+            case "STUDENT_MOVED_TO_TALENT_BANK" -> "Baja";
             case "TALENT_CV_UPDATED" -> "Actualización de CV";
             case "TALENT_UPDATED", "TALENT_FOUNDATION_UPDATED" -> "Actualización de talento";
             default -> "Cambio relevante";

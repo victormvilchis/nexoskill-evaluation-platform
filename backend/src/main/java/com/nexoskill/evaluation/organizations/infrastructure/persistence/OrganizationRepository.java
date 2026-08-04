@@ -1,6 +1,8 @@
 package com.nexoskill.evaluation.organizations.infrastructure.persistence;
 
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +16,7 @@ public interface OrganizationRepository extends JpaRepository<OrganizationJpaEnt
     boolean existsByCode(String code);
     boolean existsByNameIgnoreCase(String name);
     boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
+    List<OrganizationJpaEntity> findAllByOrganizationTypeAndStatusOrderByNameAsc(OrganizationType type, OrganizationStatus status);
 
     @Query(value = """
         select o as organization,

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { createAcademyTalent, getTalent, getTalentCatalogs, updateAcademyTalent, uploadTalentCv } from '../features/talent-bank/api/talentBankApi'
+import { TalentCvUploadField } from '../features/talent-bank/components/TalentCvUploadField'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
@@ -33,7 +34,7 @@ export function AcademyTalentEditorPage({ mode }: Props) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [validFrom, setValidFrom] = useState(today())
-  const [expiresAt, setExpiresAt] = useState('')
+  const [expiresAt, setExpiresAt] = useState('2999-12-31')
   const [organizationHiredOn, setOrganizationHiredOn] = useState('')
   const [profileCode, setProfileCode] = useState<TalentProfileCode>('JR')
   const [technologyPublicId, setTechnologyPublicId] = useState('')
@@ -97,8 +98,6 @@ export function AcademyTalentEditorPage({ mode }: Props) {
     if (!email.trim()) errors.email = 'El correo es obligatorio.'
     if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
     if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
-    if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
-    if (!expiresAt) errors.expiresAt = 'El vencimiento es obligatorio.'
     if (!organizationHiredOn) errors.organizationHiredOn = 'La fecha de contratación es obligatoria.'
     if (!technologyPublicId) errors.technologyPublicId = 'Selecciona una tecnología.'
     setFieldErrors(errors); return Object.keys(errors).length === 0
@@ -157,13 +156,11 @@ export function AcademyTalentEditorPage({ mode }: Props) {
           <label className="form-field ns-field-span-8"><span>Correo</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />{fieldErrors.email && <small className="field-error">{fieldErrors.email}</small>}</label>
           <label className="form-field ns-field-span-6"><span>Nombre</span><input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} />{fieldErrors.firstName && <small className="field-error">{fieldErrors.firstName}</small>}</label>
           <label className="form-field ns-field-span-6"><span>Apellidos</span><input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} />{fieldErrors.lastName && <small className="field-error">{fieldErrors.lastName}</small>}</label>
-          <label className="form-field ns-field-span-4"><span>Inicio de vigencia</span><DateField name="validFrom" value={validFrom} onChange={setValidFrom} />{fieldErrors.validFrom && <small className="field-error">{fieldErrors.validFrom}</small>}</label>
-          <label className="form-field ns-field-span-4"><span>Vencimiento</span><DateField name="expiresAt" value={expiresAt} min={validFrom || undefined} onChange={setExpiresAt} />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
           <label className="form-field ns-field-span-4"><span>Fecha de contratación en la organización</span><DateField name="organizationHiredOn" value={organizationHiredOn} onChange={setOrganizationHiredOn} />{fieldErrors.organizationHiredOn && <small className="field-error">{fieldErrors.organizationHiredOn}</small>}</label>
           <label className="form-field ns-field-span-4"><span>Perfil</span><SelectField name="profileCode" value={profileCode} onChange={(value) => setProfileCode(value as TalentProfileCode)} options={(catalogs?.profiles ?? []).map((value) => ({ value, label: value }))} /></label>
           <label className="form-field ns-field-span-8"><span>Tecnología</span><SelectField name="technologyPublicId" value={technologyPublicId} onChange={setTechnologyPublicId} options={[{ value: '', label: 'Seleccionar tecnología' }, ...(catalogs?.technologies ?? []).map((item) => ({ value: item.publicId, label: item.name }))]} />{fieldErrors.technologyPublicId && <small className="field-error">{fieldErrors.technologyPublicId}</small>}</label>
         </div></section>
-        <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Documentación</p><h2>Currículum vitae</h2></div></div><label className="form-field"><span>CV en PDF, Word o PowerPoint</span><input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" onChange={(event) => setCvFile(event.target.files?.[0])} /><small>Tamaño máximo: 15 MB.</small></label></section>
+        <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Documentación</p><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} disabled={saving} onChange={setCvFile} /></section>
         <FormActions sticky><button type="button" className="secondary-button" disabled={saving} onClick={() => navigate('/admin/talent-bank')}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Guardando…' : mode === 'create' ? 'Registrar talento' : 'Guardar cambios'}</button></FormActions>
       </>}
     </form>

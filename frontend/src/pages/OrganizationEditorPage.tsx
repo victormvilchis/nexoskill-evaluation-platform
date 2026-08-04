@@ -222,19 +222,6 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
     <main className="content-page org-editor-page">
       <BackButton fallback="/admin/organizations" />
 
-      <header className="ns-page-header org-editor-header">
-        <div>
-          <p className="eyebrow">Multiorganización</p>
-          <h1>{readOnly ? 'Detalle de organización' : editing ? 'Editar organización' : 'Nueva organización'}</h1>
-          <p className="muted">
-            {global
-              ? 'Contexto interno global de Valtieris Talent Platform. No utiliza licenciamiento comercial.'
-              : 'Configura identidad, contenido, vencimiento y política comercial.'}
-          </p>
-        </div>
-        {editing && status && <span className={`status-badge status-${status.toLowerCase()}`}>{status}</span>}
-      </header>
-
       {error && (
         <section className="inline-error-panel org-editor-error" role="alert">
           <div className="inline-error-icon"><Icon name="error" size={20} /></div>

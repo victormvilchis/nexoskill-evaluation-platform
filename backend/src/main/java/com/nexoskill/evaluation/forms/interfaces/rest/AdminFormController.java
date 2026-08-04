@@ -49,6 +49,12 @@ public class AdminFormController {
     }
 
 
+    @GetMapping("/organizations")
+    @PreAuthorize("hasAuthority('FORM_VIEW')")
+    public java.util.List<FormModels.OrganizationOptionView> organizations() {
+        return service.availableOrganizations();
+    }
+
     @GetMapping("/content-options/questions")
     @PreAuthorize("hasAuthority('FORM_VIEW')")
     public FormModels.QuestionOptionPage questionOptions(

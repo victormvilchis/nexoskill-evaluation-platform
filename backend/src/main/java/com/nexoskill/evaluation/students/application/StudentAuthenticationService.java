@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -80,11 +81,6 @@ public class StudentAuthenticationService {
 			throw invalidLogin(command, student, "TEMP_PASSWORD_EXPIRED", now);
 		}
 		LocalDate today = LocalDate.now(clock);
-		StudentEffectiveStatus effectiveStatus = student.effectiveStatusOn(today);
-		if (effectiveStatus == StudentEffectiveStatus.EXPIRED) {
-			revokeActive(student.getId(), StudentSessionRevocationReason.EXPIRED, now);
-			throw invalidLogin(command, student, "STUDENT_ACCESS_EXPIRED", now);
-		}
 		if (!student.canAuthenticateOn(today, now)) {
 			throw invalidLogin(command, student, "STUDENT_ACCOUNT_UNAVAILABLE", now);
 		}
@@ -103,9 +99,10 @@ public class StudentAuthenticationService {
 
 		String rawToken = tokenGenerator.generate();
 		Instant expiresAt = now.plus(properties.getSecurity().getSessionDuration());
-		Instant accessExpiration = student.accessExpirationInstant(clock.getZone());
-		if (accessExpiration != null && accessExpiration.isBefore(expiresAt)) {
-			expiresAt = accessExpiration;
+		if (organization.getExpiresOn() != null) {
+			Instant organizationExpiration = organization.getExpiresOn().plusDays(1)
+					.atStartOfDay(ZoneOffset.UTC).toInstant();
+			if (organizationExpiration.isBefore(expiresAt)) expiresAt = organizationExpiration;
 		}
 		if (student.isPasswordChangeRequired() && student.getTemporaryPasswordExpiresAt() != null
 				&& student.getTemporaryPasswordExpiresAt().isBefore(expiresAt)) {
@@ -167,7 +164,7 @@ public class StudentAuthenticationService {
 		return new AuthenticatedStudent(student.getId(), student.getPublicId(), organization.getId(),
 				organization.getPublicId(), organization.getCode(), organization.getName(), student.getStudentCode(),
 				student.getEmail(), student.getFirstName(), student.getLastName(), student.getDisplayName(),
-				student.effectiveStatusOn(LocalDate.now(clock)), student.getValidFrom(), student.getExpiresAt(),
+				student.effectiveStatusOn(LocalDate.now(clock)), organization.getValidFrom(), organization.getExpiresOn(),
 				student.getLastLoginAt(), student.isPasswordChangeRequired());
 	}
 

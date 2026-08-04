@@ -30,8 +30,7 @@ const navigationConfig: NavSection[] = [
       { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
       { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
       { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' },
-      { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'STUDENT_VIEW' },
-      { id: 'permanent-deletions', label: 'Eliminaciones definitivas', to: '/admin/permanent-deletions', icon: 'trash', permission: 'STUDENT_DELETE' }
+      { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'STUDENT_VIEW' }
     ]
   },
   {
@@ -323,7 +322,6 @@ export function ApplicationLayout() {
               <span className="avatar">{initials(user?.displayName)}</span>
               <span className="account-trigger-copy">
                 <strong>{user?.displayName}</strong>
-                <small>{user?.roles.includes('ADMINISTRATOR') ? 'Administrador' : 'Usuario'}</small>
               </span>
               <Icon name="chevronDown" size={15} />
             </button>

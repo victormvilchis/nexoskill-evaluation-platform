@@ -2,6 +2,9 @@ package com.nexoskill.evaluation.forms.application;
 
 import com.nexoskill.evaluation.organizations.domain.model.ContentScope;
 import com.nexoskill.evaluation.organizations.domain.model.TenantContext;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
+import java.util.List;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
@@ -66,6 +69,30 @@ public class FormCreationTargetResolver {
                         "No fue posible resolver la organización propietaria del formulario."));
         return new Target(scope, organization.getId(), organization.getPublicId(),
                 organization.getCode(), organization.getName());
+    }
+
+    public List<FormModels.OrganizationOptionView> availableOrganizations(TenantContext tenant) {
+        if (tenant == null || !tenant.hasOrganization()) {
+            throw new BusinessException("FORM_CONTEXT_NOT_RESOLVED",
+                    "No fue posible determinar el contexto autorizado para consultar organizaciones.");
+        }
+        if (!tenant.globalAdministrator()) {
+            OrganizationJpaEntity organization = organizations.findById(tenant.organizationId())
+                    .orElseThrow(() -> new BusinessException("FORM_OWNER_ORGANIZATION_INVALID",
+                            "No fue posible resolver la organización activa."));
+            return List.of(toOption(organization));
+        }
+        LocalDate today = LocalDate.now(clock);
+        return organizations.findAllByOrganizationTypeAndStatusOrderByNameAsc(
+                        OrganizationType.CUSTOMER, OrganizationStatus.ACTIVE).stream()
+                .filter(organization -> organization.isOperational(today))
+                .map(this::toOption)
+                .toList();
+    }
+
+    private FormModels.OrganizationOptionView toOption(OrganizationJpaEntity organization) {
+        return new FormModels.OrganizationOptionView(organization.getPublicId(), organization.getCode(),
+                organization.getName());
     }
 
     private ContentScope parseScope(String value, TenantContext tenant) {

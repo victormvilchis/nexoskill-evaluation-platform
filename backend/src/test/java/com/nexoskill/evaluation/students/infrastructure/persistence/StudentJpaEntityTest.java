@@ -17,17 +17,17 @@ class StudentJpaEntityTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 26);
 
     @Test
-    void usesCalendarDatesAndFourFunctionalStatusesForAuthentication() {
+    void ignoresIndividualAccessDatesBecauseOrganizationLicenseControlsAuthentication() {
         StudentJpaEntity future = student(StudentStatus.ACTIVE, TODAY.plusDays(1), TODAY.plusDays(30));
         StudentJpaEntity active = student(StudentStatus.ACTIVE, TODAY.minusDays(1), TODAY.plusDays(30));
         StudentJpaEntity expired = student(StudentStatus.ACTIVE, TODAY.minusDays(30), TODAY.minusDays(1));
         StudentJpaEntity inactiveExpired = student(StudentStatus.INACTIVE, TODAY.minusDays(30), TODAY.minusDays(1));
 
         assertThat(future.effectiveStatusOn(TODAY)).isEqualTo(StudentEffectiveStatus.ACTIVE);
-        assertThat(future.canAuthenticateOn(TODAY, NOW)).isFalse();
+        assertThat(future.canAuthenticateOn(TODAY, NOW)).isTrue();
         assertThat(active.canAuthenticateOn(TODAY, NOW)).isTrue();
-        assertThat(expired.effectiveStatusOn(TODAY)).isEqualTo(StudentEffectiveStatus.EXPIRED);
-        assertThat(expired.canAuthenticateOn(TODAY, NOW)).isFalse();
+        assertThat(expired.effectiveStatusOn(TODAY)).isEqualTo(StudentEffectiveStatus.ACTIVE);
+        assertThat(expired.canAuthenticateOn(TODAY, NOW)).isTrue();
         assertThat(inactiveExpired.effectiveStatusOn(TODAY)).isEqualTo(StudentEffectiveStatus.INACTIVE);
     }
 

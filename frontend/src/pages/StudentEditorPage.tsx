@@ -4,7 +4,8 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { getStudentExperience, updateStudentExperience } from '../features/students/api/studentImportApi'
 import { createStudent, getStudent, getStudentCatalogs, updateStudent } from '../features/students/api/studentApi'
-import { createProspectTalent, getTalentFoundation, updateFullTalent, convertTalent } from '../features/talent-bank/api/talentBankApi'
+import { createProspectTalent, getTalentFoundation, updateFullTalent, convertTalent, uploadTalentCv } from '../features/talent-bank/api/talentBankApi'
+import { TalentCvUploadField } from '../features/talent-bank/components/TalentCvUploadField'
 import { StudentExperienceFields } from '../features/students/components/StudentExperienceFields'
 import { StudentTemporaryCredentialsDialog } from '../features/students/components/StudentTemporaryCredentialsDialog'
 import type { StudentExperiencePayload } from '../features/students/types/studentImport'
@@ -115,8 +116,9 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   const [lastName, setLastName] = useState('')
   const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
   const [validFrom, setValidFrom] = useState(todayInput())
-  const [expiresAt, setExpiresAt] = useState('')
+  const [expiresAt, setExpiresAt] = useState('2999-12-31')
   const [admissionDate, setAdmissionDate] = useState('')
+  const [cvFile, setCvFile] = useState<File>()
   const [professionalProfilePublicId, setProfessionalProfilePublicId] = useState('')
   const [technologicalProfilePublicId, setTechnologicalProfilePublicId] = useState('')
   const [flags, setFlags] = useState<CertificationFlags>(EMPTY_FLAGS)
@@ -273,10 +275,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
     if ((!talentWorkspace || conversion) && corporateUser.trim() && !admissionDate && corporateUser.trim() !== (student?.corporateUser ?? '').trim()) errors.corporateUser = 'Captura una Fecha de alta para habilitar el Usuario corporativo.'
     if (!firstName.trim()) errors.firstName = 'El nombre es obligatorio.'
     if (!lastName.trim()) errors.lastName = 'Los apellidos son obligatorios.'
-    if (!validFrom) errors.validFrom = 'El inicio de vigencia es obligatorio.'
-    if (!expiresAt) errors.expiresAt = 'La fecha de vencimiento es obligatoria.'
     if (talentWorkspace && conversion && !admissionDate) errors.admissionDate = 'La Fecha de alta es obligatoria para convertir el talento.'
-    if (validFrom && expiresAt && expiresAt < validFrom) errors.expiresAt = 'La fecha de vencimiento no puede ser anterior al inicio de vigencia.'
     setFieldErrors(errors)
     if (Object.keys(errors).length > 0) focusFirstFieldError(errors)
     return Object.keys(errors).length === 0
@@ -318,6 +317,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
         if (talentWorkspace) {
           const response = await createProspectTalent(payload)
           createdPublicId = response.talent.publicId
+          if (cvFile) await uploadTalentCv(createdPublicId, cvFile)
         } else {
           const response = await createStudent(payload)
           createdPublicId = response.student.publicId
@@ -348,8 +348,10 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
           ...certificationPayload, version: student.version
         }
         if (talentWorkspace && conversion) await convertTalent(publicId, updatePayload)
-        else if (talentWorkspace) await updateFullTalent(publicId, updatePayload)
-        else await updateStudent(publicId, updatePayload)
+        else if (talentWorkspace) {
+          await updateFullTalent(publicId, updatePayload)
+          if (cvFile) await uploadTalentCv(publicId, cvFile)
+        } else await updateStudent(publicId, updatePayload)
         let experienceWarning = false
         try {
           await updateStudentExperience(publicId, cleanExperience(experience))
@@ -368,7 +370,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
             : `${talentWorkspace ? 'Talento' : 'Colaborador'} actualizado correctamente.`, message: experienceWarning
           ? 'Los datos principales se guardaron, pero la experiencia deberá actualizarse nuevamente.'
           : movedToTalentBank
-            ? 'El colaborador fue dado de baja de BBVA y trasladado a Talent Bank.'
+            ? 'El colaborador fue dado de baja y trasladado a Talent Bank.'
             : admissionChanged && !talentWorkspace
               ? 'La fecha de alta cambió; se recalcularon únicamente las fechas límite pendientes.'
               : undefined })
@@ -385,7 +387,6 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   return (
     <main className="content-page editor-page student-editor-foundation">
       <BackButton fallback={basePath} />
-      <header className="page-heading compact ns-redundant-editor-heading"><div><p className="eyebrow">{talentWorkspace ? 'Talent Bank' : 'Colaboradores'}</p><h1>{conversion ? 'Convertir a colaborador' : mode === 'create' ? (talentWorkspace ? 'Nuevo prospecto' : 'Nuevo colaborador') : mode === 'edit' ? (talentWorkspace ? 'Editar talento' : 'Editar colaborador') : (talentWorkspace ? 'Ver talento' : 'Ver colaborador')}</h1><p className="muted">{conversion ? 'Completa la información faltante para incorporar el talento a Colaboradores.' : talentWorkspace ? 'El registro pertenece a la organización, pero no contabiliza en los indicadores de Colaboradores.' : 'La Fecha de alta determina si el colaborador está activo y puede gestionar certificaciones.'}</p></div></header>
       {error && <div className="error-message" role="alert">{error}</div>}
       <form className="student-foundation-form" onSubmit={handleSubmit} noValidate>
         {administrator && mode === 'create' && <section className="editor-card student-organization-first"><div className="section-heading"><div><p className="eyebrow">Organización</p><h2>Selecciona primero la organización</h2></div></div><div className="foundation-form-grid"><label className="form-field"><span>Organización</span><SelectField name="organizationPublicId" value={organizationPublicId} onChange={(nextValue) => void changeOrganization(nextValue)} disabled={organizationLoading} required ariaInvalid={Boolean(fieldErrors.organizationPublicId)} ariaLabel="Organización" options={[{ value: '', label: 'Seleccionar organización' }, ...organizations.map((item) => ({ value: item.publicId, label: `${item.name} · ${item.code}` }))]} />{field('organizationPublicId')}</label>{organizationLoading && <p className="form-help">Cargando organizaciones comerciales activas…</p>}{!organizationLoading && !organizationPublicId && <p className="form-help">Selecciona una organización para habilitar el resto del formulario.</p>}{organizationPublicId && catalogLoading && <p className="form-help">Consultando la configuración de {selectedOrganization?.name ?? 'la organización'}…</p>}{organizationError && <div className="error-message" role="alert">{organizationError}</div>}{catalogError && <div className="error-message" role="alert">{catalogError}</div>}</div></section>}
@@ -403,11 +404,9 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
             <label className="form-field ns-field-span-6"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
             <label className="form-field ns-field-span-6"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{firstName}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
             <label className="form-field ns-field-span-6"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{lastName}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
-            <label className="form-field ns-field-span-4"><span>Inicio de vigencia</span>{readOnly ? <strong className="readonly-value">{formatDate(validFrom)}</strong> : <DateField name="validFrom" value={validFrom} onChange={setValidFrom} required ariaInvalid={Boolean(fieldErrors.validFrom)} ariaLabel="Seleccionar inicio de vigencia" />}{field('validFrom')}</label>
-            <label className="form-field ns-field-span-4"><span>Vencimiento</span>{readOnly ? <strong className="readonly-value">{formatDate(expiresAt)}</strong> : <DateField name="expiresAt" value={expiresAt} min={validFrom || undefined} onChange={setExpiresAt} required ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />}{field('expiresAt')}</label>
             <label className="form-field ns-field-span-4"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <DateField name="admissionDate" value={admissionDate} onChange={setAdmissionDate} disabled={talentWorkspace && !conversion} ariaInvalid={Boolean(fieldErrors.admissionDate)} ariaLabel="Seleccionar Fecha de alta" />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">{talentWorkspace && !conversion ? 'La Fecha de alta se capturará durante la conversión a colaborador.' : 'Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.'}</small>}</label>
             {readOnly && student?.organization && <label className="form-field ns-field-span-6"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
-            {readOnly && student && <label className="form-field ns-field-span-6"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Desactivado' : 'Vencido'}</strong></label>}
+            {readOnly && student && <label className="form-field ns-field-span-6"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Dado de baja' : 'Dado de baja'}</strong></label>}
           </div></section>
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
             <label className="form-field ns-field-span-6"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={setProfessionalProfilePublicId} disabled={(!admissionDate && !talentWorkspace) || profileOptions.length === 0} ariaLabel="Perfil" options={[{ value: '', label: 'Seleccionar perfil' }, ...profileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && !admissionDate && <small>El colaborador está inactivo; la información de certificaciones es solo de consulta.</small>}{!readOnly && admissionDate && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
@@ -415,6 +414,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
 
           </div>}</section>}
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate || talentWorkspace ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate && !talentWorkspace} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
+          {talentWorkspace && !conversion && !readOnly && <section className="editor-card"><div className="section-heading"><div><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} disabled={saving} onChange={setCvFile} /></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />
         </>}
         {!readOnly && organizationResolved && (
@@ -450,7 +450,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       <ConfirmDialog
         open={confirmingDeactivation}
         title="Confirmar baja del colaborador"
-        description="Al eliminar la Fecha de alta, el colaborador será dado de baja de BBVA y trasladado a Talent Bank dentro de la misma organización. Conservará su información e historial, perderá el acceso y dejará de contabilizarse en los indicadores operativos."
+        description="Al eliminar la Fecha de alta, el colaborador será dado de baja y trasladado a Talent Bank dentro de la misma organización. Conservará su información e historial, perderá el acceso y dejará de contabilizarse en los indicadores operativos."
         confirmLabel="Dar de baja"
         tone="danger"
         busy={saving}

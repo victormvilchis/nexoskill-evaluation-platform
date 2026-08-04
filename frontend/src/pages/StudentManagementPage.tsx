@@ -6,7 +6,6 @@ import {
   deactivateStudent,
   getStudentAdministration,
   getStudentAdministrativeHistory,
-  deleteStudent,
   resetStudentPassword,
   revokeAllStudentSessions,
   revokeStudentSession
@@ -30,8 +29,8 @@ type PendingAction = 'ACTIVATE' | 'DEACTIVATE' | 'RESET_PASSWORD'
 
 const STATUS_LABELS = {
   ACTIVE: 'Activo',
-  INACTIVE: 'Desactivado',
-  EXPIRED: 'Vencido',
+  INACTIVE: 'Dado de baja',
+  EXPIRED: 'Dado de baja',
   DELETED: 'Eliminado'
 } as const
 
@@ -54,8 +53,8 @@ function sessionLabel(session: StudentSession) {
 function revocationReasonLabel(reason?: string | null) {
   if (!reason) return undefined
   return ({
-    DEACTIVATED: 'Baja de BBVA',
-    EXPIRED: 'Vigencia vencida',
+    DEACTIVATED: 'Baja',
+    EXPIRED: 'Acceso restringido por la organización',
     PASSWORD_RESET: 'Restablecimiento de contraseña',
     ADMIN_REVOKED: 'Revocación administrativa',
     ALL_SESSIONS_REVOKED: 'Revocación administrativa de todas las sesiones'
@@ -78,8 +77,6 @@ export function StudentManagementPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [pendingAction, setPendingAction] = useState<PendingAction>()
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleteConfirmed, setDeleteConfirmed] = useState(false)
   const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
 
   async function loadAdministration() {
@@ -131,7 +128,7 @@ export function StudentManagementPage() {
       } else {
         await deactivateStudent(publicId)
         setPendingAction(undefined)
-        toast.success('Baja de BBVA registrada', 'El colaborador fue trasladado a Talent Bank y dejó de contabilizarse en los indicadores operativos.')
+        toast.success('El colaborador fue dado de baja correctamente.', 'El registro fue trasladado a Talent Bank y dejó de contabilizarse en los indicadores operativos.')
         navigate('/admin/talent-bank', { replace: true })
       }
     } catch (requestError) {
@@ -192,23 +189,7 @@ export function StudentManagementPage() {
     }
   }
 
-  async function executeDelete() {
-    if (!deleteConfirmed) return
-    setBusy(true)
-    setError(undefined)
-    try {
-      await deleteStudent(publicId)
-      toast.success('Colaborador eliminado',
-        'La cuenta quedó eliminada lógicamente; sus históricos, resultados y certificaciones se conservaron.')
-      navigate('/admin/collaborators', { replace: true })
-    } catch (requestError) {
-      setError(requestError instanceof ApiRequestError
-        ? requestError.message
-        : 'No fue posible eliminar al colaborador.')
-    } finally {
-      setBusy(false)
-    }
-  }
+
 
   if (loading) return <LoadingScreen />
   if (!administration) {
@@ -224,15 +205,6 @@ export function StudentManagementPage() {
   return (
     <main className="content-page resource-page student-management-page">
       <BackButton fallback="/admin/collaborators" />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Colaborador</p>
-          <h1>Administrar {student.displayName}</h1>
-          <p className="muted">Las acciones sensibles de cuenta, acceso, contraseña, sesiones y eliminación se concentran en esta vista.</p>
-        </div>
-        <span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{STATUS_LABELS[student.effectiveStatus]}</span>
-      </header>
-
       {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="ns-card student-management-summary">
@@ -240,8 +212,6 @@ export function StudentManagementPage() {
         <div><span>Usuario corporativo</span><strong>{student.corporateUser || 'N/A'}</strong></div>
         <div><span>Correo</span><strong>{student.email}</strong></div>
         <div><span>Organización</span><strong>{student.organization?.name ?? 'Sin organización'}</strong></div>
-        <div><span>Inicio de vigencia</span><strong>{formatDate(student.validFrom)}</strong></div>
-        <div><span>Vencimiento</span><strong>{formatDate(student.expiresAt)}</strong></div>
         <div><span>Fecha de alta</span><strong>{formatDate(student.admissionDate)}</strong></div>
         <div><span>Asiento</span><strong>{seat.assignedSeatPublicId ? seat.status : 'Sin asiento asignado'}</strong></div>
         <div><span>Sesiones activas</span><strong>{activeSessions}</strong></div>
@@ -256,7 +226,7 @@ export function StudentManagementPage() {
             <button className="primary-button" type="button" disabled={busy} onClick={() => setPendingAction('ACTIVATE')}>Activar</button>
           )}
           {canDeactivate && permissions.has('STUDENT_STATUS_CHANGE') && (
-            <button className="secondary-button" type="button" disabled={busy} onClick={() => setPendingAction('DEACTIVATE')}>Dar de baja de BBVA</button>
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => setPendingAction('DEACTIVATE')}>Dar de baja</button>
           )}
         </div>
       </section>
@@ -315,21 +285,12 @@ export function StudentManagementPage() {
           onPageSizeChange={(nextSize) => { setHistorySize(nextSize); setHistoryPage(0) }} />
       </section>
 
-      {permissions.has('STUDENT_DELETE') && (
-        <section className="ns-card student-administration-section student-permanent-delete-zone">
-          <div className="ns-card-heading"><div><span className="ns-step">5</span><h2>Eliminación lógica</h2></div></div>
-          <p>La eliminación bloquea el acceso y oculta al colaborador de la operación diaria. Sus identificadores, certificaciones, intentos, resultados, auditoría e históricos se conservan.</p>
-          <button className="danger-button" type="button" disabled={busy}
-            onClick={() => { setDeleteConfirmed(false); setDeleteOpen(true) }}>Eliminar colaborador</button>
-        </section>
-      )}
-
       <ConfirmDialog open={pendingAction === 'ACTIVATE'} title="Activar colaborador"
-        description="Se validarán la organización, el inicio de vigencia, el vencimiento y la disponibilidad de asiento. Las sesiones anteriores no se restaurarán."
+        description="Se validarán el estado de la organización y la disponibilidad operativa. Las sesiones anteriores no se restaurarán."
         confirmLabel="Activar" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
 
-      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Dar de baja de BBVA"
+      <ConfirmDialog open={pendingAction === 'DEACTIVATE'} title="Dar de baja"
         description="El colaborador será retirado del módulo Colaboradores y trasladado a Talent Bank dentro de la misma organización. Conservará su información, certificaciones, historial y CV; perderá el acceso, sus sesiones serán revocadas y dejará de contabilizarse en los indicadores operativos."
         confirmLabel="Dar de baja" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executeStatusAction()} />
@@ -339,16 +300,7 @@ export function StudentManagementPage() {
         confirmLabel="Generar contraseña" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executePasswordReset()} />
 
-      <ConfirmDialog open={deleteOpen} title="Eliminar colaborador"
-        description="El colaborador quedará eliminado lógicamente y perderá el acceso. Sus identificadores, certificaciones, resultados e históricos se conservarán."
-        confirmLabel="Eliminar colaborador" tone="danger" busy={busy} confirmDisabled={!deleteConfirmed}
-        onCancel={() => { setDeleteOpen(false); setDeleteConfirmed(false) }}
-        onConfirm={() => void executeDelete()}>
-        <label className="student-delete-confirmation">
-          <input type="checkbox" checked={deleteConfirmed} onChange={(event) => setDeleteConfirmed(event.target.checked)} />
-          <span>Confirmo que el colaborador perderá el acceso y que sus históricos se conservarán.</span>
-        </label>
-      </ConfirmDialog>
+
 
       {temporaryCredentials && (
         <StudentTemporaryCredentialsDialog title="Contraseña temporal generada"

@@ -225,13 +225,6 @@ export function AdminUserManagementPage() {
   return (
     <main className="content-page resource-page internal-user-management-page">
       <BackButton fallback="/admin/users" />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Usuarios</p>
-          <h1>Administrar usuario</h1>
-          <p className="muted">Estados, sesiones y credenciales temporales se gestionan en esta vista protegida.</p>
-        </div>
-      </header>
 
       {error && <div className="error-message" role="alert">{error}</div>}
       {selfManagement && (
@@ -302,8 +295,6 @@ export function AdminUserManagementPage() {
       <section className="detail-card internal-user-admin-metadata">
         <div><span>Último cambio</span><strong>{formatDate(user.statusChangedAt)}</strong></div>
         <div><span>Ejecutado por</span><strong>{user.statusChangedBy ?? 'Sistema'}</strong></div>
-        <div><span>Inicio de vigencia</span><strong>{formatDate(user.startsAt)}</strong></div>
-        <div><span>Vencimiento</span><strong>{formatDate(user.expiresAt, 'Sin vencimiento')}</strong></div>
       </section>
 
       <section className="ns-data-panel internal-user-history-panel">

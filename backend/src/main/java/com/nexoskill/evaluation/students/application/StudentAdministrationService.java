@@ -58,7 +58,7 @@ public class StudentAdministrationService {
                 + "AND EVENT_TYPE IN ('STUDENT_CREATED','STUDENT_UPDATED','STUDENT_FOUNDATION_CREATED',"
                 + "'STUDENT_FOUNDATION_UPDATED','STUDENT_ACTIVATED','STUDENT_MOVED_TO_TALENT_BANK',"
                 + "'STUDENT_PASSWORD_RESET','STUDENT_SESSION_REVOKED','STUDENT_SESSIONS_REVOKED',"
-                + "'STUDENT_DELETED','STUDENT_EXPIRED','STUDENT_CERTIFICATION_APPLICABILITY_CHANGED',"
+                + "'STUDENT_CERTIFICATION_APPLICABILITY_CHANGED',"
                 + "'STUDENT_CERTIFICATIONS_UPDATED','STUDENT_CERTIFICATION_CYCLE_CREATED',"
                 + "'STUDENT_CERTIFICATION_CYCLE_UPDATED','STUDENT_CERTIFICATION_PRIMARY_CHANGED',"
                 + "'STUDENT_CERTIFICATION_CYCLE_CANCELLED','STUDENT_CERTIFICATION_ATTEMPT_CREATED',"
@@ -91,11 +91,9 @@ public class StudentAdministrationService {
             case "STUDENT_UPDATED", "STUDENT_FOUNDATION_UPDATED" -> "Actualización de colaborador";
             case "STUDENT_FOUNDATION_CREATED" -> "Configuración inicial";
             case "STUDENT_ACTIVATED" -> "Activación";
-            case "STUDENT_MOVED_TO_TALENT_BANK" -> "Baja de BBVA";
+            case "STUDENT_MOVED_TO_TALENT_BANK" -> "Baja";
             case "STUDENT_PASSWORD_RESET" -> "Restablecimiento de contraseña";
             case "STUDENT_SESSION_REVOKED", "STUDENT_SESSIONS_REVOKED" -> "Revocación de acceso";
-            case "STUDENT_DELETED" -> "Eliminación lógica";
-            case "STUDENT_EXPIRED" -> "Vencimiento";
             case "STUDENT_CERTIFICATION_APPLICABILITY_CHANGED" -> "Cambio de aplicabilidad";
             case "STUDENT_CERTIFICATIONS_UPDATED" -> "Actualización de certificaciones";
             case "STUDENT_CERTIFICATION_CYCLE_CREATED" -> "Alta de ciclo de certificación";

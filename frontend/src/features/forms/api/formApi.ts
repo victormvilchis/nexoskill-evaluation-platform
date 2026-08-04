@@ -5,7 +5,8 @@ import type {
   FormContentScope,
   FormDetail,
   FormPayload,
-  FormQuestionOptionPage
+  FormQuestionOptionPage,
+  FormOrganizationOption
 } from '../../../shared/types/forms'
 
 function targetQuery(scope: FormContentScope, organizationPublicId?: string) {
@@ -14,6 +15,10 @@ function targetQuery(scope: FormContentScope, organizationPublicId?: string) {
     query.set('organizationPublicId', organizationPublicId)
   }
   return query
+}
+
+export function getFormOrganizations(signal?: AbortSignal) {
+  return apiRequest<FormOrganizationOption[]>('/admin/forms/organizations', { signal })
 }
 
 export function getForm(publicId: string, signal?: AbortSignal) {

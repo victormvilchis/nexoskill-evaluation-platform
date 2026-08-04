@@ -51,9 +51,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
         where s.organizationId = :organizationId
           and s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
           and s.status <> com.nexoskill.evaluation.students.domain.StudentStatus.DELETED
-          and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
-               or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.expiresAt is not null and s.expiresAt < :today))
+          and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
         """)
     long countExpiredByOrganizationId(@Param("organizationId") Long organizationId,
             @Param("today") LocalDate today);
@@ -71,8 +69,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
         select s.id from StudentJpaEntity s
         where s.recordModule = com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR
           and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-          and s.expiresAt is not null
-          and s.expiresAt < :now
+          and 1 = 0
         """)
     List<Long> findExpiredActiveStudentIds(@Param("now") LocalDate now);
 
@@ -85,14 +82,12 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
                :status is null
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE
                    and s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                   and s.admissionDate is not null
-                   and s.validFrom <= :now and (s.expiresAt is null or s.expiresAt >= :now))
-               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED
-                   and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED
-                        or (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.ACTIVE
-                            and s.expiresAt is not null and s.expiresAt < :now)))
+                   and s.admissionDate is not null)
+               or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.EXPIRED and 1 = 0)
                or (:status = com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.INACTIVE
-                   and (s.status = com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE or s.admissionDate is null))
+                   and (s.status in (com.nexoskill.evaluation.students.domain.StudentStatus.INACTIVE,
+                                    com.nexoskill.evaluation.students.domain.StudentStatus.EXPIRED)
+                        or s.admissionDate is null))
           )
           and (:query is null
                or lower(s.displayName) like lower(concat('%', :query, '%'))
@@ -103,6 +98,5 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
     Page<StudentJpaEntity> search(@Param("organizationId") Long organizationId,
             @Param("query") String query,
             @Param("status") StudentEffectiveStatus status,
-            @Param("now") LocalDate now,
             Pageable pageable);
 }

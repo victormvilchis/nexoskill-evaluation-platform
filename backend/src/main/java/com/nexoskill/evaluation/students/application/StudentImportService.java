@@ -1932,7 +1932,7 @@ public class StudentImportService {
 
     private CatalogRef ensureProfessionalProfile(Long organizationId, String name, Long actorId) {
         if (name == null || name.isBlank()) return null;
-        String code = catalogCode("PRF", name, organizationId, 120);
+        String code = catalogCode("PRF", name, organizationId, 120, "CERTIFICATION_PROFILE_CATALOG", "PROFILE_CODE");
         CatalogState existing = resolveCatalogAnyStatus("CERTIFICATION_PROFILE_CATALOG",
                 "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
                 "perfil profesional");
@@ -1973,7 +1973,7 @@ public class StudentImportService {
 
     private CatalogRef ensureTechnologicalProfile(Long organizationId, String name, Long actorId) {
         if (name == null || name.isBlank()) return null;
-        String code = catalogCode("TPR", name, organizationId, 40);
+        String code = catalogCode("TPR", name, organizationId, 40, "TECHNOLOGICAL_PROFILE_CATALOG", "PROFILE_CODE");
         CatalogState existing = resolveCatalogAnyStatus("TECHNOLOGICAL_PROFILE_CATALOG",
                 "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
                 "perfil tecnológico");
@@ -2014,7 +2014,7 @@ public class StudentImportService {
 
     private CatalogRef ensureQuestionTechnology(Long organizationId, String name, Long actorId) {
         if (name == null || name.isBlank()) return null;
-        String code = catalogCode("TEC", name, organizationId, 80);
+        String code = catalogCode("TEC", name, organizationId, 80, "QUESTION_TECHNOLOGY", "TECHNOLOGY_CODE");
         CatalogState existing = resolveCatalogAnyStatus("QUESTION_TECHNOLOGY",
                 "TECHNOLOGY_CODE", "TECHNOLOGY_NAME", organizationId, name, code,
                 "tecnología");
@@ -2076,8 +2076,7 @@ public class StudentImportService {
                     "Existen varios registros equivalentes para el " + catalogLabel + " '" + value
                             + "' en la organización. Revisa el catálogo antes de continuar.");
         }
-        return rows.stream().filter(item -> generatedCode.equalsIgnoreCase(item.code()))
-                .findFirst().orElse(null);
+        return null;
     }
 
     private CatalogRef activateCatalogIfNecessary(String table, Long organizationId,
@@ -2100,13 +2099,28 @@ public class StudentImportService {
         return new CatalogRef(existing.publicId(), existing.code(), existing.name());
     }
 
-    private String catalogCode(String prefix, String name, Long organizationId, int maxLength) {
-        String normalized = StudentExperienceService.normalizeKey(name).replace(' ', '_');
-        String suffix = "_" + sha256((organizationId + ":" + normalized)
-                .getBytes(StandardCharsets.UTF_8)).substring(0, 10).toUpperCase(Locale.ROOT);
-        int available = Math.max(1, maxLength - prefix.length() - suffix.length() - 1);
-        String base = normalized.length() > available ? normalized.substring(0, available) : normalized;
-        return prefix + "_" + base + suffix;
+    private String catalogCode(String prefix, String name, Long organizationId, int maxLength,
+            String table, String codeColumn) {
+        String normalized = StudentExperienceService.normalizeKey(name).replace(' ', '_')
+                .replaceAll("[^A-Z0-9_]+", "_").replaceAll("^_+|_+$", "");
+        if (normalized.isBlank()) normalized = "CATALOGO";
+        String rawBase = prefix + "_" + normalized;
+        String candidate = rawBase.substring(0, Math.min(rawBase.length(), maxLength));
+        int sequence = 2;
+        while (catalogCodeExists(table, codeColumn, organizationId, candidate)) {
+            String suffix = "_" + sequence++;
+            int baseLength = Math.max(1, maxLength - suffix.length());
+            candidate = rawBase.substring(0, Math.min(rawBase.length(), baseLength)) + suffix;
+        }
+        return candidate;
+    }
+
+    private boolean catalogCodeExists(String table, String codeColumn, Long organizationId, String code) {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM " + table
+                        + " WHERE CONTENT_SCOPE='ORGANIZATION' AND OWNER_ORGANIZATION_ID=:organizationId"
+                        + " AND UPPER(" + codeColumn + ")=UPPER(:code)",
+                new MapSqlParameterSource("organizationId", organizationId).addValue("code", code), Integer.class);
+        return count != null && count > 0;
     }
 
     private CatalogRef resolveCatalog(List<CatalogRef> catalogs, String value) {

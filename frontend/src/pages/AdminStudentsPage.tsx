@@ -3,13 +3,16 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
 import { searchStudents } from '../features/students/api/studentApi'
+import { permanentlyDeletePerson } from '../features/talent-bank/api/talentBankApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
 import { SortIndicator } from '../shared/components/SortIndicator'
 import { ResourceSearchField, ResourceSelectField } from '../shared/components/ResourceFilters'
-import { TableActionLink, TableActions } from '../shared/components/TableActions'
+import { TableActionButton, TableActionLink, TableActions } from '../shared/components/TableActions'
 import { TablePagination } from '../shared/components/TablePagination'
+import { useToast } from '../shared/components/ToastProvider'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { OrganizationSummary } from '../features/organizations/types/organizations'
@@ -17,13 +20,12 @@ import type { StudentEffectiveStatus, StudentPage } from '../shared/types/studen
 const statuses: Array<{ value: StudentEffectiveStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activo' },
   { value: 'ALL', label: 'Todos los estados' },
-  { value: 'INACTIVE', label: 'Desactivado' },
-  { value: 'EXPIRED', label: 'Vencido' }
+  { value: 'INACTIVE', label: 'Dado de baja' }
 ]
 const statusLabels: Record<StudentEffectiveStatus, string> = {
-  ACTIVE: 'Activo', INACTIVE: 'Desactivado', EXPIRED: 'Vencido', DELETED: 'Eliminado'
+  ACTIVE: 'Activo', INACTIVE: 'Dado de baja', EXPIRED: 'Dado de baja', DELETED: 'Eliminado'
 }
-const validStatuses = new Set<StudentEffectiveStatus>(['ACTIVE', 'INACTIVE', 'EXPIRED'])
+const validStatuses = new Set<StudentEffectiveStatus>(['ACTIVE', 'INACTIVE'])
 function statusFromQuery(value: string | null): StudentEffectiveStatus | 'ALL' {
   if (value === 'ALL') return 'ALL'
   return value && validStatuses.has(value as StudentEffectiveStatus) ? value as StudentEffectiveStatus : 'ACTIVE'
@@ -47,6 +49,7 @@ function formatTechnology(technology?: string | null, expertise?: string | null)
   return hasExpertise ? `${normalizedTechnology} - ${normalizedExpertise}` : normalizedTechnology
 }
 export function AdminStudentsPage() {
+  const toast = useToast()
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const certificationOperator = Boolean(user?.roles.some(
@@ -60,6 +63,8 @@ export function AdminStudentsPage() {
   const [data, setData] = useState<StudentPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<StudentPage['content'][number]>()
+  const [deleting, setDeleting] = useState(false)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
   const organization = searchParams.get('organization') ?? ''
@@ -104,7 +109,7 @@ export function AdminStudentsPage() {
     if (value) next.set(name, value); else next.delete(name)
     setSearchParams(next)
   }
-  function toggleSort(nextSort: 'displayName' | 'admissionDate' | 'expiresAt') {
+  function toggleSort(nextSort: 'displayName' | 'admissionDate') {
     const currentSort = searchParams.get('sort')
     const currentDirection = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
     const nextDirection = currentSort === nextSort && currentDirection === 'ASC' ? 'DESC' : 'ASC'
@@ -129,11 +134,29 @@ export function AdminStudentsPage() {
   const showCertificationColumns = administrator && organization
     ? Boolean(selectedOrganization?.appliesCertifications)
     : (data?.content.some((student) => student.certificationsEnabled) ?? true)
-  const columnCount = showCertificationColumns ? 8 : 6
+  const columnCount = showCertificationColumns ? 7 : 6
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
   const importTarget = administrator && organization
     ? `/admin/collaborators/import?organization=${encodeURIComponent(organization)}`
     : '/admin/collaborators/import'
+  async function confirmPermanentDeletion() {
+    if (!deleteCandidate || deleting) return
+    setDeleting(true)
+    try {
+      await permanentlyDeletePerson(deleteCandidate.publicId)
+      setData((current) => current ? {
+        ...current,
+        content: current.content.filter((item) => item.publicId !== deleteCandidate.publicId),
+        totalElements: Math.max(0, current.totalElements - 1)
+      } : current)
+      toast.success('El registro y toda su información asociada fueron eliminados definitivamente.')
+      setDeleteCandidate(undefined)
+    } catch (requestError) {
+      toast.error('No fue posible eliminar el registro.', requestError instanceof ApiRequestError ? requestError.message : undefined)
+    } finally {
+      setDeleting(false)
+    }
+  }
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
       {(canImport || permissions.has('STUDENT_CREATE')) && <div className="ns-list-action-bar ns-student-header-actions" aria-label="Acciones de colaboradores">{canImport && <Link className="button-link ns-excel-import-button ns-create-button-secondary" to={importTarget} aria-label="Cargar Excel de colaboradores"><span className="ns-excel-import-icon-wrap" aria-hidden="true"><svg className="ns-excel-import-icon" focusable="false" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.5h9l4 4v13h-13v-17Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14.5 3.5v4h4M8.25 11l3 5m0-5-3 5M14 11v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span><span>Cargar Excel</span></Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link ns-create-button" to="/admin/collaborators/new"><Icon name="plus" size={15} /> Crear colaborador</Link>}</div>}
@@ -171,18 +194,6 @@ export function AdminStudentsPage() {
                     <SortIndicator active={activeSort === 'admissionDate'} direction={direction} />
                   </button>
                 </th>
-                {showCertificationColumns && (
-                  <th aria-sort={activeSort === 'expiresAt' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
-                    <button
-                      className={`ns-sortable-column-button${activeSort === 'expiresAt' ? ' active' : ''}`}
-                      type="button"
-                      onClick={() => toggleSort('expiresAt')}
-                    >
-                      Vencimiento
-                      <SortIndicator active={activeSort === 'expiresAt'} direction={direction} />
-                    </button>
-                  </th>
-                )}
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
               </tr>
@@ -199,13 +210,13 @@ export function AdminStudentsPage() {
             <td>{formatTechnology(student.currentTechnology, student.expertise)}</td>
             <td>{student.corporateUser || 'N/A'}</td>
             <td>{formatDate(student.admissionDate)}</td>
-            {showCertificationColumns && <td>{formatDate(student.expiresAt)}</td>}
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/collaborators/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/collaborators/${student.publicId}/edit`} />}
-              {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Administrar" to={`/admin/collaborators/${student.publicId}/manage`} tone="primary" />}
-              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Administrar certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
+              {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Gestionar" to={`/admin/collaborators/${student.publicId}/manage`} tone="primary" />}
+              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
+              {permissions.has('STUDENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(student)} />}
             </TableActions></td>
           </tr>)}
             </tbody>
@@ -213,6 +224,12 @@ export function AdminStudentsPage() {
         </div>
         <TablePagination currentPage={page} pageSize={data?.size ?? size} totalElements={data?.totalElements ?? 0} totalPages={data?.totalPages ?? 0} isLoading={loading} onPageChange={goToPage} onPageSizeChange={changePageSize} />
       </section>
+      <ConfirmDialog open={Boolean(deleteCandidate)} title="Eliminar definitivamente"
+        description="Esta acción eliminará de forma permanente el registro, su historial, sus documentos y toda la información asociada. La información no podrá continuar consultándose en la plataforma. ¿Deseas continuar?"
+        confirmLabel="Eliminar definitivamente" tone="danger" busy={deleting}
+        onCancel={() => setDeleteCandidate(undefined)} onConfirm={() => void confirmPermanentDeletion()}>
+        {deleteCandidate && <div className="permanent-deletion-warning"><strong>{deleteCandidate.displayName}</strong><p>{deleteCandidate.email} · {deleteCandidate.studentCode}</p></div>}
+      </ConfirmDialog>
     </main>
   )
 }

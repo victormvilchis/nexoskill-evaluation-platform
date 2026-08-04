@@ -31,6 +31,7 @@ public class StudentFoundationService {
                s.PASSWORD_CHANGE_REQUIRED, s.TEMP_PASSWORD_EXPIRES_AT, s.LAST_LOGIN_AT,
                s.CREATED_AT, s.UPDATED_AT, s.VERSION_NO,
                o.PUBLIC_ID ORGANIZATION_PUBLIC_ID, o.ORGANIZATION_CODE, o.ORGANIZATION_NAME,
+               o.VALID_FROM ORGANIZATION_VALID_FROM, o.EXPIRES_ON ORGANIZATION_EXPIRES_ON,
                o.APPLIES_CERTIFICATIONS, o.MANUAL_STUDENT_CODE,
                profile.PUBLIC_ID PROFILE_PUBLIC_ID, profile.PROFILE_CODE, profile.PROFILE_NAME,
                tech_profile.PUBLIC_ID TECH_PROFILE_PUBLIC_ID,
@@ -516,9 +517,9 @@ public class StudentFoundationService {
     private void appendStatus(StringBuilder where, StudentEffectiveStatus status) {
         if (status == null) return;
         switch (status) {
-            case ACTIVE -> where.append(" AND s.STATUS = 'ACTIVE' AND s.ADMISSION_DATE IS NOT NULL AND s.ACCESS_VALID_FROM <= :today AND s.ACCESS_EXPIRES_ON >= :today ");
-            case EXPIRED -> where.append(" AND (s.STATUS = 'EXPIRED' OR (s.STATUS = 'ACTIVE' AND s.ACCESS_EXPIRES_ON < :today)) ");
-            case INACTIVE -> where.append(" AND (s.STATUS = 'INACTIVE' OR s.ADMISSION_DATE IS NULL) ");
+            case ACTIVE -> where.append(" AND s.STATUS = 'ACTIVE' AND s.ADMISSION_DATE IS NOT NULL ");
+            case EXPIRED -> where.append(" AND 1 = 0 ");
+            case INACTIVE -> where.append(" AND (s.STATUS IN ('INACTIVE','EXPIRED') OR s.ADMISSION_DATE IS NULL) ");
             case DELETED -> where.append(" AND 1 = 0 ");
         }
     }
@@ -537,10 +538,10 @@ public class StudentFoundationService {
 
     private StudentView mapStudent(ResultSet rs, int rowNum) throws SQLException {
         StudentStatus physical = StudentStatus.valueOf(rs.getString("STATUS"));
-        LocalDate validFrom = localDate(rs, "ACCESS_VALID_FROM");
-        LocalDate expiresAt = localDate(rs, "ACCESS_EXPIRES_ON");
+        LocalDate validFrom = localDate(rs, "ORGANIZATION_VALID_FROM");
+        LocalDate expiresAt = localDate(rs, "ORGANIZATION_EXPIRES_ON");
         LocalDate admissionDate = localDate(rs, "ADMISSION_DATE");
-        StudentEffectiveStatus effective = effectiveStatus(physical, admissionDate, expiresAt, LocalDate.now(clock));
+        StudentEffectiveStatus effective = effectiveStatus(physical, admissionDate);
         boolean organizationCertifications = rs.getBoolean("APPLIES_CERTIFICATIONS");
         return new StudentView(rs.getString("PUBLIC_ID"), rs.getString("STUDENT_CODE"), rs.getString("CORPORATE_USER"), rs.getString("EMAIL"),
                 rs.getString("FIRST_NAME"), rs.getString("LAST_NAME"), rs.getString("DISPLAY_NAME"), physical,
@@ -576,10 +577,11 @@ public class StudentFoundationService {
         return value == null ? null : value.toLocalDate();
     }
 
-    private StudentEffectiveStatus effectiveStatus(StudentStatus status, LocalDate admissionDate, LocalDate expiresAt, LocalDate today) {
+    private StudentEffectiveStatus effectiveStatus(StudentStatus status, LocalDate admissionDate) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
-        if (admissionDate == null || status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
-        if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) return StudentEffectiveStatus.EXPIRED;
+        if (admissionDate == null || status == StudentStatus.INACTIVE || status == StudentStatus.EXPIRED) {
+            return StudentEffectiveStatus.INACTIVE;
+        }
         return StudentEffectiveStatus.ACTIVE;
     }
 

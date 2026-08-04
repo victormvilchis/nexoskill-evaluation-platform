@@ -177,15 +177,6 @@ export function OrganizationManagementPage() {
   return (
     <main className="content-page narrow-content resource-page org-management-page">
       <BackButton fallback="/admin/organizations" />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Organización</p>
-          <h1>Administrar {organization.name}</h1>
-          <p className="muted">Las acciones de estado no eliminan físicamente información relacionada.</p>
-        </div>
-        <span className={`status-badge status-${organization.status.toLowerCase()}`}>{LABELS[organization.status]}</span>
-      </header>
-
       {error && (
         <section className="inline-error-panel" role="alert">
           <div className="inline-error-icon"><Icon name="error" /></div>
@@ -196,6 +187,7 @@ export function OrganizationManagementPage() {
       <section className="ns-card org-management-summary">
         <div><span>Nombre</span><strong>{organization.name}</strong></div>
         <div><span>Código</span><strong>{organization.code}</strong></div>
+        <div><span>Estado</span><strong><span className={`status-badge status-${organization.status.toLowerCase()}`}>{LABELS[organization.status]}</span></strong></div>
         <div><span>Colaboradores registrados</span><strong>{organization.studentCount ?? 0}</strong></div>
         <div><span>Último cambio de estado</span><strong>{formatDateTime(organization.statusChangedAt)}</strong></div>
         <div className="org-management-wide"><span>Motivo actual</span><strong>{organization.statusReason || 'Sin motivo registrado'}</strong></div>

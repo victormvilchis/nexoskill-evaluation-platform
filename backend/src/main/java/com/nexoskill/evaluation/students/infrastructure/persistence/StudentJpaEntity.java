@@ -198,9 +198,8 @@ public class StudentJpaEntity {
     public StudentEffectiveStatus effectiveStatusOn(LocalDate today) {
         if (status == StudentStatus.DELETED) return StudentEffectiveStatus.DELETED;
         if (recordModule == StudentRecordModule.TALENT_BANK) return StudentEffectiveStatus.INACTIVE;
-        if (admissionDate == null || status == StudentStatus.INACTIVE) return StudentEffectiveStatus.INACTIVE;
-        if (status == StudentStatus.EXPIRED || (expiresAt != null && today.isAfter(expiresAt))) {
-            return StudentEffectiveStatus.EXPIRED;
+        if (admissionDate == null || status == StudentStatus.INACTIVE || status == StudentStatus.EXPIRED) {
+            return StudentEffectiveStatus.INACTIVE;
         }
         return StudentEffectiveStatus.ACTIVE;
     }
@@ -213,8 +212,6 @@ public class StudentJpaEntity {
         return recordModule == StudentRecordModule.COLLABORATOR
                 && status == StudentStatus.ACTIVE
                 && admissionDate != null
-                && validFrom != null && !today.isBefore(validFrom)
-                && expiresAt != null && !today.isAfter(expiresAt)
                 && (lockedUntil == null || !lockedUntil.isAfter(now));
     }
 
@@ -223,7 +220,7 @@ public class StudentJpaEntity {
     }
 
     public Instant accessExpirationInstant(ZoneId zoneId) {
-        return expiresAt == null ? null : expiresAt.plusDays(1).atStartOfDay(zoneId).toInstant();
+        return null;
     }
 
     public Instant accessExpirationInstant() {
@@ -268,11 +265,8 @@ public class StudentJpaEntity {
         this.admissionDate = admissionDate;
         this.corporateUser = corporateUser;
         this.normalizedCorporateUser = normalizedCorporateUser;
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
         if (recordModule == StudentRecordModule.TALENT_BANK || admissionDate == null) {
             this.status = StudentStatus.INACTIVE;
-        } else if (expiresAt != null && today.isAfter(expiresAt)) {
-            this.status = StudentStatus.EXPIRED;
         } else if (this.status != StudentStatus.DELETED) {
             this.status = StudentStatus.ACTIVE;
         }
@@ -322,14 +316,7 @@ public class StudentJpaEntity {
         this.recordModule = StudentRecordModule.COLLABORATOR;
         this.talentType = null;
         this.admissionDate = admissionDate;
-        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
-        if (admissionDate == null) {
-            this.status = StudentStatus.INACTIVE;
-        } else if (expiresAt != null && today.isAfter(expiresAt)) {
-            this.status = StudentStatus.EXPIRED;
-        } else {
-            this.status = StudentStatus.ACTIVE;
-        }
+        this.status = admissionDate == null ? StudentStatus.INACTIVE : StudentStatus.ACTIVE;
         this.talentMovedAt = now;
         this.talentMovedBy = actorId;
         touch(actorId, now);

@@ -126,7 +126,7 @@ public class FormService {
         FormJpaEntity form = new FormJpaEntity();
         form.publicId = UUID.randomUUID().toString();
         form.code = uniqueCode(command.title());
-        form.status = "DRAFT";
+        form.status = "ACTIVE";
         form.contentMode = contentMode.name();
         form.createOperationId = operationId;
         form.createdBy = actorUserId;
@@ -210,7 +210,7 @@ public class FormService {
         copy.title = cloneTitle(command.title(), source.title);
         copy.code = uniqueCode(copy.title);
         copy.description = source.description;
-        copy.status = "DRAFT";
+        copy.status = "ACTIVE";
         copy.modeCode = source.modeCode;
         copy.passingScore = source.passingScore;
         copy.maxAttempts = source.maxAttempts;
@@ -238,6 +238,11 @@ public class FormService {
         repository.saveAndFlush(copy);
         contentManager.replace(copy.id, contentMode, validated.questions(), validated.pools());
         return detail(copy);
+    }
+
+    @Transactional(readOnly = true)
+    public List<FormModels.OrganizationOptionView> availableOrganizations() {
+        return targetResolver.availableOrganizations(tenantContextResolver.resolve(request));
     }
 
     @Transactional(readOnly = true)

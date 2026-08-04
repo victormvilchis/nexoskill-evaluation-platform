@@ -13,6 +13,7 @@ import com.nexoskill.evaluation.authentication.domain.model.AuthSession;
 import com.nexoskill.evaluation.authentication.domain.model.AuthSessionScope;
 import com.nexoskill.evaluation.authentication.domain.repository.AuthSessionRepository;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.UserOrganizationMembershipRepository;
 import com.nexoskill.evaluation.shared.infrastructure.config.AppProperties;
 import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
@@ -74,15 +75,21 @@ public class LoginService {
 			throw AuthenticationException.invalidCredentials();
 		}
 
-		validateAccountState(user, command, now);
-		validateOrganization(user, command, now);
+		OrganizationJpaEntity organization = validateOrganization(user, command, now);
+		validateAccountState(user, command, now, organization != null);
 
 		user.registerSuccessfulLogin(now);
 		userRepository.save(user);
 
 		String rawToken = tokenGenerator.generate();
-		Instant expiresAt = user.getAccess()
-				.capSessionExpiration(now.plus(properties.getSecurity().getSessionDuration()));
+		Instant expiresAt = now.plus(properties.getSecurity().getSessionDuration());
+		if (organization == null) {
+			expiresAt = user.getAccess().capSessionExpiration(expiresAt);
+		} else if (organization.getExpiresOn() != null) {
+			Instant organizationExpiration = organization.getExpiresOn().plusDays(1)
+					.atStartOfDay(ZoneOffset.UTC).toInstant();
+			if (organizationExpiration.isBefore(expiresAt)) expiresAt = organizationExpiration;
+		}
 		expiresAt = user.capSessionExpirationForPassword(expiresAt);
 		AuthSessionScope scope = user.isPasswordChangeRequired() ? AuthSessionScope.PASSWORD_CHANGE
 				: AuthSessionScope.FULL;
@@ -96,10 +103,10 @@ public class LoginService {
 				user.isPasswordChangeRequired() ? "El usuario inició una sesión restringida para cambiar su contraseña."
 						: "El usuario inició sesión.",
 				command.ipAddress(), command.userAgent(), Map.of("sessionScope", scope.name()), now);
-		return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now));
+		return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now, organization));
 	}
 
-	private void validateAccountState(UserAccount user, LoginCommand command, Instant now) {
+	private void validateAccountState(UserAccount user, LoginCommand command, Instant now, boolean organizationControlsAccess) {
 		if (user.getStatus() == UserStatus.DELETED) {
 			recordFailure(user.getId(), command, "ACCOUNT_DELETED", now);
 			throw AuthenticationException.accountDeleted();
@@ -120,25 +127,28 @@ public class LoginService {
 			recordFailure(user.getId(), command, "TEMP_PASSWORD_EXPIRED", now);
 			throw AuthenticationException.temporaryPasswordExpired();
 		}
-		UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
-		if (accessStatus == UserAccessStatus.EXPIRED) {
-			recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
-			throw AuthenticationException.accessExpired();
-		}
-		if (!user.canAuthenticateAt(now)) {
-			recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
-			throw AuthenticationException.accountInactive();
+		if (!organizationControlsAccess) {
+			UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
+			if (accessStatus == UserAccessStatus.EXPIRED) {
+				recordFailure(user.getId(), command, "ACCESS_EXPIRED", now);
+				throw AuthenticationException.accessExpired();
+			}
+			if (!user.canAuthenticateAt(now)) {
+				recordFailure(user.getId(), command, "ACCOUNT_UNAVAILABLE", now);
+				throw AuthenticationException.accountInactive();
+			}
 		}
 	}
 
-	private void validateOrganization(UserAccount user, LoginCommand command, Instant now) {
+	private OrganizationJpaEntity validateOrganization(UserAccount user, LoginCommand command, Instant now) {
 		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR")) {
-			return;
+			return null;
 		}
-		var organization = membershipRepository.findActiveOrganizationForUser(user.getId()).orElseThrow(() -> {
-			recordFailure(user.getId(), command, "ORGANIZATION_INACTIVE", now);
-			return AuthenticationException.organizationInactive();
-		});
+		OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.getId())
+				.orElseThrow(() -> {
+					recordFailure(user.getId(), command, "ORGANIZATION_INACTIVE", now);
+					return AuthenticationException.organizationInactive();
+				});
 		LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
 		if (organization.getStatus() == OrganizationStatus.EXPIRED
 				|| (organization.getExpiresOn() != null && today.isAfter(organization.getExpiresOn()))) {
@@ -150,6 +160,7 @@ public class LoginService {
 			recordFailure(user.getId(), command, "ORGANIZATION_INACTIVE", now);
 			throw AuthenticationException.organizationInactive();
 		}
+		return organization;
 	}
 
 	private void recordFailure(Long userId, LoginCommand command, String reason, Instant now) {

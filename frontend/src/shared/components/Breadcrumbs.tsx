@@ -27,15 +27,12 @@ function resolveCrumbs(pathname: string): Crumb[] {
     else if (pathname !== '/admin/talent-bank') base.push({ label: 'Detalle' })
     return base
   }
-  if (pathname.startsWith('/admin/permanent-deletions')) {
-    return [{ label: 'Administración' }, { label: 'Eliminaciones definitivas' }]
-  }
   if (pathname.startsWith('/admin/collaborators')) {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Colaboradores', to: '/admin/collaborators' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nuevo colaborador' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
-    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
-    else if (pathname.endsWith('/certifications')) base.push({ label: 'Administrar certificaciones' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Gestión' })
+    else if (pathname.endsWith('/certifications')) base.push({ label: 'Certificaciones' })
     else if (pathname !== '/admin/collaborators') base.push({ label: 'Detalle' })
     return base
   }
@@ -43,7 +40,7 @@ function resolveCrumbs(pathname: string): Crumb[] {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Organizaciones', to: '/admin/organizations' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nueva organización' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
-    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Gestión' })
     else if (pathname !== '/admin/organizations') base.push({ label: 'Detalle' })
     return base
   }
@@ -51,7 +48,7 @@ function resolveCrumbs(pathname: string): Crumb[] {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Usuarios', to: '/admin/users' }]
     if (pathname.endsWith('/new')) base.push({ label: 'Nuevo usuario' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
-    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Gestión' })
     else if (pathname !== '/admin/users') base.push({ label: 'Detalle' })
     return base
   }
@@ -67,7 +64,7 @@ function resolveCrumbs(pathname: string): Crumb[] {
     }
     if (pathname.endsWith('/new')) base.push({ label: 'Crear' })
     else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
-    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Gestión' })
     else if (segments.length > 3) base.push({ label: 'Ver' })
     return base
   }

@@ -6,6 +6,7 @@ import com.nexoskill.evaluation.authentication.domain.model.AuthSessionScope;
 import com.nexoskill.evaluation.authentication.domain.model.SessionStatus;
 import com.nexoskill.evaluation.authentication.domain.repository.AuthSessionRepository;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
+import com.nexoskill.evaluation.organizations.infrastructure.persistence.OrganizationJpaEntity;
 import com.nexoskill.evaluation.organizations.infrastructure.persistence.UserOrganizationMembershipRepository;
 import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import com.nexoskill.evaluation.users.domain.model.UserAccount;
@@ -122,13 +123,16 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 					"ACCOUNT_TEMPORARILY_LOCKED", "Tu cuenta está bloqueada temporalmente.");
 		}
 
-		UserAccessStatus accessStatus = user.getAccess().effectiveStatusAt(now);
-		if (accessStatus == UserAccessStatus.EXPIRED) {
+		OrganizationJpaEntity organization = validateOrganization(user, now, session, response, request);
+		if ((user.hasRole("MANAGER") || user.hasRole("SUPERVISOR")) && organization == null) return false;
+		UserAccessStatus accessStatus = organization == null
+				? user.getAccess().effectiveStatusAt(now) : UserAccessStatus.ACTIVE;
+		if (organization == null && accessStatus == UserAccessStatus.EXPIRED) {
 			revoke(session, now, response);
 			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ACCESS_EXPIRED",
 					"Tu acceso a la plataforma ha expirado.");
 		}
-		if (!user.canAuthenticateAt(now)) {
+		if (organization == null && !user.canAuthenticateAt(now)) {
 			revoke(session, now, response);
 			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ACCOUNT_INACTIVE",
 					"Tu cuenta se encuentra inactiva. Contacta a un administrador.");
@@ -138,16 +142,20 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 			return publicRequest(request) || reject(response, HttpServletResponse.SC_UNAUTHORIZED,
 					"TEMP_PASSWORD_EXPIRED", "La contraseña temporal ha expirado.");
 		}
-		if (!validateOrganization(user, now, session, response, request)) {
-			return false;
-		}
+
+		Instant accessStartsAt = organization == null ? user.getAccess().startsAt()
+				: organization.getValidFrom() == null ? null
+						: organization.getValidFrom().atStartOfDay(ZoneOffset.UTC).toInstant();
+		Instant accessExpiresAt = organization == null ? user.getAccess().expiresAt()
+				: organization.getExpiresOn() == null ? null
+						: organization.getExpiresOn().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
 		AuthenticatedUser principal = new AuthenticatedUser(user.getId(), user.getPublicId(), user.getEmail(),
 				user.getFirstName(), user.getLastName(), user.getDisplayName(),
 				user.getRoles().stream().map(role -> role.code())
 						.collect(java.util.stream.Collectors.toUnmodifiableSet()),
-				user.permissions(), user.getLastLoginAt(), accessStatus, user.getAccess().startsAt(),
-				user.getAccess().expiresAt(), user.isPasswordChangeRequired(), user.getPasswordChangedAt(),
+				user.permissions(), user.getLastLoginAt(), accessStatus, accessStartsAt,
+				accessExpiresAt, user.isPasswordChangeRequired(), user.getPasswordChangedAt(),
 				user.getTemporaryPasswordExpiresAt());
 		List<SimpleGrantedAuthority> authorities = java.util.stream.Stream
 				.concat(principal.roles().stream().map(role -> "ROLE_" + role), principal.permissions().stream())
@@ -163,31 +171,32 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 		return true;
 	}
 
-	private boolean validateOrganization(UserAccount user, Instant now, AuthSession session,
+	private OrganizationJpaEntity validateOrganization(UserAccount user, Instant now, AuthSession session,
 			HttpServletResponse response, HttpServletRequest request) throws IOException {
-		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR")) {
-			return true;
-		}
-		var organization = membershipRepository.findActiveOrganizationForUser(user.getId()).orElse(null);
+		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR")) return null;
+		OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.getId()).orElse(null);
 		if (organization == null) {
 			revoke(session, now, response);
-			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_INACTIVE",
+			reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_INACTIVE",
 					"La organización asociada a tu cuenta se encuentra inactiva.");
+			return null;
 		}
 		LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
 		if (organization.getStatus() == OrganizationStatus.EXPIRED
 				|| (organization.getExpiresOn() != null && today.isAfter(organization.getExpiresOn()))) {
 			revoke(session, now, response);
-			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_EXPIRED",
+			reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_EXPIRED",
 					"La organización asociada a tu cuenta ya no se encuentra vigente.");
+			return null;
 		}
 		if (organization.getStatus() != OrganizationStatus.ACTIVE
 				|| (organization.getValidFrom() != null && today.isBefore(organization.getValidFrom()))) {
 			revoke(session, now, response);
-			return publicRequest(request) || reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_INACTIVE",
+			reject(response, HttpServletResponse.SC_FORBIDDEN, "ORGANIZATION_INACTIVE",
 					"La organización asociada a tu cuenta se encuentra inactiva.");
+			return null;
 		}
-		return true;
+		return organization;
 	}
 
 	private void revoke(AuthSession session, Instant now, HttpServletResponse response) {

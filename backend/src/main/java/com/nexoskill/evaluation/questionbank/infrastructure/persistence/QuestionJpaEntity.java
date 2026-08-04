@@ -310,10 +310,10 @@ public class QuestionJpaEntity {
     public QuestionStatus getStatus() { return status; }
     public String getStatement() { return statement; }
     public String getExplanation() { return explanation; }
-    public QuestionMediaJpaEntity getPromptMedia() { return promptMedia; }
     public String getCodeLanguage() { return codeLanguage; }
     public String getCodeContent() { return codeContent; }
     public String getAcceptedAnswersJson() { return acceptedAnswersJson; }
+    public QuestionMediaJpaEntity getPromptMedia() { return promptMedia; }
     public boolean isCaseSensitive() { return Integer.valueOf(1).equals(caseSensitive); }
     public boolean isManualReview() { return Integer.valueOf(1).equals(manualReview); }
     public BigDecimal getNumericMin() { return numericMin; }

@@ -1,7 +1,6 @@
 package com.nexoskill.evaluation.users.application.service;
 
 import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
-import com.nexoskill.evaluation.shared.domain.BusinessException;
 import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.UserStatusCommand;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
@@ -35,10 +34,6 @@ public class ActivateUserService {
 		AdminUserSummary before = managed.summary();
 		transitionPolicy.validate(before.status(), UserStatus.ACTIVE);
 		Instant now = clock.instant();
-		if (before.expiresAt() != null && !before.expiresAt().isAfter(now)) {
-			throw new BusinessException("USER_ACCESS_EXPIRED",
-					"Actualiza la fecha de vencimiento antes de activar al usuario.");
-		}
 		String reason = transitionPolicy.normalizeReason(command.reason(), false, "Reactivación administrativa");
 		AdminUserSummary updated = users.updateStatus(command.publicId(), UserStatus.ACTIVE, UserAccessStatus.ACTIVE,
 				command.actorUserId(), reason, now);

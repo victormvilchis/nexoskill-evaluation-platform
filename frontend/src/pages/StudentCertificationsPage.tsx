@@ -624,13 +624,6 @@ export function StudentCertificationsPage() {
   return (
     <main className="content-page certification-page certification-workspace">
       <BackButton fallback="/admin/collaborators" />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Colaboradores · Certificaciones</p>
-          <h1>Administrar certificaciones</h1>
-          <p className="muted">Los datos generales son de solo lectura. El tipo Certificación o Recertificación, las fechas límite y los vencimientos se calculan en backend.</p>
-        </div>
-      </header>
 
       {error && <div className="error-message" role="alert">{error}</div>}
       {inactiveStudent && <div className="warning-message" role="status">{inactiveBecauseNoAdmissionDate
@@ -641,8 +634,6 @@ export function StudentCertificationsPage() {
         <div><span>Colaborador</span><strong>{detail.student.displayName}</strong></div>
         <div><span>Organización</span><strong>{detail.student.organizationName}</strong></div>
         <div><span>Estado</span><strong>{STUDENT_STATUS_LABELS[detail.student.status] ?? detail.student.status}</strong></div>
-        <div><span>Inicio de vigencia</span><strong>{formatDate(detail.student.validFrom)}</strong></div>
-        <div><span>Vencimiento de acceso</span><strong>{formatDate(detail.student.expiresAt)}</strong></div>
         <div><span>Fecha de alta</span><strong>{detail.student.admissionDate ? formatDate(detail.student.admissionDate) : 'N/A'}</strong></div>
         <div><span>Perfil</span><strong>{detail.student.professionalProfile?.name ?? 'Sin perfil'}</strong></div>
         <div><span>Perfil tecnológico</span><strong>{detail.student.technologicalProfile?.name ?? 'Sin perfil tecnológico'}</strong></div>

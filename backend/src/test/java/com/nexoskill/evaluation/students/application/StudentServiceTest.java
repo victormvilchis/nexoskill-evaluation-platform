@@ -82,13 +82,13 @@ class StudentServiceTest {
         assertThat(result.totalElements()).isZero();
         assertThat(result.totalPages()).isZero();
         verify(students, times(1)).existsByOrganizationIdAndRecordModule(20L, com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR);
-        verify(students, never()).search(any(), any(), any(), any(), any());
+        verify(students, never()).search(any(), any(), any(), any());
     }
 
     @Test
     void shouldKeepTheResponseEmptyWhenTheRepositoryReturnsAnEmptyPage() {
         when(students.existsByOrganizationIdAndRecordModule(20L, com.nexoskill.evaluation.students.domain.StudentRecordModule.COLLABORATOR)).thenReturn(true);
-        when(students.search(any(), any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 10)));
+        when(students.search(any(), any(), any(), any())).thenReturn(Page.empty(PageRequest.of(0, 10)));
         StudentService.PageResult result = service.search(TENANT, null,
                 com.nexoskill.evaluation.students.domain.StudentEffectiveStatus.ACTIVE, false, 0, 10);
         assertThat(result.content()).isEmpty();
@@ -175,13 +175,16 @@ class StudentServiceTest {
     }
 
     @Test
-    void shouldRejectActivationWhenValidityAlreadyExpired() {
+    void shouldUseOrganizationValidityWhenActivatingAStudent() {
         StudentJpaEntity student = student(StudentStatus.INACTIVE, TODAY.minusDays(1));
         when(students.findByOrganizationIdAndPublicIdForUpdate(20L, "student-public")).thenReturn(Optional.of(student));
-        assertThatThrownBy(() -> service.activate(TENANT, "student-public",
-                new StudentService.Actor(1L, "127.0.0.1", "browser")))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_ACCESS_DATES_INVALID"));
+        when(students.save(student)).thenReturn(student);
+
+        StudentService.StudentDetail activated = service.activate(TENANT, "student-public",
+                new StudentService.Actor(1L, "127.0.0.1", "browser"));
+
+        assertThat(activated.status()).isEqualTo(StudentStatus.ACTIVE);
+        verify(students).save(student);
     }
 
     private StudentJpaEntity student(StudentStatus status, LocalDate expiresAt) {

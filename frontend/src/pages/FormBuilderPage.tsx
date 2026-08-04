@@ -1,11 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getAllOrganizations } from '../features/organizations/api/organizationApi'
-import type { OrganizationSummary } from '../features/organizations/types/organizations'
 import {
   createForm,
   getForm,
   getFormCategoryOptions,
+  getFormOrganizations,
   getFormQuestionOptions,
   updateForm
 } from '../features/forms/api/formApi'
@@ -29,7 +28,9 @@ import type {
   FormPayload,
   FormPoolItem,
   FormQuestionItem,
-  FormQuestionOptionPage
+  FormQuestionOption,
+  FormQuestionOptionPage,
+  FormOrganizationOption
 } from '../shared/types/forms'
 import type { PageSize } from '../shared/types/pagination'
 
@@ -96,7 +97,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [model, setModel] = useState<FormPayload>(() => initialPayload(globalAdministrator))
   const [selectedQuestions, setSelectedQuestions] = useState<FormQuestionItem[]>([])
   const [configuredPools, setConfiguredPools] = useState<FormPoolItem[]>([])
-  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [organizations, setOrganizations] = useState<FormOrganizationOption[]>([])
   const [categories, setCategories] = useState<FormCategoryOption[]>([])
   const [questionPage, setQuestionPage] = useState<FormQuestionOptionPage>(EMPTY_QUESTION_PAGE)
   const [questionQuery, setQuestionQuery] = useState('')
@@ -109,6 +110,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
+  const [previewQuestion, setPreviewQuestion] = useState<FormQuestionOption | null>(null)
 
   useEffect(() => {
     if (!editing && globalAdministrator && model.title === '' && model.contentScope === 'ORGANIZATION'
@@ -120,9 +122,10 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   useEffect(() => {
     if (!globalAdministrator || editing) return
     const controller = new AbortController()
-    getAllOrganizations({ status: 'ACTIVE', sort: 'name', direction: 'ASC', signal: controller.signal })
-      .then(values => setOrganizations(values.filter(value => value.organizationType !== 'GLOBAL')))
-      .catch(() => setError('No fue posible cargar las organizaciones disponibles.'))
+    getFormOrganizations(controller.signal)
+      .then(setOrganizations)
+      .catch((requestError) => setError(requestError instanceof ApiRequestError
+        ? requestError.message : 'No fue posible cargar las organizaciones disponibles.'))
     return () => controller.abort()
   }, [editing, globalAdministrator])
 
@@ -316,7 +319,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       categoryNames: option.categoryNames,
       status: 'ACTIVE',
       order: current.length + 1,
-      points: 1,
+      points: option.defaultPoints || 1,
       required: true
     }])
   }
@@ -408,10 +411,12 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     setFieldErrors({})
     try {
       if (editing && id) {
-        await updateForm(id, payload)
+        const saved = await updateForm(id, payload)
+        await getForm(saved.publicId)
         completeSave({ title: 'El formulario se actualizó correctamente.' })
       } else {
-        await createForm(payload)
+        const created = await createForm(payload)
+        await getForm(created.publicId)
         completeSave({
           title: model.contentMode === 'MANUAL'
             ? 'El formulario y sus preguntas se guardaron correctamente.'
@@ -435,7 +440,6 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   if (readOnly) {
     return <main className="content-page ns-form-builder">
       <BackButton fallback="/admin/forms" />
-      <header className="ns-page-header"><div><p className="eyebrow">Formularios</p><h1>Ver formulario</h1><p className="muted">Consulta la configuración sin modificarla.</p></div></header>
       {error && <div className="ns-inline-alert" role="alert"><strong>No fue posible abrir el formulario</strong><span>{error}</span></div>}
       {!error && <div className="ns-builder-layout">
         <div className="ns-builder-main">
@@ -472,7 +476,6 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
 
   return <main className="content-page ns-form-builder">
     <BackButton fallback="/admin/forms" />
-    <header className="ns-page-header"><div><p className="eyebrow">Constructor de formularios</p><h1>{editing ? 'Editar formulario' : 'Nuevo formulario'}</h1><p className="muted">Configura el encabezado y el contenido completo en una sola operación.</p></div></header>
     {error && <div className="ns-inline-alert" role="alert"><strong>Revisa el formulario</strong><span>{error}</span></div>}
     <form id="form-builder" onSubmit={submit}>
       <div className="ns-builder-layout">
@@ -509,7 +512,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
                       const selected = selectedQuestions.some(item => item.questionPublicId === question.publicId)
                       return <article className="form-question-option" key={question.publicId}>
                         <div><strong>{question.statement}</strong><p>{question.typeName}{question.difficultyName ? ` · ${question.difficultyName}` : ''}{question.technologyName ? ` · ${question.technologyName}` : ''}</p><small>{question.categoryNames.length ? question.categoryNames.join(' · ') : 'Sin categoría'} · {question.contentScope === 'GLOBAL' ? 'Global' : question.organizationName}</small></div>
-                        <button className="secondary-button compact-button" disabled={selected} type="button" onClick={() => addQuestion(question.publicId)}>{selected ? <><Icon name="check" size={15} /> Agregada</> : <><Icon name="plus" size={15} /> Agregar</>}</button>
+                        <div className="form-question-option-actions"><button className="secondary-button compact-button" type="button" onClick={() => setPreviewQuestion(question)}><Icon name="eye" size={15} /> Revisar</button><button className="secondary-button compact-button" disabled={selected} type="button" onClick={() => addQuestion(question.publicId)}>{selected ? <><Icon name="check" size={15} /> Agregada</> : <><Icon name="plus" size={15} /> Agregar</>}</button></div>
                       </article>
                     })}
                   </div>
@@ -521,7 +524,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
                   {selectedQuestions.map((question, index) => <article className="form-selected-question" key={question.questionPublicId}>
                     <span className="form-question-order">{index + 1}</span>
                     <div className="form-selected-question-copy"><strong>{question.statement}</strong><small>{question.typeName}{question.categoryNames.length ? ` · ${question.categoryNames.join(', ')}` : ''}{question.status !== 'ACTIVE' ? ' · Conservada como histórica' : ''}</small></div>
-                    <label className="form-points-field"><span>Puntos</span><input type="number" min="0.01" step="0.01" value={question.points} onChange={event => updateQuestion(question.questionPublicId, { points: Number(event.target.value) })} /></label>
+                    <div className="form-points-field form-readonly-value"><span>Puntos</span><strong>{question.points}</strong></div>
                     <label className="form-required-field"><input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.questionPublicId, { required: event.target.checked })} /><span>Obligatoria</span></label>
                     <div className="form-question-actions"><button aria-label="Subir pregunta" type="button" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><Icon name="arrowUp" size={16} /></button><button aria-label="Bajar pregunta" type="button" disabled={index === selectedQuestions.length - 1} onClick={() => moveQuestion(index, 1)}><Icon name="arrowDown" size={16} /></button><button aria-label="Retirar pregunta" className="is-danger" type="button" onClick={() => removeQuestion(question.questionPublicId)}><Icon name="trash" size={16} /></button></div>
                   </article>)}
@@ -568,6 +571,17 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       </div>
       <FormActions sticky><button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/forms')}>Cancelar</button><button className="primary-button" disabled={saving || readiness.length > 0} type="submit">{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear formulario'}</button></FormActions>
     </form>
+
+    <ConfirmDialog open={Boolean(previewQuestion)} title="Vista previa de la pregunta" description="Consulta la configuración definida en el Banco de preguntas. Desde Formularios no puede modificarse." confirmLabel={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId) ? 'Ya agregada' : 'Agregar pregunta'} confirmDisabled={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId)} onConfirm={() => { if (previewQuestion) addQuestion(previewQuestion.publicId); setPreviewQuestion(null) }} onCancel={() => setPreviewQuestion(null)}>
+      {previewQuestion && <div className="form-question-preview">
+        <section><span>Enunciado</span><strong>{previewQuestion.statement}</strong></section>
+        <div className="form-question-preview-grid"><div><span>Tipo</span><strong>{previewQuestion.typeName}</strong></div><div><span>Dificultad</span><strong>{previewQuestion.difficultyName ?? 'N/A'}</strong></div><div><span>Tecnología</span><strong>{previewQuestion.technologyName ?? 'N/A'}</strong></div><div><span>Seniority</span><strong>{previewQuestion.levelCode ?? 'N/A'}</strong></div><div><span>Categorías</span><strong>{previewQuestion.categoryNames.join(', ') || 'N/A'}</strong></div><div><span>Puntos</span><strong>{previewQuestion.defaultPoints}</strong></div><div><span>Alcance</span><strong>{previewQuestion.contentScope === 'GLOBAL' ? 'Global' : previewQuestion.organizationName}</strong></div><div><span>Estado</span><strong>Activa</strong></div></div>
+        {previewQuestion.options.length > 0 && <section><span>Opciones y respuesta correcta</span><ol className="form-question-preview-options">{previewQuestion.options.map(option => <li key={option.publicId} className={option.correct ? 'is-correct' : ''}><strong>{option.text || option.matchText || `Opción ${option.order}`}</strong>{option.correct && <small>Respuesta correcta</small>}</li>)}</ol></section>}
+        {previewQuestion.acceptedAnswersJson && <section><span>Respuestas aceptadas</span><code>{previewQuestion.acceptedAnswersJson}</code></section>}
+        {previewQuestion.explanation && <section><span>Explicación</span><p>{previewQuestion.explanation}</p></section>}
+        {previewQuestion.codeContent && <section><span>Código {previewQuestion.codeLanguage ? `(${previewQuestion.codeLanguage})` : ''}</span><pre>{previewQuestion.codeContent}</pre></section>}
+      </div>}
+    </ConfirmDialog>
 
     <ConfirmDialog open={Boolean(pendingChange)} title="Cambiar configuración del contenido" description="El contenido configurado no es compatible con el nuevo alcance o modalidad y será descartado." confirmLabel="Cambiar y limpiar contenido" tone="danger" onConfirm={confirmPendingChange} onCancel={() => setPendingChange(null)} />
   </main>

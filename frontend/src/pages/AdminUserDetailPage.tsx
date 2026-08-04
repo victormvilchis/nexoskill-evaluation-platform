@@ -4,7 +4,6 @@ import { searchOrganizations } from '../features/organizations/api/organizationA
 import { getRoles, getUser, updateUser } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
-import { DateTimeField } from '../shared/components/DateField'
 import { SelectField } from '../shared/components/SelectField'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
@@ -13,17 +12,6 @@ import type { AdminUser, InternalRoleCode, RoleOption } from '../shared/types/us
 
 interface AdminUserDetailPageProps {
   mode?: 'view' | 'edit'
-}
-
-function toLocalDateTime(value: string | null) {
-  if (!value) return ''
-  const date = new Date(value)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
-}
-
-function toInstant(value: string) {
-  return new Date(value).toISOString()
 }
 
 function formatDate(value: string | null, fallback = 'Sin registro') {
@@ -60,9 +48,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
   const [displayName, setDisplayName] = useState('')
   const [roleCode, setRoleCode] = useState<InternalRoleCode>('MANAGER')
   const [organizationPublicId, setOrganizationPublicId] = useState('')
-  const [startsAt, setStartsAt] = useState('')
-  const [expiresAt, setExpiresAt] = useState('')
-  const [withoutExpiration, setWithoutExpiration] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,9 +75,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
         setDisplayName(response.displayName)
         setRoleCode(response.roles[0] ?? 'MANAGER')
         setOrganizationPublicId(response.organizationPublicId ?? '')
-        setStartsAt(toLocalDateTime(response.startsAt))
-        setExpiresAt(toLocalDateTime(response.expiresAt))
-        setWithoutExpiration(!response.expiresAt)
       })
       .catch((requestError) => {
         if (!active) return
@@ -140,24 +122,12 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!editing || !publicId || submitting) return
+    if (!editing || !publicId || submitting || !user) return
     setError(null)
     setFieldErrors({})
 
     if (!organizationPublicId) {
       setFieldErrors({ organizationPublicId: 'Selecciona una organización.' })
-      return
-    }
-    if (!startsAt) {
-      setFieldErrors({ startsAt: 'La fecha de inicio es obligatoria.' })
-      return
-    }
-    if (!withoutExpiration && !expiresAt) {
-      setFieldErrors({ expiresAt: 'Selecciona una fecha de vencimiento o marca acceso sin vencimiento.' })
-      return
-    }
-    if (!withoutExpiration && new Date(expiresAt) <= new Date(startsAt)) {
-      setFieldErrors({ expiresAt: 'El vencimiento debe ser posterior al inicio.' })
       return
     }
 
@@ -170,8 +140,8 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
         displayName: displayName.trim() || undefined,
         roleCode,
         organizationPublicId,
-        startsAt: toInstant(startsAt),
-        expiresAt: withoutExpiration ? null : toInstant(expiresAt)
+        startsAt: user.startsAt,
+        expiresAt: user.expiresAt
       })
       setUser(updated)
       completeSave({
@@ -205,14 +175,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
     return (
       <main className="content-page resource-page internal-user-detail-page">
         <BackButton fallback="/admin/users" />
-        <header className="ns-page-header">
-          <div>
-            <p className="eyebrow">Administración · Usuarios</p>
-            <h1>{user.displayName}</h1>
-            <p className="muted">Consulta de solo lectura del usuario interno.</p>
-          </div>
-        </header>
-
         <section className="user-overview-grid">
           <article className="summary-card"><span>Estado</span><strong>{statusLabels[user.status]}</strong></article>
           <article className="summary-card"><span>Rol</span><strong>{roleName}</strong></article>
@@ -225,8 +187,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
           <div><span>Apellidos</span><strong>{user.lastName}</strong></div>
           <div><span>Correo electrónico</span><strong>{user.email}</strong></div>
           <div><span>Nombre para mostrar</span><strong>{user.displayName}</strong></div>
-          <div><span>Inicio de vigencia</span><strong>{formatDate(user.startsAt)}</strong></div>
-          <div><span>Vencimiento</span><strong>{formatDate(user.expiresAt, 'Sin vencimiento')}</strong></div>
           <div><span>Fecha de creación</span><strong>{formatDate(user.createdAt)}</strong></div>
           <div><span>Último cambio de estado</span><strong>{formatDate(user.statusChangedAt)}</strong></div>
           <div className="form-wide"><span>Motivo de estado</span><strong>{user.statusReason || 'Sin motivo registrado'}</strong></div>
@@ -238,14 +198,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
   return (
     <main className="content-page resource-page internal-user-editor-page">
       <BackButton fallback={`/admin/users/${publicId}`} />
-      <header className="ns-page-header">
-        <div>
-          <p className="eyebrow">Administración · Usuarios</p>
-          <h1>Editar usuario</h1>
-          <p className="muted">Modifica los datos operativos. Los estados y sesiones se administran por separado.</p>
-        </div>
-      </header>
-
       <form className="entity-form internal-user-form" onSubmit={(event) => void handleSubmit(event)}>
         <section className="form-section form-wide">
           <div className="form-section-heading">
@@ -285,21 +237,6 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
           </div>
         </section>
 
-        <section className="form-section form-wide">
-          <div className="form-section-heading">
-            <span className="form-section-number">3</span>
-            <div><h2>Vigencia</h2><p>La vigencia no modifica el estado administrativo.</p></div>
-          </div>
-          <div className="internal-user-validity-grid">
-            <label className="form-field"><span>Inicio de vigencia</span><DateTimeField value={startsAt} onChange={setStartsAt} required ariaInvalid={Boolean(fieldErrors.startsAt)} ariaLabel="Seleccionar inicio de vigencia" />{fieldErrors.startsAt && <small className="field-error">{fieldErrors.startsAt}</small>}</label>
-            <label className="form-field"><span>Vencimiento</span><DateTimeField value={expiresAt} onChange={setExpiresAt} disabled={withoutExpiration} required={!withoutExpiration} ariaInvalid={Boolean(fieldErrors.expiresAt)} ariaLabel="Seleccionar vencimiento" />{fieldErrors.expiresAt && <small className="field-error">{fieldErrors.expiresAt}</small>}</label>
-            <label className="internal-user-expiration-check">
-              <span className="internal-user-expiration-label">Vigencia indefinida</span>
-              <span className="checkbox-row"><input type="checkbox" checked={withoutExpiration} onChange={(event) => setWithoutExpiration(event.target.checked)} />Sin fecha de vencimiento</span>
-              <small>Deshabilita la fecha y hora de vencimiento sin modificar el inicio de vigencia.</small>
-            </label>
-          </div>
-        </section>
 
         {error && <div className="error-message form-wide" role="alert">{error}</div>}
         <div className="form-actions form-wide">

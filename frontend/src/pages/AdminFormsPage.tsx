@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
-import { cloneForm } from '../features/forms/api/formApi'
-import { getAllOrganizations } from '../features/organizations/api/organizationApi'
-import type { OrganizationSummary } from '../features/organizations/types/organizations'
+import { cloneForm, getForm, getFormOrganizations } from '../features/forms/api/formApi'
 import { apiRequest, ApiRequestError } from '../shared/api/apiClient'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
@@ -14,7 +12,7 @@ import { TableActionButton, TableActionLink, TableActions } from '../shared/comp
 import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
-import type { FormContentScope, FormStatus, FormSummary } from '../shared/types/forms'
+import type { FormContentScope, FormOrganizationOption, FormStatus, FormSummary } from '../shared/types/forms'
 import { normalizePagedResponse, parsePage, parsePageSize, type PagedResponse, type PageSize } from '../shared/types/pagination'
 
 const formStatusLabel: Record<FormStatus, string> = {
@@ -51,7 +49,7 @@ export function AdminFormsPage() {
   const [status, setStatus] = useState(searchParams.get('status') ?? 'ACTIVE')
   const [mode, setMode] = useState(searchParams.get('mode') ?? '')
   const [data, setData] = useState<PagedResponse<FormSummary>>({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
-  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [organizations, setOrganizations] = useState<FormOrganizationOption[]>([])
   const [cloneState, setCloneState] = useState<CloneState | null>(null)
   const [cloneBusy, setCloneBusy] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -78,9 +76,9 @@ export function AdminFormsPage() {
   useEffect(() => {
     if (!globalAdministrator || !canCreate) return
     const controller = new AbortController()
-    getAllOrganizations({ status: 'ACTIVE', sort: 'name', direction: 'ASC', signal: controller.signal })
-      .then(values => setOrganizations(values.filter(value => value.organizationType !== 'GLOBAL')))
-      .catch(() => toast.error('No fue posible cargar las organizaciones para clonación.'))
+    getFormOrganizations(controller.signal)
+      .then(setOrganizations)
+      .catch((requestError) => toast.error('No fue posible cargar las organizaciones para clonación.', requestError instanceof ApiRequestError ? requestError.message : undefined))
     return () => controller.abort()
   }, [canCreate, globalAdministrator, toast])
 
@@ -141,7 +139,7 @@ export function AdminFormsPage() {
 
     setCloneBusy(true)
     try {
-      await cloneForm(cloneState.source.publicId, {
+      const cloned = await cloneForm(cloneState.source.publicId, {
         title: cloneState.title.trim(),
         targetScope: cloneState.targetScope,
         organizationPublicId: cloneState.targetScope === 'ORGANIZATION'
@@ -149,6 +147,7 @@ export function AdminFormsPage() {
           : undefined,
         operationId: cloneState.operationId
       })
+      await getForm(cloned.publicId)
       const target = cloneState.targetScope === 'GLOBAL' ? 'a nivel global' : 'para la organización seleccionada'
       toast.success(cloneState.source.contentMode === 'MANUAL'
         ? `El formulario y todas sus preguntas se clonaron correctamente ${target}.`

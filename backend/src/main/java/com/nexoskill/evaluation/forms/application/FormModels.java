@@ -63,11 +63,17 @@ public final class FormModels {
             Integer questionCount, String difficultyCode, Integer order, Integer availableQuestionCount) {
     }
 
+    public record QuestionAnswerOption(String publicId, Integer order, String text, String matchText,
+            boolean correct, String feedback) { }
+
     public record QuestionOptionView(String publicId, String statement, String typeCode, String typeName,
             String difficultyCode, String difficultyName, String technologyName, String levelCode,
-            List<String> categoryNames, String contentScope, String organizationName) {
+            List<String> categoryNames, String contentScope, String organizationName, String explanation,
+            String codeLanguage, String codeContent, String acceptedAnswersJson, List<QuestionAnswerOption> options,
+            BigDecimal defaultPoints) {
         public QuestionOptionView {
             categoryNames = categoryNames == null ? List.of() : List.copyOf(categoryNames);
+            options = options == null ? List.of() : List.copyOf(options);
         }
     }
 
@@ -77,6 +83,8 @@ public final class FormModels {
             content = content == null ? List.of() : List.copyOf(content);
         }
     }
+
+    public record OrganizationOptionView(String publicId, String code, String name) { }
 
     public record CategoryOptionView(String publicId, String code, String name, String contentScope,
             String organizationName, Integer activeQuestionCount) {

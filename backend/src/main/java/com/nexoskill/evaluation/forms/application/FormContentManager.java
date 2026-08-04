@@ -318,13 +318,18 @@ public class FormContentManager {
     }
 
     private FormModels.QuestionOptionView toQuestionOption(QuestionJpaEntity question) {
+        List<FormModels.QuestionAnswerOption> answerOptions = question.getOptions().stream()
+                .map(option -> new FormModels.QuestionAnswerOption(option.getPublicId(), option.getOptionOrder(),
+                        option.getText(), option.getMatchText(), option.isCorrect(), option.getFeedback()))
+                .toList();
         return new FormModels.QuestionOptionView(question.getPublicId(), question.getStatement(),
                 question.getType().getCode(), question.getType().getName(),
                 question.getDifficulty() == null ? null : question.getDifficulty().getCode(),
                 question.getDifficulty() == null ? null : question.getDifficulty().getName(),
                 question.getTechnology() == null ? null : question.getTechnology().getName(),
                 question.getLevelCode(), categoryNames(question), question.getContentScope().name(),
-                ownerName(question.getOwnerOrganizationId()));
+                ownerName(question.getOwnerOrganizationId()), question.getExplanation(), question.getCodeLanguage(),
+                question.getCodeContent(), question.getAcceptedAnswersJson(), answerOptions, BigDecimal.ONE);
     }
 
     private List<String> categoryNames(QuestionJpaEntity question) {

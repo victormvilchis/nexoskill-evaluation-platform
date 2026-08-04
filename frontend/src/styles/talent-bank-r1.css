@@ -19,3 +19,13 @@
 .talent-type-prospect { background: #f3efff; color: #6546a4; }
 .talent-type-bbva_exit { background: #fff3e7; color: #9a5200; }
 @media (max-width: 760px) { .talent-type-cards, .talent-detail-grid { grid-template-columns: 1fr; } .talent-cv-row { align-items: stretch; flex-direction: column; } }
+.talent-cv-upload-field { display: grid; gap: .55rem; }
+.talent-cv-dropzone { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; min-height: 112px; padding: 1rem 1.1rem; border: 1px dashed #aab8c8; border-radius: 14px; background: #f8fafc; cursor: pointer; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.talent-cv-dropzone:hover, .talent-cv-dropzone:focus-visible, .talent-cv-dropzone.is-dragging { border-color: var(--primary-color, #1f5eff); background: #f2f6ff; box-shadow: 0 0 0 3px rgb(31 94 255 / 10%); outline: none; }
+.talent-cv-dropzone.is-disabled { cursor: not-allowed; opacity: .65; }
+.talent-cv-dropzone-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: #eaf1ff; color: var(--primary-color, #1f5eff); }
+.talent-cv-dropzone > div { display: grid; gap: .25rem; min-width: 0; }
+.talent-cv-dropzone > div strong, .talent-cv-dropzone > div span { overflow-wrap: anywhere; }
+.talent-cv-dropzone > div span, .talent-cv-upload-field > small { color: var(--muted-color, #627087); }
+.talent-cv-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+@media (max-width: 680px) { .talent-cv-dropzone { grid-template-columns: auto minmax(0, 1fr); } .talent-cv-select-button { grid-column: 1 / -1; justify-self: stretch; text-align: center; } }

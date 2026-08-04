@@ -101,18 +101,35 @@ export function uploadTalentCv(publicId: string, file: File) {
   return apiRequest<TalentCvMetadata>(`/admin/talent-bank/${publicId}/cv`, { method: 'POST', body })
 }
 
-export async function downloadTalentCv(publicId: string) {
+async function fetchTalentCv(publicId: string) {
   const response = await fetch(`/api/v1/admin/talent-bank/${publicId}/cv/download`, {
     credentials: 'include',
     headers: window.localStorage.getItem('nexoskill:organization-context')
       ? { 'X-Organization-Context': window.localStorage.getItem('nexoskill:organization-context')! }
       : undefined
   })
-  if (!response.ok) throw new Error('No fue posible descargar el CV.')
-  const blob = await response.blob()
+  if (!response.ok) throw new Error('No fue posible consultar el CV.')
   const disposition = response.headers.get('content-disposition') ?? ''
   const match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
-  const fileName = match?.[1] ? decodeURIComponent(match[1]) : 'cv'
+  return {
+    blob: await response.blob(),
+    fileName: match?.[1] ? decodeURIComponent(match[1]) : 'cv'
+  }
+}
+
+export async function viewTalentCv(publicId: string) {
+  const { blob } = await fetchTalentCv(publicId)
+  const url = URL.createObjectURL(blob)
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  if (!opened) {
+    URL.revokeObjectURL(url)
+    throw new Error('El navegador bloqueó la apertura del CV.')
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+export async function downloadTalentCv(publicId: string) {
+  const { blob, fileName } = await fetchTalentCv(publicId)
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

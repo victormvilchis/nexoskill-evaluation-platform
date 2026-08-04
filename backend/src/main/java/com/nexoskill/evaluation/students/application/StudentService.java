@@ -81,9 +81,8 @@ public class StudentService {
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "updatedAt"));
         if (!studentRepository.existsByOrganizationIdAndRecordModule(organizationId, StudentRecordModule.COLLABORATOR)) return PageResult.empty(safePage, safeSize);
-        LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
-        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, today, pageable);
+        Page<StudentJpaEntity> result = studentRepository.search(organizationId, normalizeQuery(query), status, pageable);
         List<StudentSummary> content = result.getContent() == null ? List.of()
                 : result.getContent().stream().map(entity -> summary(entity, now)).toList();
         return new PageResult(content, result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
@@ -109,18 +108,10 @@ public class StudentService {
         OrganizationJpaEntity organization = requireOperationalOrganizationEntity(tenant);
         Long organizationId = organization.getId();
         validateRequired(command);
-        validateDates(command.validFrom(), command.expiresAt());
-        LocalDate today = LocalDate.now(clock);
+        LocalDate validFrom = organization.getValidFrom() == null ? LocalDate.now(clock) : organization.getValidFrom();
+        LocalDate expiresAt = organization.getExpiresOn();
         Instant now = clock.instant();
         StudentStatus initialStatus = command.admissionDate() == null ? StudentStatus.INACTIVE : StudentStatus.ACTIVE;
-        if (initialStatus == StudentStatus.ACTIVE && command.validFrom().isAfter(today)) {
-            throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
-                    "validFrom", "El inicio de vigencia de un colaborador activo no puede ser futuro.");
-        }
-        if (initialStatus == StudentStatus.ACTIVE && command.expiresAt().isBefore(today)) {
-            throw fieldError("STUDENT_EXPIRED", "No se puede crear un colaborador activo vencido.",
-                    "expiresAt", "La fecha de vencimiento debe ser igual o posterior a la fecha actual.");
-        }
         String normalizedEmail = EmailNormalizer.normalize(command.email());
         if (studentRepository.existsByOrganizationIdAndNormalizedEmail(organizationId, normalizedEmail)) {
             throw fieldError("STUDENT_EMAIL_EXISTS", "El correo ya está registrado.",
@@ -145,7 +136,7 @@ public class StudentService {
         StudentJpaEntity student = StudentJpaEntity.create(publicId, organizationId, initialCode,
                 command.email().trim(), normalizedEmail, passwordHasher.encode(temporaryPassword),
                 name.firstName(), name.lastName(), name.displayName(), initialStatus,
-                command.validFrom(), command.expiresAt(), command.admissionDate(), corporateUser, normalizedCorporateUser,
+                validFrom, expiresAt, command.admissionDate(), corporateUser, normalizedCorporateUser,
                 now.plus(properties.getSecurity().getTemporaryPasswordDuration()), actor.userId(), now);
         try {
             student = studentRepository.saveAndFlush(student);
@@ -184,7 +175,6 @@ public class StudentService {
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId, module);
         validateVersion(student, command.version());
         validateUpdateRequired(command);
-        validateDates(command.validFrom(), command.expiresAt());
         OrganizationJpaEntity organization = organizationRepository.findById(student.getOrganizationId())
                 .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
         String normalizedEmail = EmailNormalizer.normalize(command.email());
@@ -222,9 +212,11 @@ public class StudentService {
         LocalDate previousAdmissionDate = student.getAdmissionDate();
         LocalDate previousValidFrom = student.getValidFrom();
         LocalDate previousExpiresAt = student.getExpiresAt();
+        LocalDate validFrom = organization.getValidFrom() == null ? LocalDate.now(clock) : organization.getValidFrom();
+        LocalDate expiresAt = organization.getExpiresOn();
         ResolvedName name = resolveName(command.firstName(), command.lastName(), command.displayName());
         student.updateProfile(requestedCode, command.email().trim(), normalizedEmail, name.firstName(), name.lastName(),
-                name.displayName(), command.validFrom(), command.expiresAt(), command.admissionDate(),
+                name.displayName(), validFrom, expiresAt, command.admissionDate(),
                 corporateUser, normalizedCorporateUser, actor.userId(), now);
         try {
             student = studentRepository.saveAndFlush(student);
@@ -239,9 +231,9 @@ public class StudentService {
         }
         audit(actor, "STUDENT_UPDATED", student,
                 Map.of("previousValidFrom", String.valueOf(previousValidFrom),
-                        "newValidFrom", String.valueOf(command.validFrom()),
+                        "newValidFrom", String.valueOf(validFrom),
                         "previousExpiresAt", String.valueOf(previousExpiresAt),
-                        "newExpiresAt", String.valueOf(command.expiresAt()),
+                        "newExpiresAt", String.valueOf(expiresAt),
                         "previousAdmissionDate", String.valueOf(previousAdmissionDate),
                         "newAdmissionDate", String.valueOf(command.admissionDate())), now);
         return detail(student, now);
@@ -251,19 +243,10 @@ public class StudentService {
     public StudentDetail activate(TenantContext tenant, String publicId, Actor actor) {
         requireOperationalOrganization(tenant);
         StudentJpaEntity student = findScopedForUpdate(tenant, publicId);
-        LocalDate today = LocalDate.now(clock);
         Instant now = clock.instant();
         if (student.getAdmissionDate() == null) {
             throw fieldError("STUDENT_ADMISSION_DATE_REQUIRED", "La Fecha de alta es necesaria para activar al colaborador.",
                     "admissionDate", "Captura una Fecha de alta desde Editar colaborador.");
-        }
-        if (student.getValidFrom() == null || student.getValidFrom().isAfter(today)) {
-            throw fieldError("STUDENT_VALID_FROM_FUTURE", "La vigencia todavía no inicia.",
-                    "validFrom", "El inicio de vigencia debe ser igual o anterior a la fecha actual.");
-        }
-        if (student.getExpiresAt() == null || student.getExpiresAt().isBefore(today)) {
-            throw fieldError("STUDENT_ACCESS_DATES_INVALID", "La vigencia no permite activar al estudiante.",
-                    "expiresAt", "Actualiza la fecha de vencimiento desde Editar estudiante antes de activarlo.");
         }
         if (student.getStatus() == StudentStatus.ACTIVE) {
             throw new BusinessException("STUDENT_STATUS_UNCHANGED", "El estudiante ya está activo.");
@@ -416,14 +399,6 @@ public class StudentService {
         if (blank(command.email())) throw fieldError("STUDENT_EMAIL_REQUIRED", "El correo es obligatorio.", "email", "El correo electrónico es obligatorio.");
     }
 
-    private void validateDates(LocalDate validFrom, LocalDate expiresAt) {
-        if (validFrom == null) throw fieldError("STUDENT_VALID_FROM_REQUIRED", "El inicio de vigencia es obligatorio.", "validFrom", "El inicio de vigencia es obligatorio.");
-        if (expiresAt == null) throw fieldError("STUDENT_EXPIRES_AT_REQUIRED", "La fecha de vencimiento es obligatoria.", "expiresAt", "La fecha de vencimiento es obligatoria.");
-        if (expiresAt.isBefore(validFrom)) {
-            throw fieldError("STUDENT_DATES_INVALID", "Las fechas de vigencia no son válidas.",
-                    "expiresAt", "La fecha de vencimiento no puede ser anterior al inicio de vigencia.");
-        }
-    }
 
     private String generateValidTemporaryPassword(String email) {
         for (int attempt = 0; attempt < 100; attempt++) {
@@ -577,7 +552,7 @@ public class StudentService {
             case "STUDENT_UPDATED" -> "Los datos del colaborador fueron actualizados.";
             case "STUDENT_ACTIVATED" -> "El colaborador fue activado.";
             case "STUDENT_MOVED_TO_TALENT_BANK" ->
-                    "El colaborador fue dado de baja de BBVA y trasladado a Talent Bank.";
+                    "El colaborador fue dado de baja y trasladado a Talent Bank.";
             case "STUDENT_PASSWORD_RESET" -> "Se generó una nueva contraseña temporal para el colaborador.";
             case "STUDENT_SESSION_REVOKED", "STUDENT_SESSIONS_REVOKED" ->
                     "Se revocó el acceso activo del colaborador.";

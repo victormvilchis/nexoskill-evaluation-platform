@@ -34,7 +34,6 @@ import { TalentTypeSelectionPage } from './pages/TalentTypeSelectionPage'
 import { AcademyTalentEditorPage } from './pages/AcademyTalentEditorPage'
 import { TalentBankDetailPage } from './pages/TalentBankDetailPage'
 import { TalentBankEditRouter } from './pages/TalentBankEditRouter'
-import { PermanentDeletionsPage } from './pages/PermanentDeletionsPage'
 import { StudentChangePasswordPage } from './pages/StudentChangePasswordPage'
 import { StudentProtectedRoute } from './shared/components/StudentProtectedRoute'
 import { PermissionRoute } from './shared/components/PermissionRoute'
@@ -47,7 +46,6 @@ function resolveDocumentSection(pathname: string) {
   if (pathname.startsWith('/student')) return 'Portal de colaboradores'
   if (pathname.startsWith('/admin/organizations')) return 'Organizaciones'
   if (pathname.startsWith('/admin/talent-bank')) return 'Talent Bank'
-  if (pathname.startsWith('/admin/permanent-deletions')) return 'Eliminaciones definitivas'
   if (pathname.startsWith('/admin/collaborators')) return 'Colaboradores'
   if (pathname.startsWith('/admin/users')) return 'Usuarios'
   if (pathname.startsWith('/admin/questions')) return 'Preguntas'
@@ -127,9 +125,6 @@ export default function App() {
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_UPDATE" />}>
             <Route path="/admin/talent-bank/:publicId/edit" element={<TalentBankEditRouter />} />
-          </Route>
-          <Route element={<PermissionRoute permission="STUDENT_DELETE" />}>
-            <Route path="/admin/permanent-deletions" element={<PermanentDeletionsPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CREATE" />}>
             <Route path="/admin/collaborators/new" element={<StudentEditorPage mode="create" />} />
