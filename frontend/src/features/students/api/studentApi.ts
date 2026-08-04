@@ -9,6 +9,7 @@ import type {
   StudentEffectiveStatus,
   StudentIdentity,
   StudentPage,
+  StudentFilterOptions,
   StudentCredentialResult,
   StudentSession,
   UpdateStudentPayload
@@ -21,6 +22,7 @@ export function searchStudents(params: {
   organizationPublicId?: string
   profilePublicId?: string
   technologicalProfilePublicId?: string
+  technologyPublicId?: string
   certificationsEnabled?: boolean
   page?: number
   size?: number
@@ -39,6 +41,7 @@ export function searchStudents(params: {
   if (params.organizationPublicId) search.set('organizationPublicId', params.organizationPublicId)
   if (params.profilePublicId) search.set('profilePublicId', params.profilePublicId)
   if (params.technologicalProfilePublicId) search.set('technologicalProfilePublicId', params.technologicalProfilePublicId)
+  if (params.technologyPublicId) search.set('technologyPublicId', params.technologyPublicId)
   if (typeof params.certificationsEnabled === 'boolean') search.set('certificationsEnabled', String(params.certificationsEnabled))
   return apiRequest<StudentPage>(`/admin/students?${search.toString()}`, { signal: params.signal }).then((response) => ({
     ...response,
@@ -47,6 +50,13 @@ export function searchStudents(params: {
     size: Number.isFinite(response.size) ? Math.max(response.size, 1) : (params.size ?? 10),
     totalElements: Number.isFinite(response.totalElements) ? Math.max(response.totalElements, 0) : 0,
     totalPages: Number.isFinite(response.totalPages) ? Math.max(response.totalPages, 0) : 0
+  }))
+}
+
+export function getStudentFilterOptions(signal?: AbortSignal) {
+  return apiRequest<StudentFilterOptions>('/admin/students/filter-options', { signal }).then((response) => ({
+    roles: Array.isArray(response.roles) ? response.roles : [],
+    technologies: Array.isArray(response.technologies) ? response.technologies : []
   }))
 }
 

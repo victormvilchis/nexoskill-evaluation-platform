@@ -87,6 +87,8 @@ type PendingChange =
   | { type: 'MODE'; mode: FormContentMode }
   | { type: 'TARGET'; scope: FormContentScope; organizationPublicId?: string }
 
+type FormBuilderTab = 'GENERAL' | 'CONTENT' | 'CONFIGURATION'
+
 export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const { id } = useParams()
   const editing = Boolean(id)
@@ -115,6 +117,8 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
   const [previewQuestion, setPreviewQuestion] = useState<FormQuestionOption | null>(null)
+  const [activeTab, setActiveTab] = useState<FormBuilderTab>('GENERAL')
+  const [questionCategoryPublicId, setQuestionCategoryPublicId] = useState('')
 
   useEffect(() => {
     if (!editing && globalAdministrator && model.title === '' && model.contentScope === 'ORGANIZATION'
@@ -249,30 +253,63 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     }
     const controller = new AbortController()
     setLoadingOptions(true)
+    setError('')
+
+    const categoryRequest = getFormCategoryOptions(
+      model.contentScope ?? 'ORGANIZATION',
+      model.organizationPublicId,
+      controller.signal
+    )
+
     if (model.contentMode === 'MANUAL') {
-      getFormQuestionOptions({
-        scope: model.contentScope ?? 'ORGANIZATION',
-        organizationPublicId: model.organizationPublicId,
-        query: debouncedQuestionQuery,
-        page: questionPageIndex,
-        size: questionPageSize,
-        signal: controller.signal
-      })
-        .then(setQuestionPage)
+      Promise.all([
+        getFormQuestionOptions({
+          scope: model.contentScope ?? 'ORGANIZATION',
+          organizationPublicId: model.organizationPublicId,
+          query: debouncedQuestionQuery,
+          categoryPublicId: questionCategoryPublicId || undefined,
+          page: questionPageIndex,
+          size: questionPageSize,
+          signal: controller.signal
+        }),
+        categoryRequest
+      ])
+        .then(([questions, availableCategories]) => {
+          setQuestionPage(questions)
+          setCategories(availableCategories)
+        })
         .catch(requestError => {
-          if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar las preguntas disponibles.')
+          if (!controller.signal.aborted) {
+            setError(requestError instanceof ApiRequestError
+              ? requestError.message
+              : 'No fue posible consultar las preguntas disponibles.')
+          }
         })
         .finally(() => { if (!controller.signal.aborted) setLoadingOptions(false) })
     } else {
-      getFormCategoryOptions(model.contentScope ?? 'ORGANIZATION', model.organizationPublicId, controller.signal)
+      categoryRequest
         .then(setCategories)
         .catch(requestError => {
-          if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar las categorías disponibles.')
+          if (!controller.signal.aborted) {
+            setError(requestError instanceof ApiRequestError
+              ? requestError.message
+              : 'No fue posible consultar las categorías disponibles.')
+          }
         })
         .finally(() => { if (!controller.signal.aborted) setLoadingOptions(false) })
     }
     return () => controller.abort()
-  }, [debouncedQuestionQuery, headerIssues.length, model.contentMode, model.contentScope, model.organizationPublicId, questionPageIndex, questionPageSize, targetReady])
+  }, [
+    debouncedQuestionQuery,
+    headerIssues.length,
+    model.contentMode,
+    model.contentScope,
+    model.organizationPublicId,
+    questionCategoryPublicId,
+    questionPageIndex,
+    questionPageSize,
+    targetReady
+  ])
 
   function set<K extends keyof FormPayload>(key: K, value: FormPayload[K]) {
     setModel(current => ({ ...current, [key]: value }))
@@ -289,6 +326,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     setConfiguredPools([])
     setQuestionPageIndex(0)
     setQuestionQuery('')
+    setQuestionCategoryPublicId('')
   }
 
   function applyMode(mode: FormContentMode) {
@@ -497,103 +535,200 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     <BackButton fallback="/admin/forms" />
     {error && <div className="ns-inline-alert" role="alert"><strong>Revisa el formulario</strong><span>{error}</span></div>}
     <form id="form-builder" onSubmit={submit}>
-      <div className="ns-builder-layout">
-        <div className="ns-builder-main">
-          <section className="ns-card">
-            <div className="ns-card-heading"><div><span className="ns-step">1</span><h2>Información general</h2></div><p>Define cómo se identificará y quién podrá utilizar el formulario.</p></div>
-            <div className="ns-form-grid">
-              <label className="ns-field ns-field-wide"><span>Título <b>*</b></span><input required minLength={3} aria-invalid={Boolean(fieldErrors.title)} value={model.title} onChange={event => set('title', event.target.value)} placeholder="Ej. Certificación APX — Nivel 1" />{fieldErrors.title ? <small className="ns-field-error">{fieldErrors.title}</small> : <small>Usa un nombre claro para administradores y participantes.</small>}</label>
-              <label className="ns-field ns-field-wide"><span>Descripción</span><textarea rows={4} value={model.description} onChange={event => set('description', event.target.value)} placeholder="Describe el objetivo y alcance del formulario." /></label>
-              {globalAdministrator && !editing && <label className="ns-field"><span>Alcance <b>*</b></span><SelectField value={model.contentScope ?? 'GLOBAL'} onChange={value => requestTarget(value as FormContentScope, value === 'ORGANIZATION' ? model.organizationPublicId : undefined)} ariaLabel="Alcance del formulario" options={[{ value: 'GLOBAL', label: 'Global' }, { value: 'ORGANIZATION', label: 'Organizacional' }]} /><small>El alcance determina qué preguntas y categorías estarán disponibles.</small></label>}
-              {globalAdministrator && !editing && model.contentScope === 'ORGANIZATION' && <div className="ns-field">
-                <span>Organización <b>*</b></span>
-                <SelectField required value={model.organizationPublicId ?? ''} disabled={organizationsLoading || Boolean(organizationsError)} onChange={value => requestTarget('ORGANIZATION', value)} ariaLabel="Organización propietaria" placeholder={organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización'} options={[{ value: '', label: organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización' }, ...organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))]} />
-                {organizationsError && <div className="form-option-load-error" role="alert"><span>{organizationsError}</span><button className="secondary-button compact-button" type="button" onClick={retryOrganizations}>Reintentar</button></div>}
-                {fieldErrors.organizationPublicId && <small className="ns-field-error">{fieldErrors.organizationPublicId}</small>}
-              </div>}
-              {editing && <div className="ns-field"><span>Alcance</span><div className="form-static-field"><strong>{model.contentScope === 'GLOBAL' ? 'Global' : 'Organizacional'}</strong><small>El alcance y la organización propietaria no cambian durante la edición.</small></div></div>}
-              <label className="ns-field"><span>Modalidad</span><SelectField value={model.modeCode} onChange={value => set('modeCode', value as FormMode)} ariaLabel="Modalidad" options={[{ value: 'ASSESSMENT', label: 'Evaluación' }, { value: 'PRACTICE', label: 'Práctica' }]} /><small>{model.modeCode === 'PRACTICE' ? 'Permite aprender y recibir retroalimentación.' : 'Califica el desempeño al finalizar.'}</small></label>
-              <label className="ns-field"><span>Puntaje mínimo</span><div className="ns-input-suffix"><input type="number" min="0" max="100" value={model.passingScore} onChange={event => set('passingScore', Number(event.target.value))} /><span>%</span></div><small>Porcentaje requerido para aprobar.</small></label>
-            </div>
-          </section>
+      <nav className="form-builder-tabs" aria-label="Secciones del formulario" role="tablist">
+        <button
+          className={activeTab === 'GENERAL' ? 'is-active' : ''}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'GENERAL'}
+          onClick={() => setActiveTab('GENERAL')}
+        >
+          <span>1</span> Información general
+        </button>
+        <button
+          className={activeTab === 'CONTENT' ? 'is-active' : ''}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'CONTENT'}
+          onClick={() => setActiveTab('CONTENT')}
+        >
+          <span>2</span> Contenido
+        </button>
+        <button
+          className={activeTab === 'CONFIGURATION' ? 'is-active' : ''}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'CONFIGURATION'}
+          onClick={() => setActiveTab('CONFIGURATION')}
+        >
+          <span>3</span> Configuración
+        </button>
+      </nav>
 
-          <section className={`ns-card form-content-card${headerIssues.length > 0 ? ' is-disabled' : ''}`}>
-            <div className="ns-card-heading"><div><span className="ns-step">2</span><h2>Contenido</h2></div><p>Elige una sola modalidad: preguntas manuales o Pool aleatorio.</p></div>
-            {headerIssues.length > 0 ? <div className="form-content-blocked" role="status"><Icon name="info" size={24} /><div><strong>Completa el encabezado para configurar el contenido</strong><p>{headerIssues[0]}</p></div></div> : <>
-              <div className="form-content-mode-grid" role="radiogroup" aria-label="Modalidad de contenido">
-                <button className={`form-content-mode${model.contentMode === 'MANUAL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'MANUAL'} onClick={() => requestMode('MANUAL')}><Icon name="questions" size={22} /><span><strong>Preguntas manuales</strong><small>Selecciona, ordena y retira preguntas individualmente.</small></span></button>
-                <button className={`form-content-mode${model.contentMode === 'RANDOM_POOL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'RANDOM_POOL'} onClick={() => requestMode('RANDOM_POOL')}><Icon name="categories" size={22} /><span><strong>Pool aleatorio</strong><small>Configura categorías; las preguntas activas se elegirán aleatoriamente.</small></span></button>
+      <div className="form-builder-tab-content">
+        {activeTab === 'GENERAL' && <section className="ns-card" role="tabpanel">
+          <div className="ns-card-heading">
+            <div><span className="ns-step">1</span><h2>Información general</h2></div>
+            <p>Define cómo se identificará y quién podrá utilizar el formulario.</p>
+          </div>
+          <div className="ns-form-grid">
+            <label className="ns-field ns-field-wide">
+              <span>Título <b>*</b></span>
+              <input required minLength={3} aria-invalid={Boolean(fieldErrors.title)} value={model.title} onChange={event => set('title', event.target.value)} placeholder="Ej. Certificación APX — Nivel 1" />
+              {fieldErrors.title ? <small className="ns-field-error">{fieldErrors.title}</small> : <small>Usa un nombre claro para administradores y participantes.</small>}
+            </label>
+            <label className="ns-field ns-field-wide">
+              <span>Descripción</span>
+              <textarea rows={4} value={model.description} onChange={event => set('description', event.target.value)} placeholder="Describe el objetivo y alcance del formulario." />
+            </label>
+            {globalAdministrator && !editing && <label className="ns-field">
+              <span>Alcance <b>*</b></span>
+              <SelectField value={model.contentScope ?? 'GLOBAL'} onChange={value => requestTarget(value as FormContentScope, value === 'ORGANIZATION' ? model.organizationPublicId : undefined)} ariaLabel="Alcance del formulario" options={[{ value: 'GLOBAL', label: 'Global' }, { value: 'ORGANIZATION', label: 'Organizacional' }]} />
+              <small>El alcance determina qué preguntas y categorías estarán disponibles.</small>
+            </label>}
+            {globalAdministrator && !editing && model.contentScope === 'ORGANIZATION' && <div className="ns-field">
+              <span>Organización <b>*</b></span>
+              <SelectField
+                required
+                value={model.organizationPublicId ?? ''}
+                disabled={organizationsLoading || Boolean(organizationsError)}
+                onChange={value => requestTarget('ORGANIZATION', value)}
+                ariaLabel="Organización propietaria"
+                placeholder={organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización'}
+                options={organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))}
+              />
+              <small>Solo se muestran organizaciones con seguimiento de certificaciones habilitado.</small>
+              {organizationsError && <div className="form-option-load-error" role="alert"><span>{organizationsError}</span><button className="secondary-button compact-button" type="button" onClick={retryOrganizations}>Reintentar</button></div>}
+              {fieldErrors.organizationPublicId && <small className="ns-field-error">{fieldErrors.organizationPublicId}</small>}
+            </div>}
+            {editing && <div className="ns-field">
+              <span>Alcance</span>
+              <div className="form-static-field">
+                <strong>{model.contentScope === 'GLOBAL' ? 'Global' : 'Organizacional'}</strong>
+                <small>{model.contentScope === 'ORGANIZATION' ? 'La organización propietaria se conserva durante la edición.' : 'El formulario pertenece al catálogo global.'}</small>
               </div>
+            </div>}
+            <label className="ns-field">
+              <span>Modalidad</span>
+              <SelectField value={model.modeCode} onChange={value => set('modeCode', value as FormMode)} ariaLabel="Modalidad" options={[{ value: 'ASSESSMENT', label: 'Evaluación' }, { value: 'PRACTICE', label: 'Práctica' }]} />
+              <small>{model.modeCode === 'PRACTICE' ? 'Permite aprender y recibir retroalimentación.' : 'Califica el desempeño al finalizar.'}</small>
+            </label>
+            <label className="ns-field">
+              <span>Puntaje mínimo</span>
+              <div className="ns-input-suffix"><input type="number" min="0" max="100" value={model.passingScore} onChange={event => set('passingScore', Number(event.target.value))} /><span>%</span></div>
+              <small>Porcentaje requerido para aprobar.</small>
+            </label>
+          </div>
+        </section>}
 
-              {model.contentMode === 'MANUAL' && <div className="form-manual-content">
-                <div className="form-question-browser">
-                  <div className="form-content-section-heading"><div><h3>Banco de preguntas disponible</h3><p>Solo se muestran preguntas activas y autorizadas para este alcance.</p></div></div>
+        {activeTab === 'CONTENT' && <section className={`ns-card form-content-card${headerIssues.length > 0 ? ' is-disabled' : ''}`} role="tabpanel">
+          <div className="ns-card-heading">
+            <div><span className="ns-step">2</span><h2>Contenido</h2></div>
+            <p>Elige una sola modalidad: preguntas manuales o Pool aleatorio.</p>
+          </div>
+          {headerIssues.length > 0 ? <div className="form-content-blocked" role="status">
+            <Icon name="info" size={24} />
+            <div><strong>Completa la información general para configurar el contenido</strong><p>{headerIssues[0]}</p></div>
+          </div> : <>
+            <div className="form-content-mode-grid" role="radiogroup" aria-label="Modalidad de contenido">
+              <button className={`form-content-mode${model.contentMode === 'MANUAL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'MANUAL'} onClick={() => requestMode('MANUAL')}><Icon name="questions" size={22} /><span><strong>Preguntas manuales</strong><small>Selecciona, ordena y retira preguntas individualmente.</small></span></button>
+              <button className={`form-content-mode${model.contentMode === 'RANDOM_POOL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'RANDOM_POOL'} onClick={() => requestMode('RANDOM_POOL')}><Icon name="categories" size={22} /><span><strong>Pool aleatorio</strong><small>Configura categorías; las preguntas activas se elegirán aleatoriamente.</small></span></button>
+            </div>
+
+            {model.contentMode === 'MANUAL' && <div className="form-manual-content">
+              <div className="form-question-browser">
+                <div className="form-content-section-heading"><div><h3>Banco de preguntas disponible</h3><p>Solo se muestran preguntas activas y autorizadas para esta organización y alcance.</p></div></div>
+                <div className="form-question-filters">
                   <ResourceSearchField value={questionQuery} onChange={value => { setQuestionQuery(value); setQuestionPageIndex(0) }} placeholder="Buscar por enunciado" disabled={loadingOptions} />
-                  <div className="form-question-results" aria-busy={loadingOptions}>
-                    {loadingOptions && <div className="ns-table-empty">Consultando preguntas…</div>}
-                    {!loadingOptions && questionPage.content.length === 0 && <div className="ns-table-empty"><strong>No hay preguntas activas disponibles</strong><span>Revisa el alcance, la organización o el criterio de búsqueda.</span></div>}
-                    {!loadingOptions && questionPage.content.map(question => {
-                      const selected = selectedQuestions.some(item => item.questionPublicId === question.publicId)
-                      return <article className="form-question-option" key={question.publicId}>
-                        <div><strong>{question.statement}</strong><p>{question.typeName}{question.difficultyName ? ` · ${question.difficultyName}` : ''}{question.technologyName ? ` · ${question.technologyName}` : ''}</p><small>{question.categoryNames.length ? question.categoryNames.join(' · ') : 'Sin categoría'} · {question.contentScope === 'GLOBAL' ? 'Global' : question.organizationName}</small></div>
-                        <div className="form-question-option-actions"><button className="secondary-button compact-button" type="button" onClick={() => setPreviewQuestion(question)}><Icon name="eye" size={15} /> Revisar</button><button className="secondary-button compact-button" disabled={selected} type="button" onClick={() => addQuestion(question.publicId)}>{selected ? <><Icon name="check" size={15} /> Agregada</> : <><Icon name="plus" size={15} /> Agregar</>}</button></div>
-                      </article>
-                    })}
-                  </div>
-                  <TablePagination compact currentPage={questionPage.page} pageSize={questionPage.size} totalElements={questionPage.totalElements} totalPages={questionPage.totalPages} isLoading={loadingOptions} onPageChange={setQuestionPageIndex} onPageSizeChange={value => { setQuestionPageSize(value); setQuestionPageIndex(0) }} />
+                  <SelectField
+                    value={questionCategoryPublicId}
+                    onChange={value => { setQuestionCategoryPublicId(value); setQuestionPageIndex(0) }}
+                    ariaLabel="Filtrar preguntas por categoría"
+                    placeholder="Todas las categorías"
+                    options={[
+                      { value: '', label: 'Todas las categorías' },
+                      ...categories.map(category => ({
+                        value: category.publicId,
+                        label: `${category.name} · ${category.activeQuestionCount}`
+                      }))
+                    ]}
+                  />
                 </div>
-                <div className="form-selected-questions">
-                  <div className="form-content-section-heading"><div><h3>Preguntas seleccionadas</h3><p>El orden visible será el orden guardado.</p></div><span className="form-content-count">{selectedQuestions.length}</span></div>
-                  {selectedQuestions.length === 0 && <div className="ns-builder-empty compact"><Icon name="clipboard" size={25} /><h3>Aún no agregas preguntas</h3><p>Selecciona al menos una pregunta activa del Banco.</p></div>}
-                  {selectedQuestions.map((question, index) => <article className="form-selected-question" key={question.questionPublicId}>
-                    <span className="form-question-order">{index + 1}</span>
-                    <div className="form-selected-question-copy"><strong>{question.statement}</strong><small>{question.typeName}{question.categoryNames.length ? ` · ${question.categoryNames.join(', ')}` : ''}{question.status !== 'ACTIVE' ? ' · Conservada como histórica' : ''}</small></div>
-                    <div className="form-points-field form-readonly-value"><span>Puntos</span><strong>{question.points}</strong></div>
-                    <label className="form-required-field"><input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.questionPublicId, { required: event.target.checked })} /><span>Obligatoria</span></label>
-                    <div className="form-question-actions"><button aria-label="Subir pregunta" type="button" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><Icon name="arrowUp" size={16} /></button><button aria-label="Bajar pregunta" type="button" disabled={index === selectedQuestions.length - 1} onClick={() => moveQuestion(index, 1)}><Icon name="arrowDown" size={16} /></button><button aria-label="Retirar pregunta" className="is-danger" type="button" onClick={() => removeQuestion(question.questionPublicId)}><Icon name="trash" size={16} /></button></div>
-                  </article>)}
+                <div className="form-question-results" aria-busy={loadingOptions}>
+                  {loadingOptions && <div className="ns-table-empty">Consultando preguntas…</div>}
+                  {!loadingOptions && questionPage.content.length === 0 && <div className="ns-table-empty">
+                    <strong>{questionCategoryPublicId ? 'Categoría sin preguntas disponibles' : 'No hay preguntas activas disponibles'}</strong>
+                    <span>{questionCategoryPublicId
+                      ? 'No existen preguntas activas disponibles en esta categoría para el alcance del formulario.'
+                      : 'Revisa el alcance, la organización o el criterio de búsqueda.'}</span>
+                  </div>}
+                  {!loadingOptions && questionPage.content.map(question => {
+                    const selected = selectedQuestions.some(item => item.questionPublicId === question.publicId)
+                    return <article className="form-question-option" key={question.publicId}>
+                      <div><strong>{question.statement}</strong><p>{question.typeName}{question.difficultyName ? ` · ${question.difficultyName}` : ''}{question.technologyName ? ` · ${question.technologyName}` : ''}</p><small>{question.categoryNames.length ? question.categoryNames.join(' · ') : 'Sin categoría'} · {question.contentScope === 'GLOBAL' ? 'Global' : question.organizationName}</small></div>
+                      <div className="form-question-option-actions"><button className="secondary-button compact-button" type="button" onClick={() => setPreviewQuestion(question)}><Icon name="eye" size={15} /> Revisar</button><button className="secondary-button compact-button" disabled={selected} type="button" onClick={() => addQuestion(question.publicId)}>{selected ? <><Icon name="check" size={15} /> Agregada</> : <><Icon name="plus" size={15} /> Agregar</>}</button></div>
+                    </article>
+                  })}
                 </div>
-              </div>}
+                <TablePagination compact currentPage={questionPage.page} pageSize={questionPage.size} totalElements={questionPage.totalElements} totalPages={questionPage.totalPages} isLoading={loadingOptions} onPageChange={setQuestionPageIndex} onPageSizeChange={value => { setQuestionPageSize(value); setQuestionPageIndex(0) }} />
+              </div>
+              <div className="form-selected-questions">
+                <div className="form-content-section-heading"><div><h3>Preguntas seleccionadas</h3><p>El orden visible será el orden guardado.</p></div><span className="form-content-count">{selectedQuestions.length}</span></div>
+                {selectedQuestions.length === 0 && <div className="ns-builder-empty compact"><Icon name="clipboard" size={25} /><h3>Aún no agregas preguntas</h3><p>Selecciona al menos una pregunta activa del Banco.</p></div>}
+                {selectedQuestions.map((question, index) => <article className="form-selected-question" key={question.questionPublicId}>
+                  <span className="form-question-order">{index + 1}</span>
+                  <div className="form-selected-question-copy"><strong>{question.statement}</strong><small>{question.typeName}{question.categoryNames.length ? ` · ${question.categoryNames.join(', ')}` : ''}{question.status !== 'ACTIVE' ? ' · Conservada como histórica' : ''}</small></div>
+                  <div className="form-points-field form-readonly-value"><span>Puntos</span><strong>{question.points}</strong></div>
+                  <label className="form-required-field"><input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.questionPublicId, { required: event.target.checked })} /><span>Obligatoria</span></label>
+                  <div className="form-question-actions"><button aria-label="Subir pregunta" type="button" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><Icon name="arrowUp" size={16} /></button><button aria-label="Bajar pregunta" type="button" disabled={index === selectedQuestions.length - 1} onClick={() => moveQuestion(index, 1)}><Icon name="arrowDown" size={16} /></button><button aria-label="Retirar pregunta" className="is-danger" type="button" onClick={() => removeQuestion(question.questionPublicId)}><Icon name="trash" size={16} /></button></div>
+                </article>)}
+              </div>
+            </div>}
 
-              {model.contentMode === 'RANDOM_POOL' && <div className="form-pool-content">
-                <div className="form-content-section-heading"><div><h3>Categorías del Pool</h3><p>Las preguntas se seleccionarán aleatoriamente entre las activas y disponibles.</p></div></div>
-                <div className="form-pool-add-row"><SelectField value="" onChange={addPool} ariaLabel="Agregar categoría al Pool" placeholder="Seleccionar categoría" options={availableCategories.map(category => ({ value: category.publicId, label: `${category.name} · ${category.activeQuestionCount} activas` }))} /><small>Una categoría solo puede agregarse una vez.</small></div>
-                {loadingOptions && <div className="ns-table-empty">Consultando categorías…</div>}
-                {!loadingOptions && categories.length === 0 && <div className="ns-table-empty"><strong>No hay categorías disponibles</strong><span>El alcance seleccionado no tiene categorías activas con preguntas válidas.</span></div>}
-                <div className="form-pool-list">
-                  {configuredPools.map(pool => <article className="form-pool-item" key={pool.categoryPublicId}>
-                    <div className="form-pool-copy"><strong>{pool.categoryName}</strong><small>{pool.availableQuestionCount ?? 0} preguntas activas disponibles</small></div>
-                    <label className="ns-field"><span>Cantidad</span><input type="number" min="1" max={Math.max(1, pool.availableQuestionCount ?? 1)} value={pool.questionCount} onChange={event => updatePool(pool.categoryPublicId, { questionCount: Number(event.target.value) })} /></label>
-                    <label className="ns-field"><span>Dificultad</span><SelectField value={pool.difficultyCode ?? ''} onChange={value => updatePool(pool.categoryPublicId, { difficultyCode: value || undefined })} ariaLabel={`Dificultad para ${pool.categoryName}`} options={[{ value: '', label: 'Todas' }, { value: 'JR', label: 'JR' }, { value: 'STD', label: 'STD' }, { value: 'SR', label: 'SR' }]} /></label>
-                    <button aria-label={`Retirar ${pool.categoryName}`} className="form-remove-pool" type="button" onClick={() => removePool(pool.categoryPublicId)}><Icon name="trash" size={17} /></button>
-                  </article>)}
-                </div>
-                {configuredPools.length === 0 && <div className="ns-builder-empty compact"><Icon name="categories" size={25} /><h3>Aún no configuras el Pool</h3><p>Agrega al menos una categoría y define cuántas preguntas debe tomar.</p></div>}
-              </div>}
-            </>}
-          </section>
-        </div>
+            {model.contentMode === 'RANDOM_POOL' && <div className="form-pool-content">
+              <div className="form-content-section-heading"><div><h3>Categorías del Pool</h3><p>Las preguntas se seleccionarán aleatoriamente entre las activas y disponibles.</p></div></div>
+              <div className="form-pool-add-row"><SelectField value="" onChange={addPool} ariaLabel="Agregar categoría al Pool" placeholder="Seleccionar categoría" options={availableCategories.map(category => ({ value: category.publicId, label: `${category.name} · ${category.activeQuestionCount} activas` }))} /><small>Una categoría solo puede agregarse una vez.</small></div>
+              {loadingOptions && <div className="ns-table-empty">Consultando categorías…</div>}
+              {!loadingOptions && categories.length === 0 && <div className="ns-table-empty"><strong>No hay categorías disponibles</strong><span>El alcance seleccionado no tiene categorías activas con preguntas válidas.</span></div>}
+              <div className="form-pool-list">
+                {configuredPools.map(pool => <article className="form-pool-item" key={pool.categoryPublicId}>
+                  <div className="form-pool-copy"><strong>{pool.categoryName}</strong><small>{pool.availableQuestionCount ?? 0} preguntas activas disponibles</small></div>
+                  <label className="ns-field"><span>Cantidad</span><input type="number" min="1" max={Math.max(1, pool.availableQuestionCount ?? 1)} value={pool.questionCount} onChange={event => updatePool(pool.categoryPublicId, { questionCount: Number(event.target.value) })} /></label>
+                  <label className="ns-field"><span>Dificultad</span><SelectField value={pool.difficultyCode ?? ''} onChange={value => updatePool(pool.categoryPublicId, { difficultyCode: value || undefined })} ariaLabel={`Dificultad para ${pool.categoryName}`} options={[{ value: '', label: 'Todas' }, { value: 'JR', label: 'JR' }, { value: 'STD', label: 'STD' }, { value: 'SR', label: 'SR' }]} /></label>
+                  <button aria-label={`Retirar ${pool.categoryName}`} className="form-remove-pool" type="button" onClick={() => removePool(pool.categoryPublicId)}><Icon name="trash" size={17} /></button>
+                </article>)}
+              </div>
+              {configuredPools.length === 0 && <div className="ns-builder-empty compact"><Icon name="categories" size={25} /><h3>Aún no configuras el Pool</h3><p>Agrega al menos una categoría y define cuántas preguntas debe tomar.</p></div>}
+            </div>}
+          </>}
+        </section>}
 
-        <aside className="ns-builder-sidebar"><section className="ns-card ns-settings-card">
-          <div className="ns-card-heading"><h2>Configuración</h2><p>Los cambios se aplican al guardar.</p></div>
-          <div className="ns-settings-group"><h3>Disponibilidad</h3><Toggle checked={model.acceptResponses} onChange={value => set('acceptResponses', value)} title="Aceptar respuestas" description="Habilita el acceso de participantes cuando el formulario esté activo." /></div>
-          <div className="ns-settings-group"><h3>Calificación e intentos</h3>
-            <Toggle checked={model.retryUntilPassed} onChange={value => set('retryUntilPassed', value)} title="Reintentar hasta aprobar" />
-            <Toggle checked={model.showResults} onChange={value => set('showResults', value)} title="Mostrar resultados automáticamente" />
-            <Toggle checked={model.showCorrectAnswers} onChange={value => set('showCorrectAnswers', value)} title="Mostrar respuestas correctas" />
-            <div className="ns-inline-fields"><label className="ns-field"><span>Duración</span><div className="ns-input-suffix"><input type="number" min="1" value={model.durationMinutes ?? ''} onChange={event => set('durationMinutes', event.target.value ? Number(event.target.value) : undefined)} /><span>min</span></div></label><label className="ns-field"><span>Intentos máximos</span><input type="number" min="1" disabled={model.retryUntilPassed} value={model.maxAttempts ?? ''} onChange={event => set('maxAttempts', event.target.value ? Number(event.target.value) : undefined)} /></label></div>
+        {activeTab === 'CONFIGURATION' && <section className="ns-card ns-settings-card form-settings-tab" role="tabpanel">
+          <div className="ns-card-heading"><div><span className="ns-step">3</span><h2>Configuración</h2></div><p>Los cambios se aplican como una sola unidad al guardar.</p></div>
+          <div className="form-settings-grid">
+            <div className="ns-settings-group"><h3>Disponibilidad</h3><Toggle checked={model.acceptResponses} onChange={value => set('acceptResponses', value)} title="Aceptar respuestas" description="Habilita el acceso de participantes cuando el formulario esté activo." /></div>
+            <div className="ns-settings-group"><h3>Calificación e intentos</h3>
+              <Toggle checked={model.retryUntilPassed} onChange={value => set('retryUntilPassed', value)} title="Reintentar hasta aprobar" />
+              <Toggle checked={model.showResults} onChange={value => set('showResults', value)} title="Mostrar resultados automáticamente" />
+              <Toggle checked={model.showCorrectAnswers} onChange={value => set('showCorrectAnswers', value)} title="Mostrar respuestas correctas" />
+              <div className="ns-inline-fields"><label className="ns-field"><span>Duración</span><div className="ns-input-suffix"><input type="number" min="1" value={model.durationMinutes ?? ''} onChange={event => set('durationMinutes', event.target.value ? Number(event.target.value) : undefined)} /><span>min</span></div></label><label className="ns-field"><span>Intentos máximos</span><input type="number" min="1" disabled={model.retryUntilPassed} value={model.maxAttempts ?? ''} onChange={event => set('maxAttempts', event.target.value ? Number(event.target.value) : undefined)} /></label></div>
+            </div>
+            <div className="ns-settings-group"><h3>Presentación</h3>
+              <Toggle checked={model.randomizeQuestions} onChange={value => set('randomizeQuestions', value)} title="Orden aleatorio de preguntas" />
+              <Toggle checked={model.randomizeOptions} onChange={value => set('randomizeOptions', value)} title="Orden aleatorio de opciones" />
+              <Toggle checked={model.showProgress} onChange={value => set('showProgress', value)} title="Mostrar barra de progreso" />
+              <Toggle checked={model.hideQuestionNumbers} onChange={value => set('hideQuestionNumbers', value)} title="Ocultar número de pregunta" />
+              <Toggle checked={model.allowSaveResume} onChange={value => set('allowSaveResume', value)} title="Guardar y continuar después" />
+            </div>
+            <div className="ns-settings-group"><label className="ns-field"><span>Mensaje de agradecimiento</span><textarea rows={5} value={model.thankYouMessage} onChange={event => set('thankYouMessage', event.target.value)} /></label></div>
           </div>
-          <div className="ns-settings-group"><h3>Presentación</h3>
-            <Toggle checked={model.randomizeQuestions} onChange={value => set('randomizeQuestions', value)} title="Orden aleatorio de preguntas" />
-            <Toggle checked={model.randomizeOptions} onChange={value => set('randomizeOptions', value)} title="Orden aleatorio de opciones" />
-            <Toggle checked={model.showProgress} onChange={value => set('showProgress', value)} title="Mostrar barra de progreso" />
-            <Toggle checked={model.hideQuestionNumbers} onChange={value => set('hideQuestionNumbers', value)} title="Ocultar número de pregunta" />
-            <Toggle checked={model.allowSaveResume} onChange={value => set('allowSaveResume', value)} title="Guardar y continuar después" />
-          </div>
-          <div className="ns-settings-group"><label className="ns-field"><span>Mensaje de agradecimiento</span><textarea rows={5} value={model.thankYouMessage} onChange={event => set('thankYouMessage', event.target.value)} /></label></div>
-        </section></aside>
+        </section>}
       </div>
-      <FormActions sticky><button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/forms')}>Cancelar</button><button className="primary-button" disabled={saving || readiness.length > 0} type="submit">{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear formulario'}</button></FormActions>
+
+      <FormActions sticky>
+        <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/forms')}>Cancelar</button>
+        <button className="primary-button" disabled={saving || readiness.length > 0} type="submit">{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear formulario'}</button>
+      </FormActions>
     </form>
 
     <ConfirmDialog open={Boolean(previewQuestion)} title="Vista previa de la pregunta" description="Consulta la configuración definida en el Banco de preguntas. Desde Formularios no puede modificarse." confirmLabel={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId) ? 'Ya agregada' : 'Agregar pregunta'} confirmDisabled={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId)} onConfirm={() => { if (previewQuestion) addQuestion(previewQuestion.publicId); setPreviewQuestion(null) }} onCancel={() => setPreviewQuestion(null)}>

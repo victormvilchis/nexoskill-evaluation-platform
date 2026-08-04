@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
-import { searchOrganizations } from '../features/organizations/api/organizationApi'
-import { searchStudents } from '../features/students/api/studentApi'
+import { getStudentFilterOptions, searchStudents } from '../features/students/api/studentApi'
 import { permanentlyDeletePerson } from '../features/talent-bank/api/talentBankApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
@@ -15,8 +14,7 @@ import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
-import type { OrganizationSummary } from '../features/organizations/types/organizations'
-import type { StudentEffectiveStatus, StudentPage } from '../shared/types/students'
+import type { StudentEffectiveStatus, StudentFilterOptions, StudentPage } from '../shared/types/students'
 const statuses: Array<{ value: StudentEffectiveStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activo' },
   { value: 'ALL', label: 'Todos los estados' },
@@ -56,10 +54,10 @@ export function AdminStudentsPage() {
     (role) => role === 'ADMINISTRATOR' || role === 'MANAGER' || role === 'SUPERVISOR'
   ))
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
-  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
   const [status, setStatus] = useState<StudentEffectiveStatus | 'ALL'>(statusFromQuery(searchParams.get('status')))
+  const [filterOptions, setFilterOptions] = useState<StudentFilterOptions>({ roles: [], technologies: [] })
   const [data, setData] = useState<StudentPage | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,16 +65,19 @@ export function AdminStudentsPage() {
   const [deleting, setDeleting] = useState(false)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
-  const organization = searchParams.get('organization') ?? ''
+  const role = searchParams.get('role') ?? ''
+  const technology = searchParams.get('technology') ?? ''
   const debouncedQuery = useDebouncedValue(query, 300)
   useEffect(() => {
-    if (!administrator) return
     const controller = new AbortController()
-    searchOrganizations({ status: 'ACTIVE', page: 0, size: 100, signal: controller.signal })
-      .then((response) => setOrganizations(response.content.filter((item) => item.organizationType === 'CUSTOMER')))
-      .catch(() => { if (!controller.signal.aborted) setOrganizations([]) })
+    getStudentFilterOptions(controller.signal)
+      .then(setFilterOptions)
+      .catch(() => {
+        if (!controller.signal.aborted) setFilterOptions({ roles: [], technologies: [] })
+      })
     return () => controller.abort()
-  }, [administrator])
+  }, [])
+
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
     const currentStatus = statusFromQuery(searchParams.get('status'))
@@ -93,17 +94,23 @@ export function AdminStudentsPage() {
     setError(null)
     searchStudents({
       query: searchParams.get('query') ?? '', status: statusFromQuery(searchParams.get('status')),
-      organizationPublicId: administrator ? organization || undefined : undefined,
+      profilePublicId: role || undefined,
+      technologyPublicId: technology || undefined,
       page, size, sort: searchParams.get('sort') ?? 'displayName',
       direction: searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC', signal: controller.signal
     }).then((response) => {
       setData({ ...response, content: response.content ?? [] })
-      if (response.totalPages > 0 && page >= response.totalPages) goToPage(response.totalPages - 1)
+      if (response.totalPages > 0 && page >= response.totalPages) {
+        const validPage = response.totalPages - 1
+        const next = new URLSearchParams(searchParams)
+        if (validPage > 0) next.set('page', String(validPage)); else next.delete('page')
+        setSearchParams(next, { replace: true })
+      }
     }).catch((requestError) => {
       if (!controller.signal.aborted) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar colaboradores.')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [administrator, organization, page, searchParams, size])
+  }, [page, role, searchParams, setSearchParams, size, technology])
   function updateParam(name: string, value: string) {
     const next = new URLSearchParams(searchParams); next.delete('page')
     if (value) next.set(name, value); else next.delete(name)
@@ -130,15 +137,10 @@ export function AdminStudentsPage() {
   }
   const activeSort = searchParams.get('sort')
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
-  const selectedOrganization = organizations.find((item) => item.publicId === organization)
-  const showCertificationColumns = administrator && organization
-    ? Boolean(selectedOrganization?.appliesCertifications)
-    : (data?.content.some((student) => student.certificationsEnabled) ?? true)
-  const columnCount = showCertificationColumns ? 7 : 6
+  const showCertificationColumns = data?.content.some((student) => student.certificationsEnabled) ?? true
+  const columnCount = showCertificationColumns ? 6 : 5
   const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
-  const importTarget = administrator && organization
-    ? `/admin/collaborators/import?organization=${encodeURIComponent(organization)}`
-    : '/admin/collaborators/import'
+  const importTarget = '/admin/collaborators/import'
   async function confirmPermanentDeletion() {
     if (!deleteCandidate || deleting) return
     setDeleting(true)
@@ -160,9 +162,16 @@ export function AdminStudentsPage() {
   return (
     <main className="content-page resource-page ns-list-page student-page student-global-page">
       {(canImport || permissions.has('STUDENT_CREATE')) && <div className="ns-list-action-bar ns-student-header-actions" aria-label="Acciones de colaboradores">{canImport && <Link className="button-link ns-excel-import-button ns-create-button-secondary" to={importTarget} aria-label="Cargar Excel de colaboradores"><span className="ns-excel-import-icon-wrap" aria-hidden="true"><svg className="ns-excel-import-icon" focusable="false" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.5h9l4 4v13h-13v-17Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><path d="M14.5 3.5v4h4M8.25 11l3 5m0-5-3 5M14 11v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg></span><span>Cargar Excel</span></Link>}{permissions.has('STUDENT_CREATE') && <Link className="primary-button button-link ns-create-button" to="/admin/collaborators/new"><Icon name="plus" size={15} /> Crear colaborador</Link>}</div>}
-      <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE' || organization)} onClear={clearFilters}>
+      <FilterToolbar hasActiveFilters={Boolean(query || role || technology || status !== 'ACTIVE')} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre, correo, código o usuario corporativo" />
-        {administrator && <ResourceSelectField label="Organización" value={organization} onChange={(value) => updateParam('organization', value)}><option value="">Todas las organizaciones</option>{organizations.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.code}</option>)}</ResourceSelectField>}
+        <ResourceSelectField label="Rol" value={role} onChange={(value) => updateParam('role', value)}>
+          <option value="">Todos los roles</option>
+          {filterOptions.roles.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </ResourceSelectField>
+        <ResourceSelectField label="Tecnología" value={technology} onChange={(value) => updateParam('technology', value)}>
+          <option value="">Todas las tecnologías</option>
+          {filterOptions.technologies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </ResourceSelectField>
         <ResourceSelectField label="Estado" value={status} onChange={(value) => setStatus(value as StudentEffectiveStatus | 'ALL')}>{statuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
       </FilterToolbar>
       {error && <div className="error-message" role="alert">{error}</div>}
@@ -183,7 +192,6 @@ export function AdminStudentsPage() {
                 </th>
                 {showCertificationColumns && <th>Rol</th>}
                 <th>Tecnología actual</th>
-                <th>Usuario corporativo</th>
                 <th aria-sort={activeSort === 'admissionDate' ? (direction === 'ASC' ? 'ascending' : 'descending') : 'none'}>
                   <button
                     className={`ns-sortable-column-button${activeSort === 'admissionDate' ? ' active' : ''}`}
@@ -208,7 +216,6 @@ export function AdminStudentsPage() {
             </td>
             {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}
             <td>{formatTechnology(student.currentTechnology, student.expertise)}</td>
-            <td>{student.corporateUser || 'N/A'}</td>
             <td>{formatDate(student.admissionDate)}</td>
             <td><span className={`status-badge status-${student.effectiveStatus.toLowerCase()}`}>{statusLabels[student.effectiveStatus]}</span></td>
             <td className="ns-actions-column"><TableActions>

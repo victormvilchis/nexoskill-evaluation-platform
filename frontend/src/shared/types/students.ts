@@ -74,6 +74,16 @@ export interface StudentSession {
   revocationReason: string | null
 }
 
+export interface StudentFilterOption {
+  value: string
+  label: string
+}
+
+export interface StudentFilterOptions {
+  roles: StudentFilterOption[]
+  technologies: StudentFilterOption[]
+}
+
 export interface StudentCatalogs {
   organization: StudentOrganizationRef
   appliesCertifications: boolean

@@ -1,145 +1,215 @@
-/* Densidad homogénea para todas las tablas administrativas visibles. */
+/* Densidad homogénea y compacta para todas las tablas administrativas visibles. */
 .ns-data-panel,
 .table-panel {
-  border-radius: 10px;
+  border-radius: 9px;
+}
+
+.ns-data-table-wrap,
+.responsive-table {
+  overflow-x: auto;
+  scrollbar-gutter: stable;
 }
 
 .ns-data-table,
 .responsive-table table {
-  min-width: 680px;
-  line-height: 1.22;
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  table-layout: auto;
+  line-height: 1.16;
 }
 
 .ns-data-table th,
 .responsive-table th {
-  max-width: 320px;
-  padding: .46rem .58rem !important;
-  font-size: .66rem !important;
-  line-height: 1.15;
-  letter-spacing: .03em !important;
+  max-width: 300px;
+  padding: .34rem .44rem !important;
+  font-size: .63rem !important;
+  line-height: 1.1;
+  letter-spacing: .025em !important;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .ns-data-table td,
 .responsive-table td {
-  max-width: 320px;
-  padding: .48rem .58rem !important;
-  font-size: .79rem;
-  line-height: 1.24;
+  max-width: 300px;
+  padding: .36rem .44rem !important;
+  font-size: .75rem;
+  line-height: 1.17;
+  vertical-align: middle;
+}
+
+.ns-data-table th:first-child,
+.ns-data-table td:first-child,
+.responsive-table th:first-child,
+.responsive-table td:first-child {
+  padding-left: .56rem !important;
+}
+
+.ns-data-table th:last-child,
+.ns-data-table td:last-child,
+.responsive-table th:last-child,
+.responsive-table td:last-child {
+  padding-right: .56rem !important;
 }
 
 .ns-primary-cell {
-  min-width: 190px;
-  max-width: 360px;
+  min-width: 168px;
+  max-width: 330px;
 }
 
 .ns-primary-cell > strong,
 .ns-data-table td > strong,
 .responsive-table td > strong {
-  font-size: .84rem;
-  line-height: 1.24;
+  font-size: .8rem;
+  line-height: 1.18;
 }
 
 .ns-primary-cell > small,
 .ns-data-table td > small,
 .ns-data-table td > span + small,
 .responsive-table td > small {
-  gap: .28rem;
-  margin-top: .12rem;
-  font-size: .69rem;
-  line-height: 1.18;
+  gap: .18rem;
+  margin-top: .06rem;
+  font-size: .66rem;
+  line-height: 1.12;
+}
+
+.ns-data-table tr:has(> .ns-actions-column) > :nth-last-child(2),
+.responsive-table tr:has(> .ns-actions-column) > :nth-last-child(2) {
+  width: 1%;
+  min-width: 78px;
+  white-space: nowrap;
 }
 
 .ns-actions-column {
-  min-width: 100px;
   width: 1%;
+  min-width: 88px;
+  white-space: nowrap;
 }
 
 .ns-table-actions {
-  gap: .25rem;
+  gap: .16rem;
 }
 
 .ns-table-actions-trigger {
-  min-width: 90px;
-  min-height: 32px;
-  padding: .3rem .52rem;
-  border-radius: 7px;
-  font-size: .71rem;
+  min-width: 82px;
+  min-height: 28px;
+  padding: .22rem .42rem;
+  border-radius: 6px;
+  font-size: .68rem;
 }
 
 .ns-table-actions-menu {
-  padding: 4px;
+  padding: 3px;
 }
 
 .ns-table-actions-menu .ns-table-action {
-  min-height: 32px;
-  gap: .45rem;
-  padding: .38rem .52rem;
-  font-size: .74rem;
+  min-height: 29px;
+  gap: .38rem;
+  padding: .3rem .44rem;
+  font-size: .7rem;
 }
 
 .status-badge,
 .ns-status-badge {
-  min-height: 22px;
-  padding: .14rem .42rem;
+  min-height: 19px;
+  padding: .1rem .34rem;
   border-radius: 999px;
-  font-size: .67rem;
-  line-height: 1.05;
+  font-size: .63rem;
+  line-height: 1;
   white-space: nowrap;
 }
 
 .ns-sortable-column-button {
-  min-height: 22px;
-  padding: .1rem .18rem;
+  min-height: 19px;
+  gap: .22rem;
+  padding: .04rem .1rem;
 }
 
 .ns-sort-indicator {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
 }
 
 .ns-table-pagination,
 .ns-table-pagination--compact {
-  gap: .45rem;
-  padding: .38rem .58rem;
+  gap: .34rem;
+  padding: .3rem .48rem;
+  margin-top: 0;
 }
 
 .ns-table-pagination__summary,
 .ns-table-pagination__size,
 .ns-table-pagination__mobile-page {
-  font-size: .75rem;
+  font-size: .71rem;
 }
 
 .ns-page-button,
 .ns-page-number {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
   border-radius: 6px;
-  font-size: .75rem;
+  font-size: .71rem;
 }
 
 .ns-table-pagination__size select,
 .ns-table-pagination__size .vt-select-trigger {
-  min-height: 28px !important;
-  height: 28px;
-  font-size: .75rem !important;
+  min-height: 26px !important;
+  height: 26px;
+  font-size: .71rem !important;
 }
 
+/* Colaboradores: la columna principal absorbe el ancho libre; Estado y Acciones quedan juntas. */
 .student-global-page .ns-data-table {
-  min-width: 1260px;
+  min-width: 760px;
 }
 
-.student-global-page .ns-data-table th:nth-child(1) { min-width: 205px; }
-.student-global-page .ns-data-table th:nth-child(2) { min-width: 235px; }
-.student-global-page .ns-data-table th:nth-child(3) { min-width: 145px; }
-.student-global-page .ns-data-table th:nth-child(4) { min-width: 92px; }
-.student-global-page .ns-data-table th:nth-child(5) { min-width: 125px; }
-.student-global-page .ns-data-table th:nth-child(6) { min-width: 128px; }
-.student-global-page .ns-data-table th:nth-child(7),
-.student-global-page .ns-data-table th:nth-child(8) { min-width: 108px; }
-.student-global-page .ns-data-table th:nth-child(9) { min-width: 92px; }
+.student-global-page .ns-data-table th:first-child,
+.student-global-page .ns-data-table td:first-child {
+  width: 34%;
+  min-width: 190px;
+}
+
+.student-global-page .ns-data-table th:nth-last-child(3),
+.student-global-page .ns-data-table td:nth-last-child(3) {
+  width: 1%;
+  min-width: 92px;
+  white-space: nowrap;
+}
+
+.student-global-page .ns-data-table th:nth-last-child(2),
+.student-global-page .ns-data-table td:nth-last-child(2) {
+  min-width: 74px;
+}
+
+.student-page .ns-filter-toolbar {
+  padding: .55rem .68rem;
+  margin-bottom: .62rem;
+}
+
+.student-page .ns-filter-fields {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.7fr) repeat(3, minmax(135px, .8fr));
+  gap: .48rem;
+  align-items: end;
+}
+
+.student-page .ns-search-field,
+.student-page .ns-filter-field,
+.student-page .ns-filter-field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.student-page .ns-search-field input,
+.student-page .ns-filter-field select {
+  min-height: 34px;
+  padding-top: .42rem;
+  padding-bottom: .42rem;
+}
 
 .form-option-load-error {
   display: flex;
@@ -162,21 +232,31 @@
   padding: .25rem .5rem;
 }
 
+@media (max-width: 980px) {
+  .student-page .ns-filter-fields {
+    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, .7fr));
+  }
+}
+
 @media (max-width: 760px) {
   .ns-data-table,
   .responsive-table table {
-    min-width: 640px;
+    min-width: 620px;
   }
 
   .ns-data-table th,
   .ns-data-table td,
   .responsive-table th,
   .responsive-table td {
-    max-width: 270px;
+    max-width: 255px;
+  }
+
+  .student-page .ns-filter-fields {
+    grid-template-columns: 1fr;
   }
 
   .ns-table-pagination,
   .ns-table-pagination--compact {
-    padding: .42rem .5rem;
+    padding: .34rem .42rem;
   }
 }

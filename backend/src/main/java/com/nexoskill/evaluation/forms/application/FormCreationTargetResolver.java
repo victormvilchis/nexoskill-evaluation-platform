@@ -36,8 +36,12 @@ public class FormCreationTargetResolver {
                 throw new BusinessException("FORM_OWNER_FORBIDDEN",
                         "No tienes permisos para cambiar la organización propietaria del formulario.");
             }
-            return new Target(ContentScope.ORGANIZATION, tenant.organizationId(),
-                    tenant.organizationPublicId(), tenant.organizationCode(), tenant.organizationCode());
+            OrganizationJpaEntity organization = organizations.findById(tenant.organizationId())
+                    .orElseThrow(() -> new BusinessException("FORM_OWNER_ORGANIZATION_INVALID",
+                            "No fue posible resolver la organización activa."));
+            assertFormsEnabled(organization);
+            return new Target(ContentScope.ORGANIZATION, organization.getId(),
+                    organization.getPublicId(), organization.getCode(), organization.getName());
         }
 
         ContentScope scope = parseScope(requestedScope, tenant);
@@ -59,6 +63,7 @@ public class FormCreationTargetResolver {
             throw new BusinessException("FORM_OWNER_ORGANIZATION_INVALID",
                     "La organización propietaria debe ser comercial, activa y vigente.");
         }
+        assertFormsEnabled(organization);
         return new Target(ContentScope.ORGANIZATION, organization.getId(), organization.getPublicId(),
                 organization.getCode(), organization.getName());
     }
@@ -80,13 +85,22 @@ public class FormCreationTargetResolver {
             OrganizationJpaEntity organization = organizations.findById(tenant.organizationId())
                     .orElseThrow(() -> new BusinessException("FORM_OWNER_ORGANIZATION_INVALID",
                             "No fue posible resolver la organización activa."));
+            assertFormsEnabled(organization);
             return List.of(toOption(organization));
         }
         LocalDate today = LocalDate.now(clock);
         return organizations.findOperationalByTypeAndStatus(
                         OrganizationType.CUSTOMER, OrganizationStatus.ACTIVE, today).stream()
+                .filter(OrganizationJpaEntity::isAppliesCertifications)
                 .map(this::toOption)
                 .toList();
+    }
+
+    private void assertFormsEnabled(OrganizationJpaEntity organization) {
+        if (organization == null || !organization.isAppliesCertifications()) {
+            throw new BusinessException("FORM_CERTIFICATION_TRACKING_REQUIRED",
+                    "Solo pueden utilizar Formularios las organizaciones que tienen habilitado el seguimiento de certificaciones.");
+        }
     }
 
     private boolean isOperationalCustomer(OrganizationJpaEntity organization, LocalDate today) {
