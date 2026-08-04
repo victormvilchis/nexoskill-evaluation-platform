@@ -255,7 +255,7 @@ export function deleteQuestion(
   expectedEntityVersion: number,
   reason?: string
 ) {
-  return apiRequest<QuestionDetail>(`/admin/questions/${id}/delete`, {
+  return apiRequest<void>(`/admin/questions/${id}/delete`, {
     method: 'POST',
     body: JSON.stringify({ expectedEntityVersion, reason })
   })

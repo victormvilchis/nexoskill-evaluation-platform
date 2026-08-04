@@ -98,6 +98,10 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [selectedQuestions, setSelectedQuestions] = useState<FormQuestionItem[]>([])
   const [configuredPools, setConfiguredPools] = useState<FormPoolItem[]>([])
   const [organizations, setOrganizations] = useState<FormOrganizationOption[]>([])
+  const [organizationsLoading, setOrganizationsLoading] = useState(false)
+  const [organizationsLoaded, setOrganizationsLoaded] = useState(false)
+  const [organizationsError, setOrganizationsError] = useState('')
+  const [organizationsReloadKey, setOrganizationsReloadKey] = useState(0)
   const [categories, setCategories] = useState<FormCategoryOption[]>([])
   const [questionPage, setQuestionPage] = useState<FormQuestionOptionPage>(EMPTY_QUESTION_PAGE)
   const [questionQuery, setQuestionQuery] = useState('')
@@ -120,14 +124,33 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }, [configuredPools.length, editing, globalAdministrator, model.contentScope, model.organizationPublicId, model.title, selectedQuestions.length])
 
   useEffect(() => {
-    if (!globalAdministrator || editing) return
+    if (!globalAdministrator || editing || model.contentScope !== 'ORGANIZATION'
+      || organizationsLoaded) return
     const controller = new AbortController()
+    setOrganizationsLoading(true)
+    setOrganizationsError('')
     getFormOrganizations(controller.signal)
-      .then(setOrganizations)
-      .catch((requestError) => setError(requestError instanceof ApiRequestError
-        ? requestError.message : 'No fue posible cargar las organizaciones disponibles.'))
+      .then((available) => {
+        setOrganizations(available)
+        setOrganizationsLoaded(true)
+      })
+      .catch((requestError) => {
+        if (controller.signal.aborted) return
+        setOrganizationsError(requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible cargar las organizaciones disponibles.')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOrganizationsLoading(false)
+      })
     return () => controller.abort()
-  }, [editing, globalAdministrator])
+  }, [editing, globalAdministrator, model.contentScope, organizationsLoaded, organizationsReloadKey])
+
+  function retryOrganizations() {
+    setOrganizationsLoaded(false)
+    setOrganizationsError('')
+    setOrganizationsReloadKey(value => value + 1)
+  }
 
   useEffect(() => {
     if (!id) return
@@ -417,11 +440,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       } else {
         const created = await createForm(payload)
         await getForm(created.publicId)
-        completeSave({
-          title: model.contentMode === 'MANUAL'
-            ? 'El formulario y sus preguntas se guardaron correctamente.'
-            : 'El formulario y la configuración del Pool aleatorio se guardaron correctamente.'
-        })
+        completeSave({ title: 'El formulario se creó correctamente.' })
       }
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
@@ -486,7 +505,12 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
               <label className="ns-field ns-field-wide"><span>Título <b>*</b></span><input required minLength={3} aria-invalid={Boolean(fieldErrors.title)} value={model.title} onChange={event => set('title', event.target.value)} placeholder="Ej. Certificación APX — Nivel 1" />{fieldErrors.title ? <small className="ns-field-error">{fieldErrors.title}</small> : <small>Usa un nombre claro para administradores y participantes.</small>}</label>
               <label className="ns-field ns-field-wide"><span>Descripción</span><textarea rows={4} value={model.description} onChange={event => set('description', event.target.value)} placeholder="Describe el objetivo y alcance del formulario." /></label>
               {globalAdministrator && !editing && <label className="ns-field"><span>Alcance <b>*</b></span><SelectField value={model.contentScope ?? 'GLOBAL'} onChange={value => requestTarget(value as FormContentScope, value === 'ORGANIZATION' ? model.organizationPublicId : undefined)} ariaLabel="Alcance del formulario" options={[{ value: 'GLOBAL', label: 'Global' }, { value: 'ORGANIZATION', label: 'Organizacional' }]} /><small>El alcance determina qué preguntas y categorías estarán disponibles.</small></label>}
-              {globalAdministrator && !editing && model.contentScope === 'ORGANIZATION' && <label className="ns-field"><span>Organización <b>*</b></span><SelectField required value={model.organizationPublicId ?? ''} onChange={value => requestTarget('ORGANIZATION', value)} ariaLabel="Organización propietaria" placeholder="Seleccionar organización" options={[{ value: '', label: 'Seleccionar organización' }, ...organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))]} />{fieldErrors.organizationPublicId && <small className="ns-field-error">{fieldErrors.organizationPublicId}</small>}</label>}
+              {globalAdministrator && !editing && model.contentScope === 'ORGANIZATION' && <div className="ns-field">
+                <span>Organización <b>*</b></span>
+                <SelectField required value={model.organizationPublicId ?? ''} disabled={organizationsLoading || Boolean(organizationsError)} onChange={value => requestTarget('ORGANIZATION', value)} ariaLabel="Organización propietaria" placeholder={organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización'} options={[{ value: '', label: organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización' }, ...organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))]} />
+                {organizationsError && <div className="form-option-load-error" role="alert"><span>{organizationsError}</span><button className="secondary-button compact-button" type="button" onClick={retryOrganizations}>Reintentar</button></div>}
+                {fieldErrors.organizationPublicId && <small className="ns-field-error">{fieldErrors.organizationPublicId}</small>}
+              </div>}
               {editing && <div className="ns-field"><span>Alcance</span><div className="form-static-field"><strong>{model.contentScope === 'GLOBAL' ? 'Global' : 'Organizacional'}</strong><small>El alcance y la organización propietaria no cambian durante la edición.</small></div></div>}
               <label className="ns-field"><span>Modalidad</span><SelectField value={model.modeCode} onChange={value => set('modeCode', value as FormMode)} ariaLabel="Modalidad" options={[{ value: 'ASSESSMENT', label: 'Evaluación' }, { value: 'PRACTICE', label: 'Práctica' }]} /><small>{model.modeCode === 'PRACTICE' ? 'Permite aprender y recibir retroalimentación.' : 'Califica el desempeño al finalizar.'}</small></label>
               <label className="ns-field"><span>Puntaje mínimo</span><div className="ns-input-suffix"><input type="number" min="0" max="100" value={model.passingScore} onChange={event => set('passingScore', Number(event.target.value))} /><span>%</span></div><small>Porcentaje requerido para aprobar.</small></label>

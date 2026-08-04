@@ -50,6 +50,9 @@ export function AdminFormsPage() {
   const [mode, setMode] = useState(searchParams.get('mode') ?? '')
   const [data, setData] = useState<PagedResponse<FormSummary>>({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
   const [organizations, setOrganizations] = useState<FormOrganizationOption[]>([])
+  const [organizationsLoading, setOrganizationsLoading] = useState(false)
+  const [organizationsLoaded, setOrganizationsLoaded] = useState(false)
+  const [organizationsError, setOrganizationsError] = useState('')
   const [cloneState, setCloneState] = useState<CloneState | null>(null)
   const [cloneBusy, setCloneBusy] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -72,15 +75,6 @@ export function AdminFormsPage() {
       return next
     }, { replace: true })
   }
-
-  useEffect(() => {
-    if (!globalAdministrator || !canCreate) return
-    const controller = new AbortController()
-    getFormOrganizations(controller.signal)
-      .then(setOrganizations)
-      .catch((requestError) => toast.error('No fue posible cargar las organizaciones para clonación.', requestError instanceof ApiRequestError ? requestError.message : undefined))
-    return () => controller.abort()
-  }, [canCreate, globalAdministrator, toast])
 
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
@@ -114,6 +108,23 @@ export function AdminFormsPage() {
 
   const hasFilters = useMemo(() => Boolean(query || status !== 'ACTIVE' || mode), [query, status, mode])
 
+  async function loadOrganizationsForClone(force = false) {
+    if (!globalAdministrator || organizationsLoading || (organizationsLoaded && !force)) return
+    setOrganizationsLoading(true)
+    setOrganizationsError('')
+    try {
+      const available = await getFormOrganizations()
+      setOrganizations(available)
+      setOrganizationsLoaded(true)
+    } catch (requestError) {
+      setOrganizationsError(requestError instanceof ApiRequestError
+        ? requestError.message
+        : 'No fue posible cargar las organizaciones para clonación.')
+    } finally {
+      setOrganizationsLoading(false)
+    }
+  }
+
   function openClone(source: FormSummary) {
     setCloneState({
       source,
@@ -124,6 +135,7 @@ export function AdminFormsPage() {
         : '',
       operationId: operationId()
     })
+    if (globalAdministrator) void loadOrganizationsForClone()
   }
 
   async function confirmClone() {
@@ -148,10 +160,7 @@ export function AdminFormsPage() {
         operationId: cloneState.operationId
       })
       await getForm(cloned.publicId)
-      const target = cloneState.targetScope === 'GLOBAL' ? 'a nivel global' : 'para la organización seleccionada'
-      toast.success(cloneState.source.contentMode === 'MANUAL'
-        ? `El formulario y todas sus preguntas se clonaron correctamente ${target}.`
-        : `El formulario y la configuración del Pool aleatorio se clonaron correctamente ${target}.`)
+      toast.success('Formulario clonado', 'El formulario y toda su configuración se clonaron correctamente.')
       setCloneState(null)
       setReloadKey(value => value + 1)
     } catch (requestError) {
@@ -208,14 +217,20 @@ export function AdminFormsPage() {
         description="Se creará un formulario nuevo e independiente. El original no será modificado."
         confirmLabel="Clonar formulario"
         busy={cloneBusy}
-        confirmDisabled={!cloneState?.title.trim() || Boolean(globalAdministrator && cloneState?.targetScope === 'ORGANIZATION' && !cloneState.organizationPublicId)}
+        confirmDisabled={!cloneState?.title.trim()
+          || Boolean(globalAdministrator && cloneState?.targetScope === 'ORGANIZATION'
+            && (!cloneState.organizationPublicId || organizationsLoading || Boolean(organizationsError)))}
         onConfirm={() => void confirmClone()}
         onCancel={() => { if (!cloneBusy) setCloneState(null) }}
       >
         {cloneState && <div className="form-clone-fields">
           <label className="ns-field"><span>Título de la copia <b>*</b></span><input value={cloneState.title} maxLength={200} onChange={event => setCloneState(current => current ? { ...current, title: event.target.value } : current)} /></label>
           {globalAdministrator && <label className="ns-field"><span>Destino <b>*</b></span><SelectField value={cloneState.targetScope} onChange={value => setCloneState(current => current ? { ...current, targetScope: value as FormContentScope, organizationPublicId: value === 'GLOBAL' ? '' : current.organizationPublicId } : current)} ariaLabel="Destino de la clonación" options={[{ value: 'GLOBAL', label: 'Global' }, { value: 'ORGANIZATION', label: 'Organizacional' }]} /></label>}
-          {globalAdministrator && cloneState.targetScope === 'ORGANIZATION' && <label className="ns-field"><span>Organización <b>*</b></span><SelectField value={cloneState.organizationPublicId} onChange={value => setCloneState(current => current ? { ...current, organizationPublicId: value } : current)} ariaLabel="Organización de destino" placeholder="Seleccionar organización" options={[{ value: '', label: 'Seleccionar organización' }, ...organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))]} /></label>}
+          {globalAdministrator && cloneState.targetScope === 'ORGANIZATION' && <div className="ns-field">
+            <span>Organización <b>*</b></span>
+            <SelectField value={cloneState.organizationPublicId} disabled={organizationsLoading || Boolean(organizationsError)} onChange={value => setCloneState(current => current ? { ...current, organizationPublicId: value } : current)} ariaLabel="Organización de destino" placeholder={organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización'} options={[{ value: '', label: organizationsLoading ? 'Cargando organizaciones…' : 'Seleccionar organización' }, ...organizations.map(organization => ({ value: organization.publicId, label: `${organization.name} · ${organization.code}` }))]} />
+            {organizationsError && <div className="form-option-load-error" role="alert"><span>{organizationsError}</span><button className="secondary-button compact-button" type="button" onClick={() => void loadOrganizationsForClone(true)}>Reintentar</button></div>}
+          </div>}
           {!globalAdministrator && <div className="form-static-field"><strong>Destino organizacional</strong><small>La copia permanecerá dentro de tu organización.</small></div>}
           <p className="muted">Antes de crear la copia se validará que todas las preguntas o categorías sean compatibles con el destino.</p>
         </div>}

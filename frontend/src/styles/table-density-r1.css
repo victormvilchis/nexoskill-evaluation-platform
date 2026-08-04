@@ -1,0 +1,182 @@
+/* Densidad homogénea para todas las tablas administrativas visibles. */
+.ns-data-panel,
+.table-panel {
+  border-radius: 10px;
+}
+
+.ns-data-table,
+.responsive-table table {
+  min-width: 680px;
+  line-height: 1.22;
+}
+
+.ns-data-table th,
+.responsive-table th {
+  max-width: 320px;
+  padding: .46rem .58rem !important;
+  font-size: .66rem !important;
+  line-height: 1.15;
+  letter-spacing: .03em !important;
+  white-space: nowrap;
+}
+
+.ns-data-table td,
+.responsive-table td {
+  max-width: 320px;
+  padding: .48rem .58rem !important;
+  font-size: .79rem;
+  line-height: 1.24;
+}
+
+.ns-primary-cell {
+  min-width: 190px;
+  max-width: 360px;
+}
+
+.ns-primary-cell > strong,
+.ns-data-table td > strong,
+.responsive-table td > strong {
+  font-size: .84rem;
+  line-height: 1.24;
+}
+
+.ns-primary-cell > small,
+.ns-data-table td > small,
+.ns-data-table td > span + small,
+.responsive-table td > small {
+  gap: .28rem;
+  margin-top: .12rem;
+  font-size: .69rem;
+  line-height: 1.18;
+}
+
+.ns-actions-column {
+  min-width: 100px;
+  width: 1%;
+}
+
+.ns-table-actions {
+  gap: .25rem;
+}
+
+.ns-table-actions-trigger {
+  min-width: 90px;
+  min-height: 32px;
+  padding: .3rem .52rem;
+  border-radius: 7px;
+  font-size: .71rem;
+}
+
+.ns-table-actions-menu {
+  padding: 4px;
+}
+
+.ns-table-actions-menu .ns-table-action {
+  min-height: 32px;
+  gap: .45rem;
+  padding: .38rem .52rem;
+  font-size: .74rem;
+}
+
+.status-badge,
+.ns-status-badge {
+  min-height: 22px;
+  padding: .14rem .42rem;
+  border-radius: 999px;
+  font-size: .67rem;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.ns-sortable-column-button {
+  min-height: 22px;
+  padding: .1rem .18rem;
+}
+
+.ns-sort-indicator {
+  width: 15px;
+  height: 15px;
+}
+
+.ns-table-pagination,
+.ns-table-pagination--compact {
+  gap: .45rem;
+  padding: .38rem .58rem;
+}
+
+.ns-table-pagination__summary,
+.ns-table-pagination__size,
+.ns-table-pagination__mobile-page {
+  font-size: .75rem;
+}
+
+.ns-page-button,
+.ns-page-number {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 6px;
+  font-size: .75rem;
+}
+
+.ns-table-pagination__size select,
+.ns-table-pagination__size .vt-select-trigger {
+  min-height: 28px !important;
+  height: 28px;
+  font-size: .75rem !important;
+}
+
+.student-global-page .ns-data-table {
+  min-width: 1260px;
+}
+
+.student-global-page .ns-data-table th:nth-child(1) { min-width: 205px; }
+.student-global-page .ns-data-table th:nth-child(2) { min-width: 235px; }
+.student-global-page .ns-data-table th:nth-child(3) { min-width: 145px; }
+.student-global-page .ns-data-table th:nth-child(4) { min-width: 92px; }
+.student-global-page .ns-data-table th:nth-child(5) { min-width: 125px; }
+.student-global-page .ns-data-table th:nth-child(6) { min-width: 128px; }
+.student-global-page .ns-data-table th:nth-child(7),
+.student-global-page .ns-data-table th:nth-child(8) { min-width: 108px; }
+.student-global-page .ns-data-table th:nth-child(9) { min-width: 92px; }
+
+.form-option-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .55rem;
+  margin-top: .35rem;
+  border: 1px solid #f0c9c5;
+  border-radius: 8px;
+  background: #fff7f6;
+  padding: .38rem .48rem;
+  color: #8f2922;
+  font-size: .75rem;
+  line-height: 1.25;
+}
+
+.form-option-load-error .compact-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: .25rem .5rem;
+}
+
+@media (max-width: 760px) {
+  .ns-data-table,
+  .responsive-table table {
+    min-width: 640px;
+  }
+
+  .ns-data-table th,
+  .ns-data-table td,
+  .responsive-table th,
+  .responsive-table td {
+    max-width: 270px;
+  }
+
+  .ns-table-pagination,
+  .ns-table-pagination--compact {
+    padding: .42rem .5rem;
+  }
+}

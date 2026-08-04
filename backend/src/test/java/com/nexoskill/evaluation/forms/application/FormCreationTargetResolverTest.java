@@ -13,46 +13,91 @@ import com.nexoskill.evaluation.shared.domain.BusinessException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class FormCreationTargetResolverTest {
-	private final OrganizationRepository organizations = mock(OrganizationRepository.class);
-	private final Clock clock = Clock.fixed(Instant.parse("2026-08-03T15:00:00Z"), ZoneOffset.UTC);
-	private final FormCreationTargetResolver resolver = new FormCreationTargetResolver(organizations, clock);
+    private final OrganizationRepository organizations = mock(OrganizationRepository.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-08-03T15:00:00Z"), ZoneOffset.UTC);
+    private final FormCreationTargetResolver resolver = new FormCreationTargetResolver(organizations, clock);
 
-	@Test
-	void globalAdministratorCanCreateGlobalForm() {
-		OrganizationJpaEntity global = mock(OrganizationJpaEntity.class);
-		when(global.getId()).thenReturn(1L);
-		when(global.getPublicId()).thenReturn("global-public-id");
-		when(global.getCode()).thenReturn("GLOBAL");
-		when(global.getName()).thenReturn("GLOBAL");
-		when(organizations.findByCode(OrganizationJpaEntity.GLOBAL_CODE)).thenReturn(Optional.of(global));
+    @Test
+    void globalAdministratorCanCreateGlobalForm() {
+        OrganizationJpaEntity global = mock(OrganizationJpaEntity.class);
+        when(global.getId()).thenReturn(1L);
+        when(global.getPublicId()).thenReturn("global-public-id");
+        when(global.getCode()).thenReturn("GLOBAL");
+        when(global.getName()).thenReturn("GLOBAL");
+        when(organizations.findByCode(OrganizationJpaEntity.GLOBAL_CODE)).thenReturn(Optional.of(global));
 
-		var target = resolver.resolve(TenantContext.organization(20L, "org-id", "ORG", true), "GLOBAL", null);
+        var target = resolver.resolve(TenantContext.organization(20L, "org-id", "ORG", true),
+                "GLOBAL", null);
 
-		assertThat(target.scope()).isEqualTo(ContentScope.GLOBAL);
-		assertThat(target.organizationId()).isEqualTo(1L);
-	}
+        assertThat(target.scope()).isEqualTo(ContentScope.GLOBAL);
+        assertThat(target.organizationId()).isEqualTo(1L);
+    }
 
-	@Test
-	void organizationalUserIsAlwaysRestrictedToOwnOrganization() {
-		var target = resolver.resolve(TenantContext.organization(20L, "org-id", "ORG", false), "ORGANIZATION",
-				"org-id");
+    @Test
+    void organizationalUserIsAlwaysRestrictedToOwnOrganization() {
+        var target = resolver.resolve(TenantContext.organization(20L, "org-id", "ORG", false),
+                "ORGANIZATION", "org-id");
 
-		assertThat(target.scope()).isEqualTo(ContentScope.ORGANIZATION);
-		assertThat(target.organizationId()).isEqualTo(20L);
-		assertThat(target.organizationPublicId()).isEqualTo("org-id");
-	}
+        assertThat(target.scope()).isEqualTo(ContentScope.ORGANIZATION);
+        assertThat(target.organizationId()).isEqualTo(20L);
+        assertThat(target.organizationPublicId()).isEqualTo("org-id");
+    }
 
-	@Test
-	void organizationalUserCannotManipulateOwnerOrGlobalScope() {
-		TenantContext tenant = TenantContext.organization(20L, "org-id", "ORG", false);
+    @Test
+    void organizationalUserCannotManipulateOwnerOrGlobalScope() {
+        TenantContext tenant = TenantContext.organization(20L, "org-id", "ORG", false);
 
-		assertThatThrownBy(() -> resolver.resolve(tenant, "ORGANIZATION", "other-org"))
-				.isInstanceOf(BusinessException.class).hasMessageContaining("organización propietaria");
-		assertThatThrownBy(() -> resolver.resolve(tenant, "GLOBAL", null)).isInstanceOf(BusinessException.class)
-				.hasMessageContaining("organización propietaria");
-	}
+        assertThatThrownBy(() -> resolver.resolve(tenant, "ORGANIZATION", "other-org"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("organización propietaria");
+        assertThatThrownBy(() -> resolver.resolve(tenant, "GLOBAL", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("organización propietaria");
+    }
+    @Test
+    void globalAdministratorReceivesOnlyOperationalCustomerOrganizations() {
+        OrganizationJpaEntity customer = mock(OrganizationJpaEntity.class);
+        when(customer.getPublicId()).thenReturn("customer-public-id");
+        when(customer.getCode()).thenReturn("CUSTOMER");
+        when(customer.getName()).thenReturn("Customer");
+        when(organizations.findOperationalByTypeAndStatus(
+                com.nexoskill.evaluation.organizations.domain.model.OrganizationType.CUSTOMER,
+                com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus.ACTIVE,
+                java.time.LocalDate.of(2026, 8, 3))).thenReturn(List.of(customer));
+
+        var options = resolver.availableOrganizations(
+                TenantContext.organization(1L, "global-public-id", "GLOBAL", true));
+
+        assertThat(options).hasSize(1);
+        assertThat(options.getFirst().publicId()).isEqualTo("customer-public-id");
+    }
+
+    @Test
+    void acceptsLegacyActiveCustomerWithoutAStartDate() {
+        OrganizationJpaEntity customer = mock(OrganizationJpaEntity.class);
+        when(customer.getId()).thenReturn(20L);
+        when(customer.getPublicId()).thenReturn("customer-public-id");
+        when(customer.getCode()).thenReturn("CUSTOMER");
+        when(customer.getName()).thenReturn("Customer");
+        when(customer.getOrganizationType()).thenReturn(
+                com.nexoskill.evaluation.organizations.domain.model.OrganizationType.CUSTOMER);
+        when(customer.getStatus()).thenReturn(
+                com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus.ACTIVE);
+        when(customer.getValidFrom()).thenReturn(null);
+        when(customer.getExpiresOn()).thenReturn(null);
+        when(organizations.findByPublicId("customer-public-id")).thenReturn(Optional.of(customer));
+
+        var target = resolver.resolve(
+                TenantContext.organization(1L, "global-public-id", "GLOBAL", true),
+                "ORGANIZATION", "customer-public-id");
+
+        assertThat(target.organizationId()).isEqualTo(20L);
+        assertThat(target.organizationPublicId()).isEqualTo("customer-public-id");
+    }
+
 }

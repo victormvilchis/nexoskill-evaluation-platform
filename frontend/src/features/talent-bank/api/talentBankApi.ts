@@ -108,7 +108,18 @@ async function fetchTalentCv(publicId: string) {
       ? { 'X-Organization-Context': window.localStorage.getItem('nexoskill:organization-context')! }
       : undefined
   })
-  if (!response.ok) throw new Error('No fue posible consultar el CV.')
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') ?? ''
+    const body = contentType.includes('application/json')
+      ? await response.json().catch(() => null) as { message?: string } | null
+      : null
+    const fallback = response.status === 403
+      ? 'No tienes permiso para consultar este CV.'
+      : response.status === 404
+        ? 'El archivo ya no se encuentra disponible.'
+        : 'No fue posible consultar el CV.'
+    throw new Error(body?.message?.trim() || fallback)
+  }
   const disposition = response.headers.get('content-disposition') ?? ''
   const match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
   return {
@@ -118,14 +129,21 @@ async function fetchTalentCv(publicId: string) {
 }
 
 export async function viewTalentCv(publicId: string) {
-  const { blob } = await fetchTalentCv(publicId)
-  const url = URL.createObjectURL(blob)
-  const opened = window.open(url, '_blank', 'noopener,noreferrer')
-  if (!opened) {
-    URL.revokeObjectURL(url)
-    throw new Error('El navegador bloqueó la apertura del CV.')
+  const previewWindow = window.open('', '_blank')
+  if (!previewWindow) {
+    throw new Error('No fue posible abrir el CV. Verifica que el navegador permita abrir nuevas pestañas para esta plataforma.')
   }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+
+  previewWindow.opener = null
+  try {
+    const { blob } = await fetchTalentCv(publicId)
+    const url = URL.createObjectURL(blob)
+    previewWindow.location.replace(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (error) {
+    previewWindow.close()
+    throw error
+  }
 }
 
 export async function downloadTalentCv(publicId: string) {

@@ -345,14 +345,15 @@ export function AdminQuestionsPage() {
     setBusyId(question.publicId)
     try {
       if (type === 'DELETE') {
-        await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación lógica desde el Banco de Preguntas')
-        toast.success('Pregunta eliminada', 'La pregunta fue retirada de los formularios donde estaba siendo utilizada.')
+        await deleteQuestion(question.publicId, question.entityVersion, 'Eliminación física desde el Banco de preguntas')
+        toast.success('Pregunta eliminada', 'La pregunta fue eliminada definitivamente y retirada de todos los formularios.')
       } else if (type === 'RESTORE') {
         await restoreQuestion(question.publicId, question.entityVersion)
         toast.success('Pregunta restaurada como inactiva')
       } else {
         await changeQuestionStatus(question.publicId, type === 'ACTIVATE' ? 'ACTIVE' : 'ARCHIVED', question.entityVersion)
-        toast.success(type === 'ACTIVATE' ? 'Pregunta activada' : 'Pregunta inactivada')
+        if (type === 'ACTIVATE') toast.success('Pregunta activada')
+        else toast.success('Pregunta inactivada', 'La pregunta fue inactivada y retirada de los formularios donde estaba siendo utilizada.')
       }
       setPendingAction(null)
       reload()
@@ -377,11 +378,11 @@ export function AdminQuestionsPage() {
     : pendingAction?.type === 'RESTORE' ? 'Restaurar pregunta'
       : pendingAction?.type === 'ARCHIVE' ? 'Inactivar pregunta' : 'Activar pregunta'
   const dialogDescription = pendingAction?.type === 'DELETE'
-    ? 'La pregunta será eliminada lógicamente y también será retirada de todos los formularios donde actualmente se encuentra utilizada. Las demás preguntas, intentos, resultados e historial permanecerán sin cambios. ¿Deseas continuar?'
+    ? 'Esta acción eliminará permanentemente la pregunta y la retirará de todos los formularios donde actualmente se encuentra utilizada. La pregunta dejará de existir en el Banco de preguntas. ¿Deseas continuar?'
     : pendingAction?.type === 'RESTORE'
       ? 'La pregunta se restaurará como inactiva. Después podrás activarla cuando su configuración sea válida.'
       : pendingAction?.type === 'ARCHIVE'
-        ? 'La pregunta no podrá agregarse a contenido nuevo. Sus relaciones, usos e historial existentes permanecerán intactos.'
+        ? 'La pregunta dejará de estar disponible y será retirada de todos los formularios donde actualmente se encuentra utilizada. La pregunta continuará registrada en el Banco de preguntas como inactiva. ¿Deseas continuar?'
         : 'La pregunta volverá a estar disponible para configuraciones nuevas.'
 
   return (
