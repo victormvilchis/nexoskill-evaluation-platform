@@ -168,15 +168,15 @@ export default function App() {
           <Route path="/admin/question-collections" element={<Navigate to="/admin/collections" replace />} />
           <Route path="/admin/question-collections/new" element={<Navigate to="/admin/collections/new" replace />} />
           <Route path="/admin/question-collections/:publicId" element={<Navigate to="/admin/collections" replace />} />
+          <Route element={<PermissionRoute permission="FORM_CREATE" />}>
+            <Route path="/admin/forms/new" element={<FormBuilderPage mode="create" />} />
+          </Route>
           <Route element={<PermissionRoute permission="FORM_VIEW" />}>
             <Route path="/admin/forms" element={<AdminFormsPage />} />
-            <Route path="/admin/forms/:id" element={<FormBuilderPage readOnly />} />
-          </Route>
-          <Route element={<PermissionRoute permission="FORM_CREATE" />}>
-            <Route path="/admin/forms/new" element={<FormBuilderPage />} />
+            <Route path="/admin/forms/:id" element={<FormBuilderPage mode="view" />} />
           </Route>
           <Route element={<PermissionRoute permission="FORM_UPDATE" />}>
-            <Route path="/admin/forms/:id/edit" element={<FormBuilderPage />} />
+            <Route path="/admin/forms/:id/edit" element={<FormBuilderPage mode="edit" />} />
           </Route>
           <Route element={<PermissionRoute permission="CATALOG_VIEW" />}>
             <Route path="/admin/catalogs" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />

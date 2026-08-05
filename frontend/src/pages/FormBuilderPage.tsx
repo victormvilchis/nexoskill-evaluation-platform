@@ -91,12 +91,18 @@ type PendingChange =
   | { type: 'TARGET'; scope: FormContentScope; organizationPublicId?: string }
 
 type FormBuilderTab = 'GENERAL' | 'CONTENT' | 'CONFIGURATION'
+type FormBuilderMode = 'create' | 'edit' | 'view'
 
-export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
-  const { id } = useParams()
-  const editing = Boolean(id)
+export function FormBuilderPage({ mode }: { mode: FormBuilderMode }) {
+  const { id: routeId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const routeRequestsCreation = routeId === 'new'
+  const canCreate = Boolean(user?.permissions.includes('FORM_CREATE'))
+  const effectiveMode: FormBuilderMode = routeRequestsCreation && canCreate ? 'create' : mode
+  const readOnly = effectiveMode === 'view'
+  const editing = effectiveMode !== 'create'
+  const formPublicId = editing && routeId && routeId !== 'new' ? routeId : undefined
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const completeSave = useSaveNavigation('/admin/forms')
   const toast = useToast()
@@ -116,8 +122,12 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [questionPageSize, setQuestionPageSize] = useState<PageSize>(10)
   const [loadingOptions, setLoadingOptions] = useState(false)
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [loading, setLoading] = useState(editing)
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
+  const [optionsError, setOptionsError] = useState('')
+  const [optionsReloadKey, setOptionsReloadKey] = useState(0)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
   const [bankOpen, setBankOpen] = useState(false)
@@ -170,10 +180,20 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   useEffect(() => {
-    if (!id) return
+    if (!editing) {
+      setLoading(false)
+      setLoadError('')
+      return
+    }
+    if (!formPublicId) {
+      setLoadError('El formulario ya no se encuentra disponible.')
+      setLoading(false)
+      return
+    }
     const controller = new AbortController()
     setLoading(true)
-    getForm(id, controller.signal)
+    setLoadError('')
+    getForm(formPublicId, controller.signal)
       .then((form: FormDetail) => {
         setModel({
           title: form.title,
@@ -220,11 +240,16 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       })
       .catch(requestError => {
         if (controller.signal.aborted) return
-        setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible cargar el formulario.')
+        const message = requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible cargar el formulario.'
+        setLoadError(message === 'El formulario solicitado no existe.'
+          ? 'El formulario ya no se encuentra disponible.'
+          : message)
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [id])
+  }, [editing, formPublicId])
 
   const targetReady = model.contentScope === 'GLOBAL'
     || !globalAdministrator
@@ -266,7 +291,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     }
     const controller = new AbortController()
     setLoadingOptions(true)
-    setError('')
+    setOptionsError('')
 
     const categoryRequest = getFormCategoryOptions(
       model.contentScope ?? 'ORGANIZATION',
@@ -293,7 +318,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
         })
         .catch(requestError => {
           if (!controller.signal.aborted) {
-            setError(requestError instanceof ApiRequestError
+            setOptionsError(requestError instanceof ApiRequestError
               ? requestError.message
               : 'No fue posible consultar las preguntas disponibles.')
           }
@@ -304,7 +329,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
         .then(setCategories)
         .catch(requestError => {
           if (!controller.signal.aborted) {
-            setError(requestError instanceof ApiRequestError
+            setOptionsError(requestError instanceof ApiRequestError
               ? requestError.message
               : 'No fue posible consultar las categorías disponibles.')
           }
@@ -321,7 +346,8 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
     questionCategoryPublicId,
     questionPageIndex,
     questionPageSize,
-    targetReady
+    targetReady,
+    optionsReloadKey
   ])
 
   function set<K extends keyof FormPayload>(key: K, value: FormPayload[K]) {
@@ -466,9 +492,10 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (readOnly || saving) return
+    if (readOnly || savingRef.current) return
     const firstIssue = readiness[0]
     if (firstIssue) {
+      setActiveTab(headerIssues.length > 0 ? 'GENERAL' : 'CONTENT')
       setError(firstIssue)
       return
     }
@@ -497,12 +524,13 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
         : []
     }
 
+    savingRef.current = true
     setSaving(true)
     setError('')
     setFieldErrors({})
     try {
-      if (editing && id) {
-        const saved = await updateForm(id, payload)
+      if (editing && formPublicId) {
+        const saved = await updateForm(formPublicId, payload)
         await getForm(saved.publicId)
         completeSave({ title: 'El formulario se actualizó correctamente.' })
       } else {
@@ -518,17 +546,29 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
         setError('No fue posible guardar el formulario. Revisa la configuración e intenta nuevamente.')
       }
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   if (loading) return <main className="content-page"><div className="ns-loading-card">Cargando formulario…</div></main>
 
+  if (editing && loadError) {
+    return <main className="content-page ns-form-builder">
+      <BackButton fallback="/admin/forms" />
+      <section className="inline-error-panel" role="alert">
+        <div className="inline-error-icon"><Icon name="error" size={20} /></div>
+        <div><strong>Formulario no disponible</strong><p>{loadError}</p></div>
+        <button className="secondary-button compact-button" type="button" onClick={() => navigate('/admin/forms')}>Regresar al listado</button>
+      </section>
+    </main>
+  }
+
   if (readOnly) {
     return <main className="content-page ns-form-builder">
       <BackButton fallback="/admin/forms" />
-      {error && <div className="ns-inline-alert" role="alert"><strong>No fue posible abrir el formulario</strong><span>{error}</span></div>}
-      {!error && <div className="ns-builder-layout">
+      {error && <div className="ns-inline-alert" role="alert"><strong>Revisa el formulario</strong><span>{error}</span></div>}
+      <div className="ns-builder-layout">
         <div className="ns-builder-main">
           <section className="ns-card"><div className="ns-card-heading"><h2>Información general</h2></div>
             <div className="catalog-readonly-grid">
@@ -555,7 +595,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
             <div><span>Intentos máximos</span><strong>{model.retryUntilPassed ? 'Hasta aprobar' : model.maxAttempts ?? 'Sin límite'}</strong></div>
           </div>
         </section></aside>
-      </div>}
+      </div>
     </main>
   }
 
@@ -665,6 +705,11 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
               <button className={`form-content-mode${model.contentMode === 'RANDOM_POOL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'RANDOM_POOL'} onClick={() => requestMode('RANDOM_POOL')}><Icon name="categories" size={22} /><span><strong>Pool aleatorio</strong><small>Configura categorías; las preguntas activas se elegirán aleatoriamente.</small></span></button>
             </div>
 
+            {optionsError && <div className="form-option-load-error" role="alert">
+              <span>{optionsError}</span>
+              <button className="secondary-button compact-button" type="button" onClick={() => setOptionsReloadKey(value => value + 1)}>Reintentar</button>
+            </div>}
+
             {model.contentMode === 'MANUAL' && <div className="form-manual-content form-manual-content--visual">
               <div className="form-content-section-heading form-builder-content-toolbar">
                 <div>
@@ -684,10 +729,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
               {selectedQuestions.length === 0 && <div className="ns-builder-empty form-builder-empty-visual">
                 <Icon name="clipboard" size={32} />
                 <h3>Aún no agregas preguntas</h3>
-                <p>Abre el Banco de preguntas, revisa el detalle completo y agrega las preguntas que integrarán el formulario.</p>
-                <button className="primary-button" type="button" onClick={() => setBankOpen(true)}>
-                  <Icon name="plus" size={16} /> Agregar preguntas del Banco
-                </button>
+                <p>Usa la acción superior para abrir el Banco, revisar el detalle completo y agregar las preguntas que integrarán el formulario.</p>
               </div>}
 
               <div className="form-builder-question-list" aria-label="Preguntas incorporadas al formulario">
