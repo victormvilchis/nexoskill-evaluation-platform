@@ -1,26 +1,34 @@
 package com.nexoskill.evaluation.users.application.service;
 
 import com.nexoskill.evaluation.shared.domain.BusinessException;
-import java.util.Set;
+import com.nexoskill.evaluation.users.infrastructure.persistence.SpringDataRoleJpaRepository;
+import java.util.Locale;
 import org.springframework.stereotype.Component;
 
 @Component
 public class InternalRolePolicy {
-	public static final Set<String> ALLOWED_ROLES = Set.of("ADMINISTRATOR", "MANAGER", "SUPERVISOR");
 
-	public String normalizeAndValidate(String roleCode) {
-		String normalized = roleCode == null ? "" : roleCode.trim().toUpperCase();
-		if (!ALLOWED_ROLES.contains(normalized)) {
-			throw new BusinessException("INTERNAL_ROLE_INVALID", "El rol debe ser Administrador, Gestor o Supervisor.");
-		}
-		return normalized;
-	}
+    private final SpringDataRoleJpaRepository roles;
 
-	public void validateOrganization(String roleCode, String organizationPublicId) {
-		if (("MANAGER".equals(roleCode) || "SUPERVISOR".equals(roleCode))
-				&& (organizationPublicId == null || organizationPublicId.isBlank())) {
-			throw new BusinessException("USER_ORGANIZATION_REQUIRED",
-					"Los Gestores y Supervisores deben pertenecer a una organización.");
-		}
-	}
+    public InternalRolePolicy(SpringDataRoleJpaRepository roles) {
+        this.roles = roles;
+    }
+
+    public String normalizeAndValidate(String roleCode) {
+        String normalized = roleCode == null ? "" : roleCode.trim().toUpperCase(Locale.ROOT);
+        return roles.findByCodeIgnoreCase(normalized)
+                .filter(role -> "ACTIVE".equals(role.getStatus()))
+                .filter(role -> !"USER".equals(role.getCode()))
+                .map(role -> role.getCode())
+                .orElseThrow(() -> new BusinessException("INTERNAL_ROLE_INVALID",
+                        "El rol seleccionado no existe, está inactivo o no corresponde a un usuario interno."));
+    }
+
+    public void validateOrganization(String roleCode, String organizationPublicId) {
+        if (!"ADMINISTRATOR".equals(roleCode)
+                && (organizationPublicId == null || organizationPublicId.isBlank())) {
+            throw new BusinessException("USER_ORGANIZATION_REQUIRED",
+                    "Los roles organizacionales deben pertenecer a una organización comercial.");
+        }
+    }
 }

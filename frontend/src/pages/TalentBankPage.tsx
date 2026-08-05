@@ -131,7 +131,7 @@ export function TalentBankPage() {
   }
 
   return <main className="content-page resource-page ns-list-page talent-bank-page">
-    {permissions.has('STUDENT_CREATE') && <div className="ns-list-action-bar">
+    {permissions.has('TALENT_CREATE') && <div className="ns-list-action-bar">
       <Link className="primary-button button-link ns-create-button" to="/admin/talent-bank/new">
         <Icon name="plus" size={15} /> Registrar talento
       </Link>
@@ -169,9 +169,9 @@ export function TalentBankPage() {
             <td>{talent.hasCv ? 'Disponible' : 'N/A'}</td>
             <td className="ns-actions-column"><TableActions>
               <TableActionLink icon="eye" label="Ver" to={`/admin/talent-bank/${talent.publicId}`} />
-              {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/talent-bank/${talent.publicId}/edit`} />}
-              {permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE') && <TableActionLink icon="chevronRight" label="Convertir a colaborador" to={`/admin/talent-bank/${talent.publicId}/convert`} tone="primary" />}
-              {permissions.has('STUDENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(talent)} />}
+              {permissions.has('TALENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/talent-bank/${talent.publicId}/edit`} />}
+              {permissions.has('TALENT_CONVERT') && <TableActionLink icon="chevronRight" label="Convertir a colaborador" to={`/admin/talent-bank/${talent.publicId}/convert`} tone="primary" />}
+              {permissions.has('TALENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(talent)} />}
             </TableActions></td>
           </tr>)}
         </tbody>

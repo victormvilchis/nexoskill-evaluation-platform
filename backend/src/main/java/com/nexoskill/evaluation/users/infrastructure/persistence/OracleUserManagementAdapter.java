@@ -9,7 +9,6 @@ import com.nexoskill.evaluation.users.application.model.AdminUserPage;
 import com.nexoskill.evaluation.users.application.model.AdminUserSummary;
 import com.nexoskill.evaluation.users.application.model.RoleOption;
 import com.nexoskill.evaluation.users.application.port.out.UserManagementPort;
-import com.nexoskill.evaluation.users.application.service.InternalRolePolicy;
 import com.nexoskill.evaluation.users.domain.model.UserAccessStatus;
 import com.nexoskill.evaluation.users.domain.model.UserStatus;
 import java.time.Clock;
@@ -154,15 +153,14 @@ public class OracleUserManagementAdapter implements UserManagementPort {
 	@Override
 	public List<RoleOption> listActiveRoles() {
 		return roleRepository.findByStatusOrderByNameAsc("ACTIVE").stream()
-				.filter(role -> InternalRolePolicy.ALLOWED_ROLES.contains(role.getCode()))
+				.filter(role -> !"USER".equals(role.getCode()))
 				.map(role -> new RoleOption(role.getCode(), role.getName())).toList();
 	}
 
 	private UserJpaEntity findInternalUser(String publicId) {
 		UserJpaEntity entity = userRepository.findByPublicId(publicId)
 				.orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "El usuario solicitado no existe."));
-		boolean internal = entity.getRoles().stream()
-				.anyMatch(role -> InternalRolePolicy.ALLOWED_ROLES.contains(role.getCode()));
+		boolean internal = entity.getRoles().stream().anyMatch(role -> !"USER".equals(role.getCode()));
 		if (!internal) {
 			throw new BusinessException("USER_NOT_FOUND", "El usuario solicitado no existe.");
 		}
@@ -178,19 +176,18 @@ public class OracleUserManagementAdapter implements UserManagementPort {
 	}
 
 	private RoleJpaEntity activeRole(String code) {
-		String normalized = code == null ? "" : code.trim().toUpperCase();
-		if (!InternalRolePolicy.ALLOWED_ROLES.contains(normalized)) {
-			throw new BusinessException("INTERNAL_ROLE_INVALID", "El rol debe ser Administrador, Gestor o Supervisor.");
-		}
-		return roleRepository.findByCode(normalized).filter(role -> "ACTIVE".equals(role.getStatus())).orElseThrow(
+		String normalized = code == null ? "" : code.trim().toUpperCase(java.util.Locale.ROOT);
+		return roleRepository.findByCodeIgnoreCase(normalized)
+				.filter(role -> !"USER".equals(role.getCode()))
+				.filter(role -> "ACTIVE".equals(role.getStatus())).orElseThrow(
 				() -> new BusinessException("ROLE_NOT_FOUND", "El rol seleccionado no existe o está inactivo."));
 	}
 
 	private void validateOrganizationRequirement(String roleCode, String organizationPublicId) {
-		if (("MANAGER".equals(roleCode) || "SUPERVISOR".equals(roleCode))
+		if (!"ADMINISTRATOR".equals(roleCode)
 				&& (organizationPublicId == null || organizationPublicId.isBlank())) {
 			throw new BusinessException("USER_ORGANIZATION_REQUIRED",
-					"Los Gestores y Supervisores deben pertenecer a una organización comercial.");
+					"Los roles organizacionales deben pertenecer a una organización comercial.");
 		}
 	}
 
@@ -226,7 +223,7 @@ public class OracleUserManagementAdapter implements UserManagementPort {
 				() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización seleccionada no existe."));
 		if (organization.getOrganizationType() != OrganizationType.CUSTOMER) {
 			throw new BusinessException("CUSTOMER_ORGANIZATION_REQUIRED",
-					"Gestores y Supervisores no pueden pertenecer a la organización GLOBAL.");
+					"Los roles organizacionales no pueden pertenecer a la organización GLOBAL.");
 		}
 		if (!organization.isOperational(LocalDate.now(clock))) {
 			throw new BusinessException("ORGANIZATION_NOT_OPERATIONAL",
@@ -237,7 +234,7 @@ public class OracleUserManagementAdapter implements UserManagementPort {
 
 	private AdminUserSummary toSummary(UserJpaEntity entity) {
 		Set<String> roles = entity.getRoles().stream().map(RoleJpaEntity::getCode)
-				.filter(InternalRolePolicy.ALLOWED_ROLES::contains).collect(Collectors.toUnmodifiableSet());
+				.filter(code -> !"USER".equals(code)).collect(Collectors.toUnmodifiableSet());
 		var access = entity.getAccess();
 		var membership = membershipRepository.findByUserIdAndStatus(entity.getId(), "ACTIVE").orElse(null);
 		String organizationPublicId = null;

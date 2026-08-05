@@ -75,6 +75,10 @@ public class LoginService {
 			throw AuthenticationException.invalidCredentials();
 		}
 
+		if (user.getRoles().isEmpty()) {
+			recordFailure(user.getId(), command, "ROLE_INACTIVE", now);
+			throw AuthenticationException.roleInactive();
+		}
 		OrganizationJpaEntity organization = validateOrganization(user, command, now);
 		validateAccountState(user, command, now, organization != null);
 
@@ -86,10 +90,9 @@ public class LoginService {
 		if (organization == null) {
 			expiresAt = user.getAccess().capSessionExpiration(expiresAt);
 		} else if (organization.getExpiresOn() != null) {
-			Instant organizationExpiration = organization.getExpiresOn().plusDays(1).atStartOfDay(ZoneOffset.UTC)
-					.toInstant();
-			if (organizationExpiration.isBefore(expiresAt))
-				expiresAt = organizationExpiration;
+			Instant organizationExpiration = organization.getExpiresOn().plusDays(1)
+					.atStartOfDay(ZoneOffset.UTC).toInstant();
+			if (organizationExpiration.isBefore(expiresAt)) expiresAt = organizationExpiration;
 		}
 		expiresAt = user.capSessionExpirationForPassword(expiresAt);
 		AuthSessionScope scope = user.isPasswordChangeRequired() ? AuthSessionScope.PASSWORD_CHANGE
@@ -107,8 +110,7 @@ public class LoginService {
 		return new LoginResult(rawToken, expiresAt, CurrentUser.from(user, now, organization));
 	}
 
-	private void validateAccountState(UserAccount user, LoginCommand command, Instant now,
-			boolean organizationControlsAccess) {
+	private void validateAccountState(UserAccount user, LoginCommand command, Instant now, boolean organizationControlsAccess) {
 		if (user.getStatus() == UserStatus.DELETED) {
 			recordFailure(user.getId(), command, "ACCOUNT_DELETED", now);
 			throw AuthenticationException.accountDeleted();
@@ -143,7 +145,7 @@ public class LoginService {
 	}
 
 	private OrganizationJpaEntity validateOrganization(UserAccount user, LoginCommand command, Instant now) {
-		if (!user.hasRole("MANAGER") && !user.hasRole("SUPERVISOR")) {
+		if (user.hasRole("ADMINISTRATOR")) {
 			return null;
 		}
 		OrganizationJpaEntity organization = membershipRepository.findActiveOrganizationForUser(user.getId())

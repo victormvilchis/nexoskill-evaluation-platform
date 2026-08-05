@@ -22,38 +22,40 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 class CreateUserServiceTest {
-	private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
 
-	@Test
-	void shouldAlwaysCreateInternalUsersAsActive() {
-		UserManagementPort users = mock(UserManagementPort.class);
-		PasswordHasher hasher = mock(PasswordHasher.class);
-		SecureTemporaryPasswordGenerator generator = mock(SecureTemporaryPasswordGenerator.class);
-		InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
-		AuditLogPort audit = mock(AuditLogPort.class);
-		Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+    private static final Instant NOW = Instant.parse("2026-07-26T18:00:00Z");
 
-		when(generator.generate()).thenReturn("SafePass1!");
-		when(hasher.encode("SafePass1!")).thenReturn("encoded");
-		when(users.create(any())).thenReturn(summary());
-		when(users.getByPublicId("user-public")).thenReturn(new UserManagementPort.ManagedUser(10L, summary()));
+    @Test
+    void shouldAlwaysCreateInternalUsersAsActive() {
+        UserManagementPort users = mock(UserManagementPort.class);
+        PasswordHasher hasher = mock(PasswordHasher.class);
+        SecureTemporaryPasswordGenerator generator = mock(SecureTemporaryPasswordGenerator.class);
+        InternalRolePolicy rolePolicy = mock(InternalRolePolicy.class);
+        InternalUserStatusHistoryService history = mock(InternalUserStatusHistoryService.class);
+        AuditLogPort audit = mock(AuditLogPort.class);
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
-		CreateUserService service = new CreateUserService(users, hasher, new PasswordPolicy(), generator,
-				new InternalRolePolicy(), history, audit, new AppProperties(), clock);
+        when(generator.generate()).thenReturn("SafePass1!");
+        when(hasher.encode("SafePass1!")).thenReturn("encoded");
+        when(rolePolicy.normalizeAndValidate("MANAGER")).thenReturn("MANAGER");
+        when(users.create(any())).thenReturn(summary());
+        when(users.getByPublicId("user-public")).thenReturn(new UserManagementPort.ManagedUser(10L, summary()));
 
-		service.create(new CreateUserCommand("manager@example.com", "María", "López", null, "MANAGER", "org-public",
-				NOW, null, 1L, "127.0.0.1", "browser"));
+        CreateUserService service = new CreateUserService(users, hasher, new PasswordPolicy(), generator,
+                rolePolicy, history, audit, new AppProperties(), clock);
+        service.create(new CreateUserCommand("manager@example.com", "María", "López", null, "MANAGER", "org-public",
+                NOW, null, 1L, "127.0.0.1", "browser"));
 
-		ArgumentCaptor<UserManagementPort.NewUserData> captor = ArgumentCaptor
-				.forClass(UserManagementPort.NewUserData.class);
-		verify(users).create(captor.capture());
-		assertThat(captor.getValue().initialStatus()).isEqualTo(UserStatus.ACTIVE);
-		verify(history).record(10L, 1L, null, UserStatus.ACTIVE, "Creación de usuario", NOW);
-	}
+        ArgumentCaptor<UserManagementPort.NewUserData> captor = ArgumentCaptor
+                .forClass(UserManagementPort.NewUserData.class);
+        verify(users).create(captor.capture());
+        assertThat(captor.getValue().initialStatus()).isEqualTo(UserStatus.ACTIVE);
+        verify(history).record(10L, 1L, null, UserStatus.ACTIVE, "Creación de usuario", NOW);
+    }
 
-	private static AdminUserSummary summary() {
-		return new AdminUserSummary("user-public", "manager@example.com", "María", "López", "María López",
-				UserStatus.ACTIVE, Set.of("MANAGER"), "org-public", "Acme", UserAccessStatus.ACTIVE, NOW, null, null,
-				NOW, NOW, "Administrador", "Creación de usuario");
-	}
+    private static AdminUserSummary summary() {
+        return new AdminUserSummary("user-public", "manager@example.com", "María", "López", "María López",
+                UserStatus.ACTIVE, Set.of("MANAGER"), "org-public", "Acme", UserAccessStatus.ACTIVE, NOW, null, null,
+                NOW, NOW, "Administrador", "Creación de usuario");
+    }
 }

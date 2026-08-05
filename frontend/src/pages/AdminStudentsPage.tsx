@@ -50,9 +50,6 @@ export function AdminStudentsPage() {
   const toast = useToast()
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
-  const certificationOperator = Boolean(user?.roles.some(
-    (role) => role === 'ADMINISTRATOR' || role === 'MANAGER' || role === 'SUPERVISOR'
-  ))
   const administrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
@@ -139,7 +136,7 @@ export function AdminStudentsPage() {
   const direction = searchParams.get('direction') === 'DESC' ? 'DESC' : 'ASC'
   const showCertificationColumns = data?.content.some((student) => student.certificationsEnabled) ?? true
   const columnCount = showCertificationColumns ? 6 : 5
-  const canImport = (administrator || certificationOperator) && permissions.has('STUDENT_CREATE') && permissions.has('STUDENT_UPDATE')
+  const canImport = permissions.has('STUDENT_IMPORT')
   const importTarget = '/admin/collaborators/import'
   async function confirmPermanentDeletion() {
     if (!deleteCandidate || deleting) return
@@ -222,7 +219,7 @@ export function AdminStudentsPage() {
               <TableActionLink icon="eye" label="Ver" to={`/admin/collaborators/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/collaborators/${student.publicId}/edit`} />}
               {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Gestionar" to={`/admin/collaborators/${student.publicId}/manage`} tone="primary" />}
-              {certificationOperator && student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
+              {student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
               {permissions.has('STUDENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(student)} />}
             </TableActions></td>
           </tr>)}

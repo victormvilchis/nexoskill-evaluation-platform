@@ -1,7 +1,6 @@
 import type { ApiError } from '../types/auth'
 
 const API_ROOT = '/api/v1'
-export const ORGANIZATION_CONTEXT_KEY = 'nexoskill:organization-context'
 export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
 export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
 export const STUDENT_AUTH_INVALID_EVENT = 'nexoskill:student-auth-invalid'
@@ -61,6 +60,7 @@ function publishAuthenticationFailure(code: string, message: string) {
     code === 'SESSION_EXPIRED' ||
     code === 'ACCOUNT_UNAVAILABLE' ||
     code === 'ACCOUNT_INACTIVE' ||
+    code === 'ROLE_INACTIVE' ||
     code === 'ACCOUNT_SUSPENDED' ||
     code === 'ORGANIZATION_INACTIVE' ||
     code === 'ORGANIZATION_EXPIRED' ||
@@ -107,9 +107,6 @@ export async function apiRequest<T>(
     headers: {
       Accept: 'application/json',
       ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-      ...(window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)
-        ? { 'X-Organization-Context': window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)! }
-        : {}),
       ...options.headers
     }
   })

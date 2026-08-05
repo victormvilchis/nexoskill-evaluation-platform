@@ -29,8 +29,9 @@ const navigationConfig: NavSection[] = [
     items: [
       { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
       { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
+      { id: 'roles', label: 'Roles', to: '/admin/roles', icon: 'lock', permission: 'ROLE_MANAGE' },
       { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' },
-      { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'STUDENT_VIEW' }
+      { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'TALENT_VIEW' }
     ]
   },
   {
@@ -89,7 +90,8 @@ export function ApplicationLayout() {
   )
   const accountRef = useRef<HTMLDivElement>(null)
 
-  const canShow = (item: NavItem) => !item.permission || user?.permissions.includes(item.permission)
+  const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
+  const canShow = (item: NavItem) => administrator || !item.permission || user?.permissions.includes(item.permission)
 
   const sections = useMemo(
     () => navigationConfig
@@ -104,7 +106,7 @@ export function ApplicationLayout() {
           .filter((item) => item.to || (item.children?.length ?? 0) > 0)
       }))
       .filter((section) => section.items.length > 0),
-    [user?.permissions]
+    [administrator, user?.permissions]
   )
 
   function itemIsActive(item: NavItem): boolean {

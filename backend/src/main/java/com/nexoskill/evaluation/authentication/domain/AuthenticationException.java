@@ -16,6 +16,11 @@ public class AuthenticationException extends RuntimeException {
 		return new AuthenticationException("AUTHENTICATION_FAILED", "Usuario o contraseña incorrectos.");
 	}
 
+	public static AuthenticationException roleInactive() {
+		return new AuthenticationException("ROLE_INACTIVE",
+				"El rol asignado a tu cuenta se encuentra inactivo. Contacta a un administrador.");
+	}
+
 	public static AuthenticationException accountInactive() {
 		return new AuthenticationException("ACCOUNT_INACTIVE",
 				"Tu cuenta se encuentra inactiva. Contacta a un administrador.");

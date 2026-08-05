@@ -77,7 +77,7 @@ export function AdminQuestionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user])
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
-  const supervisor = Boolean(user?.roles.includes('SUPERVISOR'))
+  const organizationalRole = !globalAdministrator
   const query = searchParams.get('q') ?? ''
   const scope = globalAdministrator ? (searchParams.get('scope') ?? '') as ContentScope | '' : ''
   const organizationPublicId = globalAdministrator ? searchParams.get('organization') ?? '' : ''
@@ -490,7 +490,7 @@ export function AdminQuestionsPage() {
                   <td>
                     <TableActions>
                       <TableActionLink to={`/admin/questions/${question.publicId}`} label="Ver" icon="eye" />
-                      {supervisor && question.ownership.scope === 'GLOBAL' && question.status === 'ACTIVE' && permissions.has('QUESTION_CREATE') && (
+                      {organizationalRole && question.ownership.scope === 'GLOBAL' && question.status === 'ACTIVE' && permissions.has('QUESTION_CREATE') && (
                         <TableActionButton label="Crear copia para mi organización" icon="copy" disabled={busyId === question.publicId} onClick={() => void createOrganizationCopy(question)} />
                       )}
                       {canManageQuestion(question) && permissions.has('QUESTION_UPDATE') && question.status !== 'DELETED' && (

@@ -22,7 +22,7 @@ public interface SpringDataUserJpaRepository extends JpaRepository<UserJpaEntity
 			SELECT DISTINCT u
 			FROM UserJpaEntity u
 			JOIN u.roles r
-			WHERE r.code IN ('ADMINISTRATOR', 'MANAGER', 'SUPERVISOR')
+			WHERE r.code <> 'USER'
 			  AND (
 			    :query IS NULL
 			    OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
@@ -35,7 +35,7 @@ public interface SpringDataUserJpaRepository extends JpaRepository<UserJpaEntity
 			SELECT COUNT(DISTINCT u)
 			FROM UserJpaEntity u
 			JOIN u.roles r
-			WHERE r.code IN ('ADMINISTRATOR', 'MANAGER', 'SUPERVISOR')
+			WHERE r.code <> 'USER'
 			  AND (
 			    :query IS NULL
 			    OR LOWER(u.email) LIKE CONCAT(CONCAT('%', :query), '%')
@@ -46,6 +46,12 @@ public interface SpringDataUserJpaRepository extends JpaRepository<UserJpaEntity
 			  AND (:status IS NULL OR u.status = :status)
 			""")
 	Page<UserJpaEntity> search(@Param("query") String query, @Param("status") UserStatus status, Pageable pageable);
+
+	@Query("SELECT COUNT(DISTINCT u) FROM UserJpaEntity u JOIN u.roles r WHERE r.id = :roleId")
+	long countAssignedToRole(@Param("roleId") Long roleId);
+
+	@Query("SELECT DISTINCT u.id FROM UserJpaEntity u JOIN u.roles r WHERE r.id = :roleId")
+	java.util.List<Long> findUserIdsAssignedToRole(@Param("roleId") Long roleId);
 
 	@Query("""
 			SELECT COUNT(DISTINCT u)

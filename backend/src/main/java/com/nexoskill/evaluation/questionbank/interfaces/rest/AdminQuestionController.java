@@ -141,7 +141,7 @@ public class AdminQuestionController {
     }
 
     @PostMapping("/{id}/copy-to-organization")
-    @PreAuthorize("hasRole('SUPERVISOR') and hasAuthority('QUESTION_CREATE')")
+    @PreAuthorize("hasAuthority('QUESTION_CREATE')")
     public ResponseEntity<QuestionDetail> copyToOrganization(@PathVariable String id,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         var question = copyToOrganization.execute(id, actor.internalId());

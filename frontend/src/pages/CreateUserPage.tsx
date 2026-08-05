@@ -38,9 +38,7 @@ export function CreateUserPage() {
       searchOrganizations({ status: 'ACTIVE', page: 0, size: 100 })
     ])
       .then(([roleOptions, organizationPage]) => {
-        const internalRoles = roleOptions.filter((role) =>
-          role.code === 'ADMINISTRATOR' || role.code === 'MANAGER' || role.code === 'SUPERVISOR'
-        )
+        const internalRoles = roleOptions
         setRoles(internalRoles)
         setOrganizations(organizationPage.content)
         const firstRole = internalRoles[0]
@@ -145,7 +143,7 @@ export function CreateUserPage() {
         </section>
 
         <section className="form-section form-wide">
-          <div className="form-section-heading"><span className="form-section-number">2</span><div><h2>Rol y organización</h2><p>Solo existen Administrador, Gestor y Supervisor.</p></div></div>
+          <div className="form-section-heading"><span className="form-section-number">2</span><div><h2>Rol y organización</h2><p>Selecciona cualquiera de los roles activos configurados en Administración &gt; Roles.</p></div></div>
           <div className="internal-user-role-grid">
             <label className="form-field">
               <span>Rol</span>

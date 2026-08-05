@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
-import { searchUsers } from '../features/users/api/userApi'
+import { getRoles, searchUsers } from '../features/users/api/userApi'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
@@ -12,7 +12,7 @@ import { TablePagination } from '../shared/components/TablePagination'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
-import type { AdminUserPage, UserStatus } from '../shared/types/users'
+import type { AdminUserPage, RoleOption, UserStatus } from '../shared/types/users'
 
 const statusOptions: Array<{ value: UserStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activos' },
@@ -61,12 +61,17 @@ export function AdminUsersPage() {
   const [query, setQuery] = useState(searchParams.get('query') ?? '')
   const [status, setStatus] = useState<UserStatus | 'ALL'>(validStatus(searchParams.get('status')))
   const [data, setData] = useState<AdminUserPage | null>(null)
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const debouncedQuery = useDebouncedValue(query, 300)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
+
+  useEffect(() => {
+    getRoles().then(setRoleOptions).catch(() => setRoleOptions([]))
+  }, [])
 
   useEffect(() => {
     const currentQuery = searchParams.get('query') ?? ''
@@ -196,7 +201,7 @@ export function AdminUsersPage() {
                     <strong>{item.displayName}</strong>
                     <small>{item.email}</small>
                   </td>
-                  <td>{item.roles.map((role) => roleLabels[role] ?? role).join(', ')}</td>
+                  <td>{item.roles.map((role) => roleOptions.find((option) => option.code === role)?.name ?? roleLabels[role] ?? role).join(', ')}</td>
                   <td>{item.organizationName ?? 'Global'}</td>
                   <td>
                     <span className={`status-badge status-${item.status.toLowerCase()}`}>

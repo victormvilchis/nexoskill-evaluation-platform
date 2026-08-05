@@ -61,13 +61,13 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
 
     Promise.all([
       getUser(publicId),
-      editing ? getRoles() : Promise.resolve([] as RoleOption[]),
+      getRoles(),
       editing ? searchOrganizations({ status: 'ACTIVE', page: 0, size: 100 }) : Promise.resolve(null)
     ])
       .then(([response, roleOptions, organizationPage]) => {
         if (!active) return
         setUser(response)
-        setRoles(roleOptions.filter((role) => role.code === 'ADMINISTRATOR' || role.code === 'MANAGER' || role.code === 'SUPERVISOR'))
+        setRoles(roleOptions)
         setOrganizations(organizationPage?.content ?? [])
         setEmail(response.email)
         setFirstName(response.firstName)
@@ -116,8 +116,8 @@ export function AdminUserDetailPage({ mode = 'view' }: AdminUserDetailPageProps)
     ? (globalOrganization ? [globalOrganization] : [])
     : customerOrganizations
   const roleName = useMemo(
-    () => roleLabels[user?.roles[0] ?? ''] ?? user?.roles[0] ?? 'Sin rol',
-    [user]
+    () => roles.find((item) => item.code === user?.roles[0])?.name ?? roleLabels[user?.roles[0] ?? ''] ?? user?.roles[0] ?? 'Sin rol',
+    [roles, user]
   )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -11,36 +11,43 @@ import jakarta.persistence.Table;
 @Table(name = "APP_PERMISSION")
 public class PermissionJpaEntity {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@Column(name = "PERMISSION_ID")
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "PERMISSION_ID")
+    private Long id;
 
-	@Column(name = "PERMISSION_CODE", nullable = false, unique = true, length = 100)
-	private String code;
+    @Column(name = "PERMISSION_CODE", nullable = false, unique = true, length = 100)
+    private String code;
 
-	@Column(name = "PERMISSION_NAME", nullable = false, length = 150)
-	private String name;
+    @Column(name = "PERMISSION_NAME", nullable = false, length = 150)
+    private String name;
 
-	@Column(name = "MODULE_CODE", nullable = false, length = 50)
-	private String moduleCode;
+    @Column(name = "MODULE_CODE", nullable = false, length = 50)
+    private String moduleCode;
 
-	protected PermissionJpaEntity() {
-	}
+    @Column(name = "DESCRIPTION", length = 500)
+    private String description;
 
-	public Long getId() {
-		return id;
-	}
+    protected PermissionJpaEntity() {
+    }
 
-	public String getCode() {
-		return code;
-	}
+    public Long getId() {
+        return id;
+    }
 
-	public String getName() {
-		return name;
-	}
+    public String getCode() {
+        return code;
+    }
 
-	public String getModuleCode() {
-		return moduleCode;
-	}
+    public String getName() {
+        return name;
+    }
+
+    public String getModuleCode() {
+        return moduleCode;
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }

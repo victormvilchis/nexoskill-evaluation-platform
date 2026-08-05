@@ -7,7 +7,7 @@ export type UserAccessStatus =
   | 'EXPIRED'
   | 'CANCELED'
 
-export type InternalRoleCode = 'ADMINISTRATOR' | 'MANAGER' | 'SUPERVISOR'
+export type InternalRoleCode = string
 export type AuthSessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
 export type AuthSessionScope = 'FULL' | 'PASSWORD_CHANGE'
 

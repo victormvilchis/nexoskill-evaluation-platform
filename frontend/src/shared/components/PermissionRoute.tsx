@@ -13,9 +13,13 @@ export function PermissionRoute({ permission, anyOf = [], roles = [] }: Permissi
 
   if (loading) return <LoadingScreen />
 
+  const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
   const required = permission ? [permission] : anyOf
-  const hasPermission = required.length === 0 || required.some((item) => user?.permissions.includes(item))
-  const hasRole = roles.length === 0 || roles.some((role) => user?.roles.includes(role))
+  const hasPermission = administrator || required.length === 0
+    || required.some((item) => user?.permissions.includes(item))
+  const hasRole = administrator || roles.length === 0
+    || roles.some((role) => user?.roles.includes(role))
+
   if (!hasPermission || !hasRole) {
     return <Navigate to="/dashboard" replace />
   }
