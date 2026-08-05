@@ -13,6 +13,7 @@ import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionStatus;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionJpaEntity;
+import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionMediaJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionCategoryRepository;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
@@ -315,22 +316,35 @@ public class FormContentManager {
                 question.getDifficulty() == null ? null : question.getDifficulty().getName(),
                 question.getTechnology() == null ? null : question.getTechnology().getName(),
                 question.getLevelCode(), categoryNames(question), question.getStatus().name(),
-                order, points, required);
+                order, points, required, question.getContentScope().name(),
+                ownerName(question.getOwnerOrganizationId()), question.getExplanation(),
+                mediaView(question.getPromptMedia()), question.getCodeLanguage(), question.getCodeContent(),
+                question.getAcceptedAnswersJson(), answerOptions(question));
     }
 
     private FormModels.QuestionOptionView toQuestionOption(QuestionJpaEntity question) {
-        List<FormModels.QuestionAnswerOption> answerOptions = question.getOptions().stream()
-                .map(option -> new FormModels.QuestionAnswerOption(option.getPublicId(), option.getOptionOrder(),
-                        option.getText(), option.getMatchText(), option.isCorrect(), option.getFeedback()))
-                .toList();
         return new FormModels.QuestionOptionView(question.getPublicId(), question.getStatement(),
                 question.getType().getCode(), question.getType().getName(),
                 question.getDifficulty() == null ? null : question.getDifficulty().getCode(),
                 question.getDifficulty() == null ? null : question.getDifficulty().getName(),
                 question.getTechnology() == null ? null : question.getTechnology().getName(),
                 question.getLevelCode(), categoryNames(question), question.getContentScope().name(),
-                ownerName(question.getOwnerOrganizationId()), question.getExplanation(), question.getCodeLanguage(),
-                question.getCodeContent(), question.getAcceptedAnswersJson(), answerOptions, BigDecimal.ONE);
+                ownerName(question.getOwnerOrganizationId()), question.getExplanation(),
+                mediaView(question.getPromptMedia()), question.getCodeLanguage(), question.getCodeContent(),
+                question.getAcceptedAnswersJson(), answerOptions(question), BigDecimal.ONE);
+    }
+
+    private List<FormModels.QuestionAnswerOption> answerOptions(QuestionJpaEntity question) {
+        return question.getOptions().stream()
+                .map(option -> new FormModels.QuestionAnswerOption(option.getPublicId(), option.getOptionOrder(),
+                        option.getText(), mediaView(option.getMedia()), option.getMatchText(),
+                        mediaView(option.getMatchMedia()), option.isCorrect(), option.getFeedback()))
+                .toList();
+    }
+
+    private FormModels.QuestionMedia mediaView(QuestionMediaJpaEntity media) {
+        return media == null ? null : new FormModels.QuestionMedia(media.getPublicId(), media.getOriginalName(),
+                media.getContentType(), media.getSize(), "/api/v1/question-media/" + media.getPublicId());
     }
 
     private List<String> categoryNames(QuestionJpaEntity question) {

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   createForm,
@@ -12,6 +12,7 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { FullScreenDialog } from '../shared/components/FullScreenDialog'
 import { FormActions } from '../shared/components/FormActions'
 import { Icon } from '../shared/components/Icon'
 import { ResourceSearchField } from '../shared/components/ResourceFilters'
@@ -19,6 +20,8 @@ import { SelectField } from '../shared/components/SelectField'
 import { TablePagination } from '../shared/components/TablePagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
+import { useToast } from '../shared/components/ToastProvider'
+import { FormQuestionReadOnly } from '../features/forms/components/FormQuestionReadOnly'
 import type {
   FormCategoryOption,
   FormContentMode,
@@ -96,6 +99,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const { user } = useAuth()
   const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const completeSave = useSaveNavigation('/admin/forms')
+  const toast = useToast()
   const [model, setModel] = useState<FormPayload>(() => initialPayload(globalAdministrator))
   const [selectedQuestions, setSelectedQuestions] = useState<FormQuestionItem[]>([])
   const [configuredPools, setConfiguredPools] = useState<FormPoolItem[]>([])
@@ -116,9 +120,18 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null)
+  const [bankOpen, setBankOpen] = useState(false)
   const [previewQuestion, setPreviewQuestion] = useState<FormQuestionOption | null>(null)
+  const [selectedQuestionPreview, setSelectedQuestionPreview] = useState<FormQuestionItem | null>(null)
+  const [formPreviewOpen, setFormPreviewOpen] = useState(false)
+  const [removeCandidate, setRemoveCandidate] = useState<FormQuestionItem | null>(null)
+  const selectedQuestionIdsRef = useRef(new Set<string>())
   const [activeTab, setActiveTab] = useState<FormBuilderTab>('GENERAL')
   const [questionCategoryPublicId, setQuestionCategoryPublicId] = useState('')
+
+  useEffect(() => {
+    selectedQuestionIdsRef.current = new Set(selectedQuestions.map(question => question.questionPublicId))
+  }, [selectedQuestions])
 
   useEffect(() => {
     if (!editing && globalAdministrator && model.title === '' && model.contentScope === 'ORGANIZATION'
@@ -322,6 +335,7 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   function clearContent() {
+    selectedQuestionIdsRef.current.clear()
     setSelectedQuestions([])
     setConfiguredPools([])
     setQuestionPageIndex(0)
@@ -365,9 +379,13 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   function addQuestion(publicId: string) {
-    if (selectedQuestions.some(question => question.questionPublicId === publicId)) return
+    if (selectedQuestionIdsRef.current.has(publicId)) {
+      toast.info('Esta pregunta ya forma parte del formulario.')
+      return
+    }
     const option = questionPage.content.find(question => question.publicId === publicId)
     if (!option) return
+    selectedQuestionIdsRef.current.add(publicId)
     setSelectedQuestions(current => [...current, {
       questionPublicId: option.publicId,
       statement: option.statement,
@@ -378,11 +396,20 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       technologyName: option.technologyName,
       levelCode: option.levelCode,
       categoryNames: option.categoryNames,
+      contentScope: option.contentScope,
+      organizationName: option.organizationName,
+      explanation: option.explanation,
+      promptMedia: option.promptMedia,
+      codeLanguage: option.codeLanguage,
+      codeContent: option.codeContent,
+      acceptedAnswersJson: option.acceptedAnswersJson,
+      options: option.options,
       status: 'ACTIVE',
       order: current.length + 1,
       points: option.defaultPoints || 1,
       required: true
     }])
+    toast.success('La pregunta se agregó correctamente al formulario.')
   }
 
   function moveQuestion(index: number, direction: -1 | 1) {
@@ -398,9 +425,12 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
   }
 
   function removeQuestion(publicId: string) {
+    selectedQuestionIdsRef.current.delete(publicId)
     setSelectedQuestions(current => current
       .filter(question => question.questionPublicId !== publicId)
       .map((question, index) => ({ ...question, order: index + 1 })))
+    setRemoveCandidate(null)
+    toast.success('La pregunta fue retirada del formulario. El Banco de preguntas no fue modificado.')
   }
 
   function updateQuestion(publicId: string, patch: Partial<Pick<FormQuestionItem, 'points' | 'required'>>) {
@@ -635,53 +665,51 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
               <button className={`form-content-mode${model.contentMode === 'RANDOM_POOL' ? ' is-selected' : ''}`} type="button" role="radio" aria-checked={model.contentMode === 'RANDOM_POOL'} onClick={() => requestMode('RANDOM_POOL')}><Icon name="categories" size={22} /><span><strong>Pool aleatorio</strong><small>Configura categorías; las preguntas activas se elegirán aleatoriamente.</small></span></button>
             </div>
 
-            {model.contentMode === 'MANUAL' && <div className="form-manual-content">
-              <div className="form-question-browser">
-                <div className="form-content-section-heading"><div><h3>Banco de preguntas disponible</h3><p>Solo se muestran preguntas activas y autorizadas para esta organización y alcance.</p></div></div>
-                <div className="form-question-filters">
-                  <ResourceSearchField value={questionQuery} onChange={value => { setQuestionQuery(value); setQuestionPageIndex(0) }} placeholder="Buscar por enunciado" disabled={loadingOptions} />
-                  <SelectField
-                    value={questionCategoryPublicId}
-                    onChange={value => { setQuestionCategoryPublicId(value); setQuestionPageIndex(0) }}
-                    ariaLabel="Filtrar preguntas por categoría"
-                    placeholder="Todas las categorías"
-                    options={[
-                      { value: '', label: 'Todas las categorías' },
-                      ...categories.map(category => ({
-                        value: category.publicId,
-                        label: `${category.name} · ${category.activeQuestionCount}`
-                      }))
-                    ]}
-                  />
+            {model.contentMode === 'MANUAL' && <div className="form-manual-content form-manual-content--visual">
+              <div className="form-content-section-heading form-builder-content-toolbar">
+                <div>
+                  <h3>Construcción visual del formulario</h3>
+                  <p>Las preguntas provienen del Banco de preguntas y se muestran en modo de solo lectura.</p>
                 </div>
-                <div className="form-question-results" aria-busy={loadingOptions}>
-                  {loadingOptions && <div className="ns-table-empty">Consultando preguntas…</div>}
-                  {!loadingOptions && questionPage.content.length === 0 && <div className="ns-table-empty">
-                    <strong>{questionCategoryPublicId ? 'Categoría sin preguntas disponibles' : 'No hay preguntas activas disponibles'}</strong>
-                    <span>{questionCategoryPublicId
-                      ? 'No existen preguntas activas disponibles en esta categoría para el alcance del formulario.'
-                      : 'Revisa el alcance, la organización o el criterio de búsqueda.'}</span>
-                  </div>}
-                  {!loadingOptions && questionPage.content.map(question => {
-                    const selected = selectedQuestions.some(item => item.questionPublicId === question.publicId)
-                    return <article className="form-question-option" key={question.publicId}>
-                      <div><strong>{question.statement}</strong><p>{question.typeName}{question.difficultyName ? ` · ${question.difficultyName}` : ''}{question.technologyName ? ` · ${question.technologyName}` : ''}</p><small>{question.categoryNames.length ? question.categoryNames.join(' · ') : 'Sin categoría'} · {question.contentScope === 'GLOBAL' ? 'Global' : question.organizationName}</small></div>
-                      <div className="form-question-option-actions"><button className="secondary-button compact-button" type="button" onClick={() => setPreviewQuestion(question)}><Icon name="eye" size={15} /> Revisar</button><button className="secondary-button compact-button" disabled={selected} type="button" onClick={() => addQuestion(question.publicId)}>{selected ? <><Icon name="check" size={15} /> Agregada</> : <><Icon name="plus" size={15} /> Agregar</>}</button></div>
-                    </article>
-                  })}
+                <div className="form-builder-content-actions">
+                  <button className="primary-button" type="button" onClick={() => { setBankOpen(true); setPreviewQuestion(null) }}>
+                    <Icon name="plus" size={16} /> Agregar preguntas del Banco
+                  </button>
+                  <button className="secondary-button" type="button" disabled={selectedQuestions.length === 0} onClick={() => setFormPreviewOpen(true)}>
+                    <Icon name="eye" size={16} /> Vista previa del formulario
+                  </button>
                 </div>
-                <TablePagination compact currentPage={questionPage.page} pageSize={questionPage.size} totalElements={questionPage.totalElements} totalPages={questionPage.totalPages} isLoading={loadingOptions} onPageChange={setQuestionPageIndex} onPageSizeChange={value => { setQuestionPageSize(value); setQuestionPageIndex(0) }} />
               </div>
-              <div className="form-selected-questions">
-                <div className="form-content-section-heading"><div><h3>Preguntas seleccionadas</h3><p>El orden visible será el orden guardado.</p></div><span className="form-content-count">{selectedQuestions.length}</span></div>
-                {selectedQuestions.length === 0 && <div className="ns-builder-empty compact"><Icon name="clipboard" size={25} /><h3>Aún no agregas preguntas</h3><p>Selecciona al menos una pregunta activa del Banco.</p></div>}
-                {selectedQuestions.map((question, index) => <article className="form-selected-question" key={question.questionPublicId}>
-                  <span className="form-question-order">{index + 1}</span>
-                  <div className="form-selected-question-copy"><strong>{question.statement}</strong><small>{question.typeName}{question.categoryNames.length ? ` · ${question.categoryNames.join(', ')}` : ''}{question.status !== 'ACTIVE' ? ' · Conservada como histórica' : ''}</small></div>
-                  <div className="form-points-field form-readonly-value"><span>Puntos</span><strong>{question.points}</strong></div>
-                  <label className="form-required-field"><input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.questionPublicId, { required: event.target.checked })} /><span>Obligatoria</span></label>
-                  <div className="form-question-actions"><button aria-label="Subir pregunta" type="button" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><Icon name="arrowUp" size={16} /></button><button aria-label="Bajar pregunta" type="button" disabled={index === selectedQuestions.length - 1} onClick={() => moveQuestion(index, 1)}><Icon name="arrowDown" size={16} /></button><button aria-label="Retirar pregunta" className="is-danger" type="button" onClick={() => removeQuestion(question.questionPublicId)}><Icon name="trash" size={16} /></button></div>
-                </article>)}
+
+              {selectedQuestions.length === 0 && <div className="ns-builder-empty form-builder-empty-visual">
+                <Icon name="clipboard" size={32} />
+                <h3>Aún no agregas preguntas</h3>
+                <p>Abre el Banco de preguntas, revisa el detalle completo y agrega las preguntas que integrarán el formulario.</p>
+                <button className="primary-button" type="button" onClick={() => setBankOpen(true)}>
+                  <Icon name="plus" size={16} /> Agregar preguntas del Banco
+                </button>
+              </div>}
+
+              <div className="form-builder-question-list" aria-label="Preguntas incorporadas al formulario">
+                {selectedQuestions.map((question, index) => <section className="form-builder-question-block" key={question.questionPublicId}>
+                  <header className="form-builder-question-block__toolbar">
+                    <div>
+                      <span>Pregunta {index + 1} de {selectedQuestions.length}</span>
+                      <strong>{question.typeName} · {question.points} {question.points === 1 ? 'punto' : 'puntos'}</strong>
+                    </div>
+                    <label className="form-builder-required-toggle">
+                      <input type="checkbox" checked={question.required} onChange={event => updateQuestion(question.questionPublicId, { required: event.target.checked })} />
+                      <span>Obligatoria</span>
+                    </label>
+                    <div className="form-question-actions">
+                      <button aria-label="Ver detalle completo" type="button" onClick={() => setSelectedQuestionPreview(question)}><Icon name="eye" size={16} /></button>
+                      <button aria-label="Subir pregunta" type="button" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><Icon name="arrowUp" size={16} /></button>
+                      <button aria-label="Bajar pregunta" type="button" disabled={index === selectedQuestions.length - 1} onClick={() => moveQuestion(index, 1)}><Icon name="arrowDown" size={16} /></button>
+                      <button aria-label="Retirar pregunta" className="is-danger" type="button" onClick={() => setRemoveCandidate(question)}><Icon name="trash" size={16} /></button>
+                    </div>
+                  </header>
+                  <FormQuestionReadOnly question={question} number={index + 1} points={question.points} required={question.required} status={question.status} />
+                </section>)}
               </div>
             </div>}
 
@@ -731,16 +759,109 @@ export function FormBuilderPage({ readOnly = false }: { readOnly?: boolean }) {
       </FormActions>
     </form>
 
-    <ConfirmDialog open={Boolean(previewQuestion)} title="Vista previa de la pregunta" description="Consulta la configuración definida en el Banco de preguntas. Desde Formularios no puede modificarse." confirmLabel={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId) ? 'Ya agregada' : 'Agregar pregunta'} confirmDisabled={selectedQuestions.some(item => item.questionPublicId === previewQuestion?.publicId)} onConfirm={() => { if (previewQuestion) addQuestion(previewQuestion.publicId); setPreviewQuestion(null) }} onCancel={() => setPreviewQuestion(null)}>
-      {previewQuestion && <div className="form-question-preview">
-        <section><span>Enunciado</span><strong>{previewQuestion.statement}</strong></section>
-        <div className="form-question-preview-grid"><div><span>Tipo</span><strong>{previewQuestion.typeName}</strong></div><div><span>Dificultad</span><strong>{previewQuestion.difficultyName ?? 'N/A'}</strong></div><div><span>Tecnología</span><strong>{previewQuestion.technologyName ?? 'N/A'}</strong></div><div><span>Seniority</span><strong>{previewQuestion.levelCode ?? 'N/A'}</strong></div><div><span>Categorías</span><strong>{previewQuestion.categoryNames.join(', ') || 'N/A'}</strong></div><div><span>Puntos</span><strong>{previewQuestion.defaultPoints}</strong></div><div><span>Alcance</span><strong>{previewQuestion.contentScope === 'GLOBAL' ? 'Global' : previewQuestion.organizationName}</strong></div><div><span>Estado</span><strong>Activa</strong></div></div>
-        {previewQuestion.options.length > 0 && <section><span>Opciones y respuesta correcta</span><ol className="form-question-preview-options">{previewQuestion.options.map(option => <li key={option.publicId} className={option.correct ? 'is-correct' : ''}><strong>{option.text || option.matchText || `Opción ${option.order}`}</strong>{option.correct && <small>Respuesta correcta</small>}</li>)}</ol></section>}
-        {previewQuestion.acceptedAnswersJson && <section><span>Respuestas aceptadas</span><code>{previewQuestion.acceptedAnswersJson}</code></section>}
-        {previewQuestion.explanation && <section><span>Explicación</span><p>{previewQuestion.explanation}</p></section>}
-        {previewQuestion.codeContent && <section><span>Código {previewQuestion.codeLanguage ? `(${previewQuestion.codeLanguage})` : ''}</span><pre>{previewQuestion.codeContent}</pre></section>}
-      </div>}
-    </ConfirmDialog>
+    <FullScreenDialog
+      open={bankOpen}
+      eyebrow="Contenido del formulario"
+      title="Agregar preguntas del Banco"
+      description="Busca y revisa la configuración completa de cada pregunta antes de incorporarla. Desde Formularios no puede modificarse."
+      className="form-question-bank-dialog"
+      onClose={() => { setBankOpen(false); setPreviewQuestion(null) }}
+      footer={<>
+        <button className="secondary-button" type="button" onClick={() => { setBankOpen(false); setPreviewQuestion(null) }}>Cerrar</button>
+        {previewQuestion && <button
+          className="primary-button"
+          type="button"
+          disabled={selectedQuestions.some(item => item.questionPublicId === previewQuestion.publicId)}
+          onClick={() => addQuestion(previewQuestion.publicId)}
+        >
+          {selectedQuestions.some(item => item.questionPublicId === previewQuestion.publicId)
+            ? <><Icon name="check" size={16} /> Ya agregada</>
+            : <><Icon name="plus" size={16} /> Agregar pregunta</>}
+        </button>}
+      </>}
+    >
+      <div className="form-question-bank-layout">
+        <aside className="form-question-bank-browser" aria-label="Preguntas disponibles">
+          <div className="form-question-bank-filters">
+            <ResourceSearchField value={questionQuery} onChange={value => { setQuestionQuery(value); setQuestionPageIndex(0) }} placeholder="Buscar por enunciado" disabled={loadingOptions} />
+            <SelectField
+              value={questionCategoryPublicId}
+              onChange={value => { setQuestionCategoryPublicId(value); setQuestionPageIndex(0) }}
+              ariaLabel="Filtrar preguntas por categoría"
+              placeholder="Todas las categorías"
+              options={[
+                { value: '', label: 'Todas las categorías' },
+                ...categories.map(category => ({ value: category.publicId, label: `${category.name} · ${category.activeQuestionCount}` }))
+              ]}
+            />
+          </div>
+          <div className="form-question-bank-results" aria-busy={loadingOptions}>
+            {loadingOptions && <div className="ns-table-empty">Consultando preguntas…</div>}
+            {!loadingOptions && questionPage.content.length === 0 && <div className="ns-table-empty">
+              <strong>Sin preguntas disponibles</strong>
+              <span>No existen preguntas activas disponibles para los filtros y el alcance seleccionados.</span>
+            </div>}
+            {!loadingOptions && questionPage.content.map(question => {
+              const selected = selectedQuestions.some(item => item.questionPublicId === question.publicId)
+              const active = previewQuestion?.publicId === question.publicId
+              return <button
+                className={`form-question-bank-result${active ? ' is-active' : ''}`}
+                key={question.publicId}
+                type="button"
+                onClick={() => setPreviewQuestion(question)}
+              >
+                <span className="form-question-bank-result__statement">{question.statement}</span>
+                <span>{question.typeName}{question.technologyName ? ` · ${question.technologyName}` : ''}</span>
+                <small>{question.categoryNames.length ? question.categoryNames.join(' · ') : 'Sin categoría'} · {question.contentScope === 'GLOBAL' ? 'Global' : question.organizationName}</small>
+                {selected && <em><Icon name="check" size={13} /> Agregada</em>}
+              </button>
+            })}
+          </div>
+          <TablePagination compact currentPage={questionPage.page} pageSize={questionPage.size} totalElements={questionPage.totalElements} totalPages={questionPage.totalPages} isLoading={loadingOptions} onPageChange={setQuestionPageIndex} onPageSizeChange={value => { setQuestionPageSize(value); setQuestionPageIndex(0) }} />
+        </aside>
+        <section className="form-question-bank-preview" aria-live="polite">
+          {previewQuestion
+            ? <FormQuestionReadOnly question={previewQuestion} points={previewQuestion.defaultPoints} variant="preview" />
+            : <div className="form-question-bank-preview-empty"><Icon name="eye" size={34} /><h3>Selecciona una pregunta</h3><p>La vista previa mostrará el enunciado, imágenes, código, opciones, respuesta correcta y clasificación completa.</p></div>}
+        </section>
+      </div>
+    </FullScreenDialog>
+
+    <FullScreenDialog
+      open={Boolean(selectedQuestionPreview)}
+      eyebrow="Pregunta incorporada"
+      title="Vista previa de la pregunta"
+      description="Consulta la configuración definida en el Banco de preguntas. Desde Formularios no puede modificarse."
+      onClose={() => setSelectedQuestionPreview(null)}
+      footer={<button className="secondary-button" type="button" onClick={() => setSelectedQuestionPreview(null)}>Cerrar</button>}
+    >
+      {selectedQuestionPreview && <div className="form-single-question-preview"><FormQuestionReadOnly question={selectedQuestionPreview} points={selectedQuestionPreview.points} required={selectedQuestionPreview.required} status={selectedQuestionPreview.status} variant="preview" /></div>}
+    </FullScreenDialog>
+
+    <FullScreenDialog
+      open={formPreviewOpen}
+      eyebrow="Vista previa del formulario"
+      title={model.title.trim() || 'Formulario sin título'}
+      description={model.description.trim() || 'Sin descripción'}
+      className="form-complete-preview-dialog"
+      onClose={() => setFormPreviewOpen(false)}
+      footer={<button className="secondary-button" type="button" onClick={() => setFormPreviewOpen(false)}>Cerrar vista previa</button>}
+    >
+      <div className="form-complete-preview">
+        <header><span>{model.modeCode === 'PRACTICE' ? 'Práctica' : 'Evaluación'} · Puntaje mínimo {model.passingScore}%</span><strong>{selectedQuestions.length} {selectedQuestions.length === 1 ? 'pregunta' : 'preguntas'}</strong></header>
+        {selectedQuestions.map((question, index) => <FormQuestionReadOnly key={question.questionPublicId} question={question} number={index + 1} points={question.points} required={question.required} status={question.status} variant="preview" />)}
+      </div>
+    </FullScreenDialog>
+
+    <ConfirmDialog
+      open={Boolean(removeCandidate)}
+      title="Retirar pregunta del formulario"
+      description="La pregunta será retirada únicamente de este formulario. El Banco de preguntas no será modificado."
+      confirmLabel="Retirar pregunta"
+      tone="danger"
+      onConfirm={() => { if (removeCandidate) removeQuestion(removeCandidate.questionPublicId) }}
+      onCancel={() => setRemoveCandidate(null)}
+    />
 
     <ConfirmDialog open={Boolean(pendingChange)} title="Cambiar configuración del contenido" description="El contenido configurado no es compatible con el nuevo alcance o modalidad y será descartado." confirmLabel="Cambiar y limpiar contenido" tone="danger" onConfirm={confirmPendingChange} onCancel={() => setPendingChange(null)} />
   </main>

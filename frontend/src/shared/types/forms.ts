@@ -3,8 +3,26 @@ export type FormMode = 'ASSESSMENT' | 'PRACTICE'
 export type FormContentMode = 'MANUAL' | 'RANDOM_POOL'
 export type FormContentScope = 'GLOBAL' | 'ORGANIZATION'
 
-export interface FormQuestionItem {
-  questionPublicId: string
+export interface FormQuestionMedia {
+  publicId: string
+  originalName: string
+  contentType: string
+  size: number
+  url: string
+}
+
+export interface FormQuestionAnswerOption {
+  publicId: string
+  order: number
+  text?: string
+  media?: FormQuestionMedia
+  matchText?: string
+  matchMedia?: FormQuestionMedia
+  correct: boolean
+  feedback?: string
+}
+
+export interface FormQuestionContent {
   statement: string
   typeCode: string
   typeName: string
@@ -13,6 +31,18 @@ export interface FormQuestionItem {
   technologyName?: string
   levelCode?: string
   categoryNames: string[]
+  contentScope?: FormContentScope
+  organizationName?: string
+  explanation?: string
+  promptMedia?: FormQuestionMedia
+  codeLanguage?: string
+  codeContent?: string
+  acceptedAnswersJson?: string
+  options: FormQuestionAnswerOption[]
+}
+
+export interface FormQuestionItem extends FormQuestionContent {
+  questionPublicId: string
   status: 'ACTIVE' | 'ARCHIVED' | 'DELETED'
   order: number
   points: number
@@ -112,38 +142,16 @@ export interface FormPayload {
   sections?: never[]
 }
 
-export interface FormQuestionAnswerOption {
-  publicId: string
-  order: number
-  text?: string
-  matchText?: string
-  correct: boolean
-  feedback?: string
-}
-
 export interface FormOrganizationOption {
   publicId: string
   code: string
   name: string
 }
 
-export interface FormQuestionOption {
+export interface FormQuestionOption extends FormQuestionContent {
   publicId: string
-  statement: string
-  typeCode: string
-  typeName: string
-  difficultyCode?: string
-  difficultyName?: string
-  technologyName?: string
-  levelCode?: string
-  categoryNames: string[]
   contentScope: FormContentScope
   organizationName: string
-  explanation?: string
-  codeLanguage?: string
-  codeContent?: string
-  acceptedAnswersJson?: string
-  options: FormQuestionAnswerOption[]
   defaultPoints: number
 }
 

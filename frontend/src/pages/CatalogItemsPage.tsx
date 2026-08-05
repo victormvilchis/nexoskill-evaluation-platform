@@ -370,8 +370,7 @@ export function CatalogItemsPage() {
             <thead>
               <tr>
                 <th>Nombre</th>
-                <th>Código</th>
-                {globalAdministrator && <th>Organización</th>}
+                <th>Organización</th>
                 <th>Actualización</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
@@ -379,11 +378,11 @@ export function CatalogItemsPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="ns-table-empty" colSpan={globalAdministrator ? 6 : 5}>Cargando registros…</td></tr>
+                <tr><td className="ns-table-empty" colSpan={5}>Cargando registros…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="ns-table-empty" colSpan={globalAdministrator ? 6 : 5}>
+                  <td className="ns-table-empty" colSpan={5}>
                     <strong>No hay registros</strong>
                     <span>{canManage ? 'Ajusta los filtros o crea un valor nuevo.' : 'Ajusta los filtros para consultar los registros disponibles.'}</span>
                   </td>
@@ -391,9 +390,8 @@ export function CatalogItemsPage() {
               )}
               {!loading && pageData.content.map((item) => (
                 <tr key={item.id}>
-                  <td className="ns-primary-cell"><strong>{item.name}</strong><small>{item.description || 'Sin descripción'}</small></td>
-                  <td><code>{item.code}</code></td>
-                  {globalAdministrator && <td>{item.organizationName ?? 'GLOBAL'}</td>}
+                  <td className="ns-primary-cell"><strong>{item.name}</strong></td>
+                  <td>{item.organizationName ?? 'GLOBAL'}</td>
                   <td>{formatDate(item.updatedAt ?? item.createdAt)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
                   <td>

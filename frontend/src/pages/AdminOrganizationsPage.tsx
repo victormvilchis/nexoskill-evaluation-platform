@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
@@ -38,12 +38,6 @@ const STATUS_LABELS: Record<OrganizationStatus, string> = {
   DELETED: 'Eliminada'
 }
 
-const CONTENT_MODE_LABELS = {
-  GLOBAL_CATALOG: 'Catálogo global',
-  CLEAN: 'En limpio',
-  CUSTOM: 'Personalizada'
-} as const
-
 function statusFromQuery(value: string | null): OrganizationStatus | 'ALL' {
   if (value === 'ALL') return 'ALL'
   return value && VALID_STATUSES.has(value as OrganizationStatus)
@@ -80,6 +74,12 @@ export function AdminOrganizationsPage() {
   const debouncedQuery = useDebouncedValue(query, 300)
   const page = parsePage(searchParams.get('page'))
   const size = parsePageSize(searchParams.get('size'))
+  const goToPage = useCallback((nextPage: number) => {
+    const next = new URLSearchParams(searchParams)
+    if (nextPage > 0) next.set('page', String(nextPage))
+    else next.delete('page')
+    setSearchParams(next)
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     const success = searchParams.get('success')
@@ -143,20 +143,13 @@ export function AdminOrganizationsPage() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [page, reloadKey, searchParams, size])
+  }, [goToPage, page, reloadKey, searchParams, size])
 
   const activeFilters = Boolean(query.trim()) || status !== 'ACTIVE'
 
   function clearFilters() {
     setQuery('')
     setStatus('ACTIVE')
-  }
-
-  function goToPage(nextPage: number) {
-    const next = new URLSearchParams(searchParams)
-    if (nextPage > 0) next.set('page', String(nextPage))
-    else next.delete('page')
-    setSearchParams(next)
   }
 
   function changePageSize(nextSize: PageSize) {
@@ -201,7 +194,6 @@ export function AdminOrganizationsPage() {
             <thead>
               <tr>
                 <th>Organización</th>
-                <th>Modalidad</th>
                 <th className="ns-number-column">Activos</th>
                 <th className="ns-number-column">Inactivos</th>
                 <th className="ns-number-column">Vencidos</th>
@@ -211,9 +203,9 @@ export function AdminOrganizationsPage() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} className="ns-table-empty">Cargando organizaciones…</td></tr>}
+              {loading && <tr><td colSpan={7} className="ns-table-empty">Cargando organizaciones…</td></tr>}
               {!loading && !error && data?.content.length === 0 && (
-                <tr><td colSpan={8} className="ns-table-empty">
+                <tr><td colSpan={7} className="ns-table-empty">
                   <strong>{activeFilters ? 'No encontramos coincidencias' : 'Aún no hay organizaciones activas'}</strong>
                   <span>{activeFilters ? 'Ajusta o limpia los filtros.' : 'Crea la primera organización comercial para comenzar.'}</span>
                 </td></tr>
@@ -224,7 +216,6 @@ export function AdminOrganizationsPage() {
                     <strong>{item.name}</strong>
                     <small><code className="ns-code-label">{item.code}</code> · {item.organizationType === 'GLOBAL' ? 'Sistema global' : 'Comercial'}</small>
                   </td>
-                  <td><span className={`org-mode-badge org-mode-${item.contentMode.toLowerCase().replace('_', '-')}`}>{CONTENT_MODE_LABELS[item.contentMode]}</span></td>
                   <td className="ns-number-column">{item.activeStudentCount ?? 0}</td>
                   <td className="ns-number-column">{item.inactiveStudentCount ?? 0}</td>
                   <td className="ns-number-column">{item.expiredStudentCount ?? 0}</td>
