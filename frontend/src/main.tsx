@@ -29,6 +29,7 @@ import './styles/visual-homologation-r3.css'
 import './styles/talent-bank-r1.css'
 import './styles/form-builder-content-r1.css'
 import './styles/table-density-r1.css'
+import './styles/filter-density-r2.css'
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

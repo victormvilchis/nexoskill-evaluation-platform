@@ -19,7 +19,7 @@ export function ResourceSearchField({
 }: ResourceSearchFieldProps) {
   return (
     <label className="ns-resource-search">
-      <Icon name="search" size={18} />
+      <Icon name="search" size={17} />
       <input
         aria-label={ariaLabel}
         autoComplete="off"
@@ -38,12 +38,14 @@ export function ResourceSearchField({
           type="button"
           onClick={() => onChange('')}
         >
-          <Icon name="close" size={14} />
+          <Icon name="close" size={13} />
         </button>
       )}
     </label>
   )
 }
+
+type ResourceSelectWidth = 'compact' | 'medium' | 'wide'
 
 interface ResourceSelectFieldProps {
   label: string
@@ -52,6 +54,22 @@ interface ResourceSelectFieldProps {
   children: ReactNode
   disabled?: boolean
   ariaLabel?: string
+  width?: ResourceSelectWidth
+}
+
+function normalizedLabel(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function inferredWidth(label: string): ResourceSelectWidth {
+  const normalized = normalizedLabel(label)
+  if (['estado', 'alcance', 'modulo', 'tipo', 'ano de creacion'].includes(normalized)) return 'compact'
+  if (['organizacion', 'categoria', 'tecnologia'].includes(normalized)) return 'wide'
+  return 'medium'
 }
 
 export function ResourceSelectField({
@@ -60,10 +78,12 @@ export function ResourceSelectField({
   onChange,
   children,
   disabled = false,
-  ariaLabel
+  ariaLabel,
+  width
 }: ResourceSelectFieldProps) {
+  const resolvedWidth = width ?? inferredWidth(label)
   return (
-    <label className="ns-resource-select">
+    <label className={`ns-resource-select ns-resource-select--${resolvedWidth}`}>
       <span>{label}</span>
       <div className="ns-resource-select-control">
         <SelectField
