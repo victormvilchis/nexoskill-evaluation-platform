@@ -938,3 +938,17 @@
     display: grid;
   }
 }
+
+.ns-import-reused-decision.compact {
+  min-width: 190px;
+  gap: 2px;
+  padding: 7px 9px;
+}
+
+.ns-import-reused-decision.compact strong {
+  font-size: .7rem;
+}
+
+.ns-import-reused-decision.compact span {
+  font-size: .78rem;
+}

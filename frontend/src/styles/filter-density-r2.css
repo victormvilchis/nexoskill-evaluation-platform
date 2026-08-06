@@ -421,3 +421,84 @@
     width: 100%;
   }
 }
+
+/* R3: containment transversal para valores extensos en filtros y selects. */
+:is(
+  .ns-filter-fields,
+  .ns-filter-toolbar,
+  .filter-panel,
+  .question-filter-panel,
+  .form-question-filters,
+  .lc-filter-row,
+  .lc-list-toolbar,
+  .ns-form-grid,
+  .ns-inline-fields
+) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:is(
+  .ns-resource-select,
+  .ns-resource-select-control,
+  .ns-filter-field,
+  .compact-filter,
+  .lc-list-select,
+  .lc-select-field,
+  .field,
+  .ns-field
+) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vt-select-field,
+.vt-select-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vt-select-trigger {
+  overflow: hidden;
+}
+
+.vt-select-trigger > span,
+.vt-select-value,
+.vt-select-placeholder {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:is(
+  .ns-filter-fields,
+  .ns-filter-toolbar,
+  .filter-panel,
+  .question-filter-panel,
+  .form-question-filters,
+  .lc-filter-row,
+  .lc-list-toolbar,
+  .ns-form-grid,
+  .ns-inline-fields
+) select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-page .ns-filter-fields > *,
+.student-page .ns-resource-select-control,
+.student-page .vt-select-field,
+.student-page .vt-select-trigger {
+  min-width: 0;
+  max-width: 100%;
+}

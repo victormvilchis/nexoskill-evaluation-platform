@@ -4,12 +4,16 @@ export interface StudentImportIssue {
   message: string
 }
 
+export type StudentImportChangeActionValue = 'KEEP_PLATFORM' | 'APPLY_EXCEL'
+
 export interface StudentImportFieldChange {
   key: string
   field: string
   currentValue: string
   excelValue: string
   selected: boolean
+  resolvedAction: StudentImportChangeActionValue | null
+  reusedDecision: boolean
 }
 
 export interface NewStudentPreview {
@@ -26,6 +30,7 @@ export interface NewStudentPreview {
 export interface ChangedStudentPreview {
   studentPublicId: string
   rowKey: string
+  row: number
   collaborator: string
   changes: StudentImportFieldChange[]
   warnings: string[]

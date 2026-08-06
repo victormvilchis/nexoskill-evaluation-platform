@@ -32,6 +32,7 @@ type ChangeState = ChangedStudentPreview & { selected: boolean; selectedFields: 
 
 type ConflictDecisions = Record<string, StudentImportConflictActionValue | ''>
 type ConflictTab = 'PENDING' | 'REUSED'
+type ChangeTab = 'PENDING' | 'REUSED'
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
@@ -90,6 +91,7 @@ export function StudentImportPage() {
   const [lowActions, setLowActions] = useState<Record<string, LowAction>>({})
   const [conflictDecisions, setConflictDecisions] = useState<ConflictDecisions>({})
   const [conflictTab, setConflictTab] = useState<ConflictTab>('PENDING')
+  const [changeTab, setChangeTab] = useState<ChangeTab>('PENDING')
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string>()
@@ -138,6 +140,16 @@ export function StudentImportPage() {
       && (row.selectedFields.size > 0 || activeConflictRowKeys.has(row.rowKey))),
     [changedRows, activeConflictRowKeys]
   )
+  const pendingChangeCount = useMemo(
+    () => changedRows.filter((row) => row.selected).reduce((total, row) =>
+      total + row.changes.filter((change) => !change.reusedDecision).length, 0),
+    [changedRows]
+  )
+  const reusedChangeCount = useMemo(
+    () => changedRows.filter((row) => row.selected).reduce((total, row) =>
+      total + row.changes.filter((change) => change.reusedDecision).length, 0),
+    [changedRows]
+  )
   const excludedRows = useMemo(
     () => newRows.filter((row) => !row.selected).length + changedRows.filter((row) => !row.selected).length,
     [newRows, changedRows]
@@ -173,6 +185,14 @@ export function StudentImportPage() {
     }
   }, [conflictTab, pendingConflicts.length, reusedConflicts.length])
 
+  useEffect(() => {
+    if (changeTab === 'PENDING' && pendingChangeCount === 0 && reusedChangeCount > 0) {
+      setChangeTab('REUSED')
+    } else if (changeTab === 'REUSED' && reusedChangeCount === 0 && pendingChangeCount > 0) {
+      setChangeTab('PENDING')
+    }
+  }, [changeTab, pendingChangeCount, reusedChangeCount])
+
   const newRowError = useMemo(() => {
     const normalizedEmails = new Map<string, number>()
     const normalizedCodes = new Map<string, number>()
@@ -207,9 +227,18 @@ export function StudentImportPage() {
       : undefined
   }, [selectedNew, omittedRows, preview?.manualStudentCode])
 
-  const visibleErrors = useMemo(() => {
-    return preview?.errors ?? []
-  }, [preview])
+  const rowSelectionByNumber = useMemo(() => new Map<number, boolean>([
+    ...newRows.map((row) => [row.row, row.selected] as const),
+    ...changedRows.map((row) => [row.row, row.selected] as const)
+  ]), [newRows, changedRows])
+  const visibleWarnings = useMemo(
+    () => preview?.warnings.filter((issue) => issue.row <= 0 || rowSelectionByNumber.get(issue.row) !== false) ?? [],
+    [preview, rowSelectionByNumber]
+  )
+  const visibleErrors = useMemo(
+    () => preview?.errors.filter((issue) => issue.row <= 0 || rowSelectionByNumber.get(issue.row) !== false) ?? [],
+    [preview, rowSelectionByNumber]
+  )
 
   const blockingMessage = newRowError
     ?? (unresolvedConflicts > 0
@@ -223,6 +252,7 @@ export function StudentImportPage() {
     setLowActions({})
     setConflictDecisions({})
     setConflictTab('PENDING')
+    setChangeTab('PENDING')
     setResult(undefined)
     setError(undefined)
   }
@@ -243,16 +273,19 @@ export function StudentImportPage() {
       if (previousToken && previousToken !== response.token) {
         void discardStudentImport(previousToken).catch(() => undefined)
       }
+      const previouslyOmittedRows = new Set(response.conflicts
+        .filter((conflict) => conflict.resolvedAction === 'OMIT_ROW')
+        .map((conflict) => conflict.rowKey))
       setNewRows(response.newStudents.map((row) => ({
         ...row,
-        selected: true,
+        selected: !previouslyOmittedRows.has(row.rowKey),
         email: row.suggestedEmail ?? '',
         studentCode: '',
         corporateUser: ''
       })))
       setChangedRows(response.changedStudents.map((row) => ({
         ...row,
-        selected: true,
+        selected: !previouslyOmittedRows.has(row.rowKey),
         selectedFields: new Set(row.changes.filter((change) => change.selected).map((change) => change.key))
       })))
       setLowActions(Object.fromEntries(response.possibleLows.map((row) => [row.studentPublicId, 'KEEP'])))
@@ -261,6 +294,7 @@ export function StudentImportPage() {
         conflict.resolvedAction ?? ''
       ])))
       setConflictTab(response.conflicts.some((conflict) => !conflict.reusedDecision) ? 'PENDING' : 'REUSED')
+      setChangeTab(response.changedStudents.some((row) => row.changes.some((change) => !change.reusedDecision)) ? 'PENDING' : 'REUSED')
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError
         ? requestError.message
@@ -299,18 +333,46 @@ export function StudentImportPage() {
     if (!loading && !applying) inputRef.current?.click()
   }
 
+  function setImportRowSelected(rowKey: string, selected: boolean) {
+    setNewRows((current) => current.map((row) => row.rowKey === rowKey ? { ...row, selected } : row))
+    setChangedRows((current) => current.map((row) => row.rowKey === rowKey ? { ...row, selected } : row))
+    if (!selected && preview) {
+      setConflictDecisions((current) => {
+        const next = { ...current }
+        preview.conflicts.filter((conflict) => conflict.rowKey === rowKey).forEach((conflict) => {
+          next[conflict.id] = conflict.resolvedAction ?? ''
+        })
+        return next
+      })
+    }
+  }
+
+  function setConflictDecision(conflictId: string, action: StudentImportConflictActionValue) {
+    if (!preview) return
+    const conflict = preview.conflicts.find((item) => item.id === conflictId)
+    if (!conflict) return
+    if (action === 'OMIT_ROW') {
+      setImportRowSelected(conflict.rowKey, false)
+      return
+    }
+    setConflictDecisions((current) => ({ ...current, [conflictId]: action }))
+  }
+
   function applyEquivalentDecision(conflictId: string) {
     if (!preview) return
     const source = preview.conflicts.find((conflict) => conflict.id === conflictId)
     const action = conflictDecisions[conflictId]
     if (!source || !action) return
+    const equivalents = activeConflicts.filter((conflict) => conflict.groupKey === source.groupKey
+      && !conflict.reusedDecision
+      && conflict.actions.some((option) => option.value === action))
+    if (action === 'OMIT_ROW') {
+      new Set(equivalents.map((conflict) => conflict.rowKey)).forEach((rowKey) => setImportRowSelected(rowKey, false))
+      return
+    }
     setConflictDecisions((current) => {
       const next = { ...current }
-      activeConflicts
-        .filter((conflict) => conflict.groupKey === source.groupKey
-          && !conflict.reusedDecision
-          && conflict.actions.some((option) => option.value === action))
-        .forEach((conflict) => { next[conflict.id] = action })
+      equivalents.forEach((conflict) => { next[conflict.id] = action })
       return next
     })
   }
@@ -485,11 +547,13 @@ export function StudentImportPage() {
           <article><strong>{selectedRowKeys.size}</strong><span>Colaboradores seleccionados</span></article>
           <article><strong>{excludedRows}</strong><span>Colaboradores excluidos</span></article>
           <article><strong>{selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length}</strong><span>Nuevos por crear</span></article>
-          <article><strong>{selectedChanges.length}</strong><span>Por actualizar</span></article>
+          <article><strong>{selectedChanges.length}</strong><span>Colaboradores por actualizar</span></article>
+          <article><strong>{pendingChangeCount}</strong><span>Actualizaciones pendientes</span></article>
+          <article><strong>{reusedChangeCount}</strong><span>Actualizadas previamente</span></article>
           <article><strong>{preview.possibleLows.length}</strong><span>Posibles bajas</span></article>
           <article><strong>{unresolvedConflicts}</strong><span>Conflictos pendientes</span></article>
           <article><strong>{resolvedConflicts}</strong><span>Conflictos resueltos</span></article>
-          <article><strong>{preview.warnings.length}</strong><span>Advertencias</span></article>
+          <article><strong>{visibleWarnings.length}</strong><span>Advertencias</span></article>
           <article><strong>{visibleErrors.length}</strong><span>Filas con error</span></article>
           <article><strong>{omittedRows.size + excludedRows}</strong><span>Filas omitidas</span></article>
         </section>
@@ -497,33 +561,49 @@ export function StudentImportPage() {
         {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div></div>
           <p className="muted">El correo es obligatorio. El Usuario corporativo es opcional y solo se habilita cuando existe Fecha de alta. {preview.manualStudentCode ? 'Captura también el Código a nivel organización.' : 'El Código a nivel organización se generará automáticamente al confirmar.'}</p>
           <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Correo</th>{preview.manualStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th>{!preview.manualStudentCode && <th>Código a nivel organización</th>}</tr></thead><tbody>
-            {newRows.map((row, index) => <tr key={row.rowKey} className={!row.selected || omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
-              <td><input type="checkbox" checked={row.selected} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td>
+            {newRows.map((row) => <tr key={row.rowKey} className={!row.selected || omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
+              <td><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /></td>
               <td><strong>{formatPersonName(row.collaborator)}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
               <td>{row.profile || 'N/A'}</td><td>{row.primaryTechnology || 'N/A'}</td><td>{row.admissionDate || 'N/A'}</td>
               <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
                 className={`ns-import-email-input${row.selected && !omittedRows.has(row.rowKey) && row.email && !validEmail(row.email) ? ' is-invalid' : ''}`}
                 type="email" value={row.email} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="nombre@dominio.com" autoComplete="off"
-                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} /></label></td>
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, email: event.target.value } : item))} /></label></td>
               {preview.manualStudentCode && <td><label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
                 value={row.studentCode} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="Código obligatorio" autoComplete="off" maxLength={80}
-                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label></td>}
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label></td>}
               <td><label className="ns-import-email-field"><span className="sr-only">Usuario corporativo de la fila {row.row}</span><input
                 value={row.corporateUser} disabled={!row.selected || omittedRows.has(row.rowKey) || !row.admissionDate}
                 placeholder={row.admissionDate ? 'Opcional' : 'Requiere Fecha de alta'} autoComplete="off" maxLength={100}
-                onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, corporateUser: event.target.value.toUpperCase() } : item))} /></label></td>
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, corporateUser: event.target.value.toUpperCase() } : item))} /></label></td>
               {!preview.manualStudentCode && <td><span className="muted">Se generará automáticamente</span></td>}
             </tr>)}
           </tbody></table></div>{newRowError && <div className="error-message" role="alert">{newRowError}</div>}
         </section>}
 
         {preview.changedStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Actualizaciones</p><h2>Colaboradores con cambios</h2></div></div>
-          {changedRows.map((row, rowIndex) => <article className={`ns-import-change-card${!row.selected || omittedRows.has(row.rowKey) ? ' is-muted' : ''}`} key={row.rowKey}>
-            <div className="ns-import-change-selection"><label><input type="checkbox" checked={row.selected} onChange={(event) => setChangedRows((current) => current.map((item, itemIndex) => itemIndex === rowIndex ? { ...item, selected: event.target.checked } : item))} /><span>Incluir colaborador</span></label><h3>{formatPersonName(row.collaborator)}</h3></div>
-            {row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Aplicar</th><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th></tr></thead><tbody>
-            {row.changes.map((change) => <tr key={change.key}><td><input type="checkbox" disabled={!row.selected || omittedRows.has(row.rowKey)} checked={row.selected && !omittedRows.has(row.rowKey) && row.selectedFields.has(change.key)} onChange={(event) => setChangedRows((current) => current.map((item, itemIndex) => { if (itemIndex !== rowIndex) return item; const selectedFields = new Set(item.selectedFields); if (event.target.checked) selectedFields.add(change.key); else selectedFields.delete(change.key); return { ...item, selectedFields } }))} /></td><td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td></tr>)}
-          </tbody></table></div></article>)}
+          <div className="ns-import-conflict-tabs" role="tablist" aria-label="Clasificación de actualizaciones">
+            <button type="button" role="tab" aria-selected={changeTab === 'PENDING'} className={changeTab === 'PENDING' ? 'is-active' : undefined} onClick={() => setChangeTab('PENDING')}>
+              Actualizaciones pendientes <span>{pendingChangeCount}</span>
+            </button>
+            <button type="button" role="tab" aria-selected={changeTab === 'REUSED'} className={changeTab === 'REUSED' ? 'is-active' : undefined} onClick={() => setChangeTab('REUSED')}>
+              Actualizadas previamente <span>{reusedChangeCount}</span>
+            </button>
+          </div>
+          {changeTab === 'PENDING' && pendingChangeCount === 0 && <div className="ns-import-conflict-empty"><strong>Actualizaciones pendientes: 0</strong><span>No hay decisiones nuevas para esta importación.</span></div>}
+          {changeTab === 'REUSED' && reusedChangeCount === 0 && <div className="ns-import-conflict-empty"><strong>Actualizadas previamente: 0</strong><span>No se reutilizaron decisiones de actualizaciones anteriores.</span></div>}
+          {changedRows.map((row) => {
+            const visibleChanges = row.changes.filter((change) => change.reusedDecision === (changeTab === 'REUSED'))
+            if (visibleChanges.length === 0) return null
+            return <article className={`ns-import-change-card${!row.selected || omittedRows.has(row.rowKey) ? ' is-muted' : ''}`} key={`${changeTab}-${row.rowKey}`}>
+              <div className="ns-import-change-selection"><label><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /><span>Incluir colaborador</span></label><h3>{formatPersonName(row.collaborator)}</h3></div>
+              {row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Aplicar Excel</th><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th><th>Decisión</th></tr></thead><tbody>
+              {visibleChanges.map((change) => <tr key={change.key}><td><input type="checkbox" disabled={!row.selected || omittedRows.has(row.rowKey) || change.reusedDecision} checked={row.selected && !omittedRows.has(row.rowKey) && row.selectedFields.has(change.key)} onChange={(event) => setChangedRows((current) => current.map((item) => { if (item.rowKey !== row.rowKey) return item; const selectedFields = new Set(item.selectedFields); if (event.target.checked) selectedFields.add(change.key); else selectedFields.delete(change.key); return { ...item, selectedFields } }))} /></td><td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td><td>{change.reusedDecision
+                ? <div className="ns-import-reused-decision compact"><strong>Decisión aplicada previamente</strong><span>{change.resolvedAction === 'APPLY_EXCEL' ? 'Aplicar información del Excel' : 'Mantener información de la plataforma'}</span></div>
+                : <span className={`status-badge ${row.selectedFields.has(change.key) ? 'active' : 'neutral'}`}>{row.selectedFields.has(change.key) ? 'Aplicar Excel' : 'Mantener plataforma'}</span>}</td></tr>)}
+            </tbody></table></div></article>
+          })}
         </section>}
 
         {activeConflicts.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Validación</p><h2>Conflictos</h2></div></div>
@@ -547,7 +627,7 @@ export function StudentImportPage() {
               {conflict.reusedDecision
                 ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label || 'Decisión anterior aplicada'}</span>{selectedAction?.description && <small>{selectedAction.description}</small>}</div>
                 : <label className="field"><span>Selecciona cómo proceder</span><SelectField value={decision}
-                  onChange={(nextValue) => setConflictDecisions((current) => ({ ...current, [conflict.id]: nextValue as StudentImportConflictActionValue }))}
+                  onChange={(nextValue) => setConflictDecision(conflict.id, nextValue as StudentImportConflictActionValue)}
                   ariaLabel="Selecciona cómo proceder"
                   options={[{ value: '', label: 'Selecciona una decisión' }, ...conflict.actions.map((action) => ({ value: action.value, label: action.label }))]} /></label>}
               {!conflict.reusedDecision && decision && <p className="muted">{selectedAction?.description}</p>}
@@ -556,7 +636,7 @@ export function StudentImportPage() {
           })}</div>
         </section>}
 
-        {preview.warnings.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Información</p><h2>Advertencias</h2></div></div><p className="muted">Estas situaciones no impiden continuar.</p><ul className="ns-import-issues warning-list">{preview.warnings.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>{issue.row > 0 ? `Fila ${issue.row}: ` : ''}</strong>{issue.message}</li>)}</ul></section>}
+        {visibleWarnings.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Información</p><h2>Advertencias</h2></div></div><p className="muted">Estas situaciones no impiden continuar.</p><ul className="ns-import-issues warning-list">{visibleWarnings.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>{issue.row > 0 ? `Fila ${issue.row}: ` : ''}</strong>{issue.message}</li>)}</ul></section>}
 
         {visibleErrors.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Corrección requerida</p><h2>Filas con error</h2></div></div><p className="muted">El error afecta únicamente al colaborador indicado y no detiene los demás registros válidos.</p><ul className="ns-import-issues">{visibleErrors.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>Fila {issue.row}: </strong>{issue.message}</li>)}</ul></section>}
 

@@ -215,7 +215,7 @@ class StudentImportServiceParsingTest {
 	void formatsImportedCollaboratorNamesForDisplayWithoutChangingStoredIdentity() {
 		assertEquals("Cinthia Cristina Hernandez Hernandez",
 				StudentImportService.displayPersonName("CINTHIA CRISTINA HERNANDEZ HERNANDEZ"));
-		assertEquals("Ángel De-la Cruz", StudentImportService.displayPersonName("  ÁNGEL   DE-LA CRUZ  "));
+		assertEquals("Ángel De-La Cruz", StudentImportService.displayPersonName("  ÁNGEL   DE-LA CRUZ  "));
 		assertNull(StudentImportService.displayPersonName(null));
 	}
 
@@ -246,4 +246,20 @@ class StudentImportServiceParsingTest {
 		assertFalse(StudentImportService.importsAttempt("AGILE"));
 		assertFalse(StudentImportService.importsAttempt("JIRA"));
 	}
+	@Test
+	void reusesFieldUpdateDecisionOnlyForTheExactSameScenario() {
+		StudentImportService.FieldChange original = new StudentImportService.FieldChange(
+				"profile", "Perfil", "ANALISTA", "DESARROLLADOR", true);
+		StudentImportService.FieldChange sameScenario = new StudentImportService.FieldChange(
+				"profile", "Perfil", " analista ", "desarrollador", false);
+		StudentImportService.FieldChange changedExcel = new StudentImportService.FieldChange(
+				"profile", "Perfil", "ANALISTA", "ARQUITECTO", true);
+
+		assertEquals(StudentImportService.changeFingerprint(original),
+				StudentImportService.changeFingerprint(sameScenario));
+		assertNotEquals(StudentImportService.changeFingerprint(original),
+				StudentImportService.changeFingerprint(changedExcel));
+	}
+
+
 }

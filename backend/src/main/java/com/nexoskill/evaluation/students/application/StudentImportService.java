@@ -123,6 +123,8 @@ public class StudentImportService {
         Map<Long, ExperienceSnapshot> existingExperience = existingExperience(effectiveTenant.organizationId());
         Map<ConflictDecisionKey, String> storedConflictDecisions =
                 existingConflictDecisions(effectiveTenant.organizationId());
+        Map<ChangeDecisionKey, String> storedChangeDecisions =
+                existingChangeDecisions(effectiveTenant.organizationId());
         Map<Long, Map<String, String>> existingImportFingerprints =
                 existingImportFingerprints(effectiveTenant.organizationId());
 
@@ -158,6 +160,7 @@ public class StudentImportService {
         Set<Long> referencedIds = new HashSet<>();
         List<NewStudentPreview> newStudents = new ArrayList<>();
         List<ChangedStudentPreview> changedStudents = new ArrayList<>();
+        Map<ChangeDecisionRef, String> changeFingerprints = new HashMap<>();
         Map<String, Match> matches = new HashMap<>();
         Map<String, ImportedStudent> effectiveImportedByRow = new HashMap<>();
         parsed.forEach(value -> effectiveImportedByRow.put(value.rowKey(), value));
@@ -229,12 +232,25 @@ public class StudentImportService {
                                 + ". Omite esta fila y conserva únicamente la actualización correcta."));
                 continue;
             }
-            List<FieldChange> changes = compare(current, effectiveImported, currentCertifications,
+            List<FieldChange> detectedChanges = compare(current, effectiveImported, currentCertifications,
                     existingExperience.getOrDefault(current.id(), ExperienceSnapshot.empty()));
+            List<FieldChange> changes = new ArrayList<>(detectedChanges.size());
+            for (FieldChange change : detectedChanges) {
+                String fingerprint = changeFingerprint(change);
+                changeFingerprints.put(new ChangeDecisionRef(current.publicId(), change.key()), fingerprint);
+                String previousAction = storedChangeDecisions.get(
+                        new ChangeDecisionKey(current.id(), change.key(), fingerprint));
+                if (isReusableChangeAction(previousAction)) {
+                    changes.add(change.withResolution(previousAction, true));
+                } else {
+                    changes.add(change);
+                }
+            }
             matches.put(effectiveImported.rowKey(), new Match(effectiveImported, current));
             if (!changes.isEmpty()) {
                 changedStudents.add(new ChangedStudentPreview(current.publicId(), effectiveImported.rowKey(),
-                        current.displayName(), changes, effectiveImported.warnings()));
+                        effectiveImported.rowNumber(), current.displayName(), List.copyOf(changes),
+                        effectiveImported.warnings()));
             }
         }
 
@@ -264,7 +280,10 @@ public class StudentImportService {
                 java.time.Instant.now(clock).plusSeconds(TOKEN_MINUTES * 60L), organization, effectiveImported,
                 Map.copyOf(matches), previewNewRows, previewChangeFields, previewPossibleLows,
                 List.copyOf(errors), List.copyOf(warnings), conflictMap,
-                Map.copyOf(conflictFingerprints), Map.copyOf(automaticConflictResolutions));
+                Map.copyOf(conflictFingerprints), Map.copyOf(automaticConflictResolutions),
+                Map.copyOf(changeFingerprints), changedStudents.stream().collect(
+                        java.util.stream.Collectors.toUnmodifiableMap(
+                                ChangedStudentPreview::rowKey, ChangedStudentPreview::changes)));
         pending.put(token, state);
         return new Preview(token, fileName, sheet.sheetName(), organization.name(), organization.code(),
                 organization.manualStudentCode(), sheet.rows().size(), newStudents, changedStudents, possibleLows, uniqueConflicts, warnings, errors,
@@ -454,13 +473,16 @@ public class StudentImportService {
                     result.temporaryPassword()));
         }
         ChangeSelection selection = changeSelections.get(match.existing().publicId());
-        if (selection == null || !selection.selected() || selection.fields().isEmpty()) return RowOutcome.none();
-        ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(),
-                selection.fields());
-        updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
+        if (selection == null || !selection.selected()) return RowOutcome.none();
+        if (!selection.fields().isEmpty()) {
+            ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(),
+                    selection.fields());
+            updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
+        }
+        persistChangeDecisions(state, imported.rowKey(), match.existing().id(), selection);
         persistConflictDecisions(state, imported.rowKey(), match.existing().id(),
                 conflictResolutions);
-        return new RowOutcome(0, 1, null);
+        return selection.fields().isEmpty() ? RowOutcome.none() : new RowOutcome(0, 1, null);
     }
 
 
@@ -801,6 +823,46 @@ public class StudentImportService {
                  ) VALUES (
                       :publicId, :organizationId, :studentId, :certificationType,
                       :conflictCode, :fingerprint, :action
+                 )
+                """, params);
+        }
+    }
+
+    private void persistChangeDecisions(PendingImport state, String rowKey, Long studentId,
+            ChangeSelection selection) {
+        if (studentId == null || selection == null || !selection.selected()) return;
+        for (FieldChange change : state.changePreviews().getOrDefault(rowKey, List.of())) {
+            String fingerprint = state.changeFingerprints().get(
+                    new ChangeDecisionRef(selection.studentPublicId(), change.key()));
+            if (fingerprint == null) continue;
+            String action = selection.fields().contains(change.key()) ? "APPLY_EXCEL" : "KEEP_PLATFORM";
+            MapSqlParameterSource params = new MapSqlParameterSource()
+                    .addValue("publicId", UUID.randomUUID().toString())
+                    .addValue("organizationId", state.organizationId())
+                    .addValue("studentId", studentId)
+                    .addValue("fieldKey", change.key())
+                    .addValue("fingerprint", fingerprint)
+                    .addValue("action", action);
+            jdbc.update("""
+                MERGE INTO STUDENT_IMPORT_CHANGE_DECISION target
+                USING (
+                    SELECT :organizationId ORGANIZATION_ID, :studentId STUDENT_ID,
+                           :fieldKey FIELD_KEY, :fingerprint CHANGE_FINGERPRINT
+                      FROM DUAL
+                ) source
+                   ON (target.ORGANIZATION_ID = source.ORGANIZATION_ID
+                       AND target.STUDENT_ID = source.STUDENT_ID
+                       AND target.FIELD_KEY = source.FIELD_KEY
+                       AND target.CHANGE_FINGERPRINT = source.CHANGE_FINGERPRINT)
+                 WHEN MATCHED THEN UPDATE SET
+                      target.ACTION_CODE = :action,
+                      target.UPDATED_AT = SYSTIMESTAMP
+                 WHEN NOT MATCHED THEN INSERT (
+                      PUBLIC_ID, ORGANIZATION_ID, STUDENT_ID, FIELD_KEY,
+                      CHANGE_FINGERPRINT, ACTION_CODE, UPDATED_AT
+                 ) VALUES (
+                      :publicId, :organizationId, :studentId, :fieldKey,
+                      :fingerprint, :action, SYSTIMESTAMP
                  )
                 """, params);
         }
@@ -1432,6 +1494,37 @@ public class StudentImportService {
                     result.put(key, rs.getString("ACTION_CODE"));
                 });
         return Map.copyOf(result);
+    }
+
+    private Map<ChangeDecisionKey, String> existingChangeDecisions(Long organizationId) {
+        Map<ChangeDecisionKey, String> result = new HashMap<>();
+        jdbc.query("""
+            SELECT STUDENT_ID, FIELD_KEY, CHANGE_FINGERPRINT, ACTION_CODE
+              FROM STUDENT_IMPORT_CHANGE_DECISION
+             WHERE ORGANIZATION_ID = :organizationId
+            """, Map.of("organizationId", organizationId), rs -> {
+                ChangeDecisionKey key = new ChangeDecisionKey(
+                        rs.getLong("STUDENT_ID"), rs.getString("FIELD_KEY"),
+                        rs.getString("CHANGE_FINGERPRINT"));
+                result.put(key, rs.getString("ACTION_CODE"));
+            });
+        return Map.copyOf(result);
+    }
+
+    private static boolean isReusableChangeAction(String action) {
+        return "KEEP_PLATFORM".equals(action) || "APPLY_EXCEL".equals(action);
+    }
+
+    static String changeFingerprint(FieldChange change) {
+        if (change == null || change.key() == null) return null;
+        return sha256(String.join("|", change.key(),
+                canonicalChangeValue(change.currentValue()),
+                canonicalChangeValue(change.excelValue())).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String canonicalChangeValue(String value) {
+        if (value == null) return "";
+        return value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     private Map<Long, Map<String, String>> existingImportFingerprints(Long organizationId) {
@@ -2645,13 +2738,17 @@ public class StudentImportService {
     private record Match(ImportedStudent imported, ExistingStudent existing) {}
     private record ConflictDecisionKey(Long studentId, String certificationType,
             String conflictCode, String fingerprint) {}
+    private record ChangeDecisionKey(Long studentId, String fieldKey, String fingerprint) {}
+    private record ChangeDecisionRef(String studentPublicId, String fieldKey) {}
     private record PendingImport(String token, Long actorId, Long organizationId, String digest,
             java.time.Instant expiresAt, Organization organization, List<ImportedStudent> imported,
             Map<String, Match> matches, Set<String> newRowKeys,
             Map<String, Set<String>> allowedChangeFields, Set<String> possibleLowPublicIds,
             List<Issue> errors, List<Issue> warnings, Map<String, ConflictPreview> conflicts,
             Map<String, String> conflictFingerprints,
-            Map<String, String> automaticConflictResolutions) {}
+            Map<String, String> automaticConflictResolutions,
+            Map<ChangeDecisionRef, String> changeFingerprints,
+            Map<String, List<FieldChange>> changePreviews) {}
     private record ExperienceSnapshot(List<StudentExperienceService.ImportedItem> current,
             List<StudentExperienceService.ImportedItem> languages,
             List<StudentExperienceService.ImportedItem> known) {
@@ -2675,10 +2772,19 @@ public class StudentImportService {
     }
 
     public record Issue(int row, String code, String message) {}
-    public record FieldChange(String key, String field, String currentValue, String excelValue, boolean selected) {}
+    public record FieldChange(String key, String field, String currentValue, String excelValue,
+            boolean selected, String resolvedAction, boolean reusedDecision) {
+        public FieldChange(String key, String field, String currentValue, String excelValue, boolean selected) {
+            this(key, field, currentValue, excelValue, selected, null, false);
+        }
+        FieldChange withResolution(String action, boolean reused) {
+            return new FieldChange(key, field, currentValue, excelValue,
+                    "APPLY_EXCEL".equals(action), action, reused);
+        }
+    }
     public record NewStudentPreview(String rowKey, int row, String collaborator, String profile,
             String primaryTechnology, String suggestedEmail, LocalDate admissionDate, List<String> warnings) {}
-    public record ChangedStudentPreview(String studentPublicId, String rowKey, String collaborator,
+    public record ChangedStudentPreview(String studentPublicId, String rowKey, int row, String collaborator,
             List<FieldChange> changes, List<String> warnings) {}
     public record PossibleLowPreview(String studentPublicId, String collaborator, String email, String action) {}
     public record ConflictAction(String value, String label, String description) {}
