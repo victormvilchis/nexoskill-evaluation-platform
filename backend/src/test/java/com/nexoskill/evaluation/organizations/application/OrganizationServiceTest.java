@@ -7,9 +7,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.nexoskill.evaluation.audit.application.port.AuditLogPort;
+import com.nexoskill.evaluation.certifications.domain.CertificationType;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.OrganizationCertificationPolicyJpaEntity;
+import com.nexoskill.evaluation.certifications.infrastructure.persistence.OrganizationCertificationPolicyRepository;
 import com.nexoskill.evaluation.organizations.domain.model.ContentMode;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationType;
 import com.nexoskill.evaluation.organizations.domain.model.OrganizationStatus;
@@ -25,7 +30,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
@@ -105,6 +112,63 @@ class OrganizationServiceTest {
 	}
 
 	@Test
+	void shouldInitializeCertificationPoliciesWithoutUnboxingNullValues() {
+		OrganizationRepository organizations = mock(OrganizationRepository.class);
+		OrganizationLicensePolicyRepository policies = mock(OrganizationLicensePolicyRepository.class);
+		OrganizationCertificationPolicyRepository certificationPolicies = mock(
+				OrganizationCertificationPolicyRepository.class);
+		AuditLogPort auditLog = mock(AuditLogPort.class);
+		OrganizationService service = new OrganizationService(organizations, policies, auditLog, certificationPolicies,
+				null, null, null, null, CLOCK);
+		when(organizations.existsByCode("ACME_MX")).thenReturn(false);
+		when(organizations.saveAndFlush(any(OrganizationJpaEntity.class))).thenAnswer(invocation -> {
+			OrganizationJpaEntity submitted = invocation.getArgument(0);
+			OrganizationJpaEntity persisted = OrganizationJpaEntity.createCustomer(submitted.getPublicId(),
+					submitted.getCode(), submitted.getName(), submitted.getContentMode(), submitted.getValidFrom(),
+					submitted.getExpiresOn(), null, NOW);
+			setId(persisted, 41L);
+			setVersion(persisted, 0L);
+			return persisted;
+		});
+		when(policies.saveAndFlush(any(OrganizationLicensePolicyJpaEntity.class))).thenAnswer(invocation -> {
+			OrganizationLicensePolicyJpaEntity persisted = invocation.getArgument(0);
+			setField(persisted, "id", 51L);
+			setField(persisted, "version", 0L);
+			return persisted;
+		});
+		when(certificationPolicies.findByOrganizationIdAndCertificationType(eq(41L), any(CertificationType.class)))
+				.thenReturn(Optional.empty());
+		when(certificationPolicies.save(any(OrganizationCertificationPolicyJpaEntity.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		service.create(new OrganizationService.CreateCommand("Acme México", "ACME_MX", ContentMode.CLEAN, null, 10, 2,
+				0, 24, 7, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 9, 1), true, false));
+
+		ArgumentCaptor<OrganizationCertificationPolicyJpaEntity> captor = ArgumentCaptor
+				.forClass(OrganizationCertificationPolicyJpaEntity.class);
+		verify(certificationPolicies, times(CertificationType.values().length)).save(captor.capture());
+		List<OrganizationCertificationPolicyJpaEntity> createdPolicies = captor.getAllValues();
+		assertThat(createdPolicies).hasSize(CertificationType.values().length);
+
+		OrganizationCertificationPolicyJpaEntity developmentSecurity = policyFor(createdPolicies,
+				CertificationType.DEVELOPMENT_SECURITY);
+		assertThat(developmentSecurity.getDeadlineMonths()).isEqualTo(2);
+		assertThat(developmentSecurity.getDeadlineDays()).isEqualTo(15);
+
+		OrganizationCertificationPolicyJpaEntity normativeTesting = policyFor(createdPolicies,
+				CertificationType.NORMATIVE_TESTING);
+		assertThat(normativeTesting.getDeadlineMonths()).isEqualTo(2);
+		assertThat(normativeTesting.getDeadlineDays()).isZero();
+
+		for (CertificationType type : List.of(CertificationType.TECHNOLOGICAL, CertificationType.ONE,
+				CertificationType.AGILE, CertificationType.JIRA)) {
+			OrganizationCertificationPolicyJpaEntity policy = policyFor(createdPolicies, type);
+			assertThat(policy.getDeadlineMonths()).isNull();
+			assertThat(policy.getDeadlineDays()).isNull();
+		}
+	}
+
+	@Test
 	void shouldRejectLicenseCreationWhenRepositoryDoesNotReturnTheGeneratedOrganizationId() {
 		OrganizationRepository organizations = mock(OrganizationRepository.class);
 		OrganizationLicensePolicyRepository policies = mock(OrganizationLicensePolicyRepository.class);
@@ -180,6 +244,12 @@ class OrganizationServiceTest {
 
 	private static void setId(OrganizationJpaEntity entity, Long id) {
 		setField(entity, "id", id);
+	}
+
+	private static OrganizationCertificationPolicyJpaEntity policyFor(
+			List<OrganizationCertificationPolicyJpaEntity> policies, CertificationType type) {
+		return policies.stream().filter(policy -> policy.getCertificationType() == type).findFirst()
+				.orElseThrow(() -> new AssertionError("No se creó la política " + type));
 	}
 
 	private static void setVersion(OrganizationJpaEntity entity, Long version) {

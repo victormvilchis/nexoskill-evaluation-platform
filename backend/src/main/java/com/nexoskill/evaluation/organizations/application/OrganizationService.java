@@ -351,10 +351,15 @@ public class OrganizationService {
 					.isPresent()) {
 				continue;
 			}
-			Integer months = type == CertificationType.DEVELOPMENT_SECURITY
-					|| type == CertificationType.NORMATIVE_TESTING ? 2 : null;
-			Integer days = type == CertificationType.DEVELOPMENT_SECURITY ? 15
-					: type == CertificationType.NORMATIVE_TESTING ? 0 : null;
+			Integer months = null;
+			Integer days = null;
+			if (type == CertificationType.DEVELOPMENT_SECURITY) {
+				months = 2;
+				days = 15;
+			} else if (type == CertificationType.NORMATIVE_TESTING) {
+				months = 2;
+				days = 0;
+			}
 			certificationPolicyRepository.save(
 					OrganizationCertificationPolicyJpaEntity.create(organizationId, type, months, days, actorId, now));
 		}

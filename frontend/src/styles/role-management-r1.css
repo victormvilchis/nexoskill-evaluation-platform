@@ -72,15 +72,6 @@
   line-height: 1.25;
 }
 
-.role-view-access {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  padding-inline: 0.65rem;
-}
-
 .status-protected {
   background: #eef2ff;
   color: #3730a3;

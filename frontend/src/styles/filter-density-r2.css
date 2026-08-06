@@ -18,10 +18,10 @@
   justify-content: space-between;
   gap: var(--ns-filter-gap);
   margin: 0 0 6px;
-  border: 1px solid #d9e2ed;
-  border-radius: 10px;
-  background: #fff;
-  padding: 6px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   box-shadow: none;
 }
 
@@ -48,7 +48,8 @@
 .resource-search,
 .lc-list-search,
 .lc-search-field,
-.question-bank-search {
+.question-bank-search,
+.permission-search {
   box-sizing: border-box;
   display: flex;
   min-width: 240px;
@@ -71,17 +72,21 @@
 .resource-search:focus-within,
 .lc-list-search:focus-within,
 .lc-search-field:focus-within,
-.question-bank-search:focus-within {
+.question-bank-search:focus-within,
+.permission-search:focus-within {
   border-color: var(--ns-filter-focus) !important;
   box-shadow: 0 0 0 2px rgba(47, 103, 216, .12) !important;
 }
 
-.ns-resource-search input,
-.ns-search-field input,
-.resource-search input,
-.lc-list-search input,
-.lc-search-field input,
-.question-bank-search input {
+:is(
+  .ns-resource-search,
+  .ns-search-field,
+  .resource-search,
+  .lc-list-search,
+  .lc-search-field,
+  .question-bank-search,
+  .permission-search
+) input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']) {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -104,7 +109,8 @@
 .resource-search input::placeholder,
 .lc-list-search input::placeholder,
 .lc-search-field input::placeholder,
-.question-bank-search input::placeholder {
+.question-bank-search input::placeholder,
+.permission-search input::placeholder {
   color: #8a98aa;
   opacity: 1;
 }

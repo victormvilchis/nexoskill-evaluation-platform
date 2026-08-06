@@ -248,31 +248,31 @@ export function AdminRolesPage() {
                     </span>
                   </td>
                   <td className="ns-actions-column role-actions-column">
-                    {role.protectedRole ? (
-                      <Link className="secondary-button button-link compact-button role-view-access" to={`/admin/roles/${role.code}`}>
-                        <Icon name="eye" size={15} /> Ver acceso
-                      </Link>
-                    ) : (
-                      <TableActions>
-                        <TableActionLink to={`/admin/roles/${role.code}/edit`} icon="edit" label="Configurar permisos" />
-                        <TableActionButton icon="copy" label="Clonar" onClick={() => openClone(role)} />
-                        <TableActionButton
-                          icon={role.status === 'ACTIVE' ? 'archive' : 'restore'}
-                          label={role.status === 'ACTIVE' ? 'Inactivar' : 'Activar'}
-                          onClick={() => setPending({
-                            type: 'status',
-                            role,
-                            status: role.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-                          })}
-                        />
-                        <TableActionButton
-                          icon="trash"
-                          label="Eliminar"
-                          tone="danger"
-                          onClick={() => setPending({ type: 'delete', role })}
-                        />
-                      </TableActions>
-                    )}
+                    <TableActions>
+                      {role.protectedRole ? (
+                        <TableActionLink to={`/admin/roles/${role.code}`} icon="eye" label="Ver acceso" />
+                      ) : (
+                        <>
+                          <TableActionLink to={`/admin/roles/${role.code}/edit`} icon="edit" label="Configurar permisos" />
+                          <TableActionButton icon="copy" label="Clonar" onClick={() => openClone(role)} />
+                          <TableActionButton
+                            icon={role.status === 'ACTIVE' ? 'archive' : 'restore'}
+                            label={role.status === 'ACTIVE' ? 'Inactivar' : 'Activar'}
+                            onClick={() => setPending({
+                              type: 'status',
+                              role,
+                              status: role.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                            })}
+                          />
+                          <TableActionButton
+                            icon="trash"
+                            label="Eliminar"
+                            tone="danger"
+                            onClick={() => setPending({ type: 'delete', role })}
+                          />
+                        </>
+                      )}
+                    </TableActions>
                   </td>
                 </tr>
               ))}
