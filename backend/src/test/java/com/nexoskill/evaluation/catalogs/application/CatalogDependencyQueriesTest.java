@@ -21,6 +21,16 @@ class CatalogDependencyQueriesTest {
     }
 
     @Test
+    void shouldDeleteEveryCertificationBridgeWithoutAssumingAUniqueMasterRelationship() {
+        assertThat(CatalogDependencyQueries.deleteTechnologyCertificationLinksSql())
+                .isEqualTo("DELETE FROM CERTIFICATION_TECHNOLOGY_CATALOG WHERE MASTER_TECHNOLOGY_ID = :key");
+        assertThat(CatalogDependencyQueries.deleteTechnologySql())
+                .contains("DELETE FROM QUESTION_TECHNOLOGY")
+                .contains("TECHNOLOGY_ID = :key")
+                .contains("VERSION_NO = :version");
+    }
+
+    @Test
     void shouldCountDirectAndCertificationProfessionalProfileRelationships() {
         String sql = sqlFor(CatalogType.PROFESSIONAL_PROFILES);
 

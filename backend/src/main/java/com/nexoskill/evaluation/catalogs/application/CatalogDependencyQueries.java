@@ -66,6 +66,15 @@ final class CatalogDependencyQueries {
         };
     }
 
+    static String deleteTechnologyCertificationLinksSql() {
+        return "DELETE FROM CERTIFICATION_TECHNOLOGY_CATALOG WHERE MASTER_TECHNOLOGY_ID = :key";
+    }
+
+    static String deleteTechnologySql() {
+        return "DELETE FROM QUESTION_TECHNOLOGY "
+                + "WHERE TECHNOLOGY_ID = :key AND VERSION_NO = :version";
+    }
+
     private static DependencyQuery query(String label, String sql) {
         return new DependencyQuery(label, sql);
     }

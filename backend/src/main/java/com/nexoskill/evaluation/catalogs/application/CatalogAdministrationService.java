@@ -29,6 +29,7 @@ import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDa
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionTechnologyRepository;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.SpringDataQuestionTypeRepository;
 import com.nexoskill.evaluation.shared.domain.BusinessException;
+import java.sql.SQLException;
 import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Instant;
@@ -338,11 +339,14 @@ public class CatalogAdministrationService {
 			}
 			case TECHNOLOGIES -> {
 				QuestionTechnologyJpaEntity entity = requireTechnology(id);
-				certificationTechnologies.findByMasterTechnologyId(entity.getId())
-						.ifPresent(certificationTechnologies::delete);
-				certificationTechnologies.flush();
-				technologies.delete(entity);
-				technologies.flush();
+				MapSqlParameterSource parameters = new MapSqlParameterSource("key", entity.getId())
+						.addValue("version", expectedVersion);
+				jdbc.update(CatalogDependencyQueries.deleteTechnologyCertificationLinksSql(), parameters);
+				int deleted = jdbc.update(CatalogDependencyQueries.deleteTechnologySql(), parameters);
+				if (deleted != 1) {
+					throw new BusinessException("CATALOG_CONCURRENT_MODIFICATION",
+							"La información fue modificada por otra sesión. Actualiza la página.");
+				}
 			}
 			case PROFESSIONAL_PROFILES -> {
 				profiles.delete(requireProfile(id));
@@ -365,6 +369,11 @@ public class CatalogAdministrationService {
 			LOGGER.info("La eliminación del catálogo {} {} fue bloqueada por integridad referencial.", type, id);
 			throw catalogInUse(type, item.name(), null);
 		} catch (DataAccessException exception) {
+			if (isIntegrityConstraintViolation(exception)) {
+				LOGGER.info("La eliminación del catálogo {} {} fue bloqueada por una restricción de integridad.",
+						type, id, exception);
+				throw catalogInUse(type, item.name(), null);
+			}
 			LOGGER.error("No fue posible eliminar el catálogo {} {}.", type, id, exception);
 			throw catalogOperationFailed();
 		}
@@ -755,6 +764,29 @@ public class CatalogAdministrationService {
 		case QUESTION_TYPES -> typeItem(requireType(id), includeDependencies);
 		case DIFFICULTIES -> difficultyItem(requireDifficulty(id), includeDependencies);
 		};
+	}
+
+	private boolean isIntegrityConstraintViolation(Throwable failure) {
+		Throwable current = failure;
+		while (current != null) {
+			if (current instanceof SQLException sqlException && isIntegrityConstraintViolation(sqlException)) {
+				return true;
+			}
+			current = current.getCause();
+		}
+		return false;
+	}
+
+	private boolean isIntegrityConstraintViolation(SQLException failure) {
+		SQLException current = failure;
+		while (current != null) {
+			String sqlState = current.getSQLState();
+			if (current.getErrorCode() == 2292 || (sqlState != null && sqlState.startsWith("23"))) {
+				return true;
+			}
+			current = current.getNextException();
+		}
+		return false;
 	}
 
 	private BusinessException usageCheckFailed(CatalogType type) {
