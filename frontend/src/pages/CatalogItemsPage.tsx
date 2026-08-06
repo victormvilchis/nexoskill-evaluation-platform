@@ -50,6 +50,43 @@ function formatDate(value?: string) {
     .format(new Date(value))
 }
 
+const catalogSingular: Record<CatalogType, string> = {
+  CATEGORIES: 'Categoría',
+  TECHNOLOGIES: 'Tecnología',
+  PROFESSIONAL_PROFILES: 'Perfil',
+  TECHNOLOGICAL_PROFILES: 'Perfil tecnológico',
+  QUESTION_TYPES: 'Tipo de pregunta',
+  DIFFICULTIES: 'Dificultad'
+}
+const catalogSubject: Record<CatalogType, string> = {
+  CATEGORIES: 'la Categoría',
+  TECHNOLOGIES: 'la Tecnología',
+  PROFESSIONAL_PROFILES: 'el Perfil',
+  TECHNOLOGICAL_PROFILES: 'el Perfil tecnológico',
+  QUESTION_TYPES: 'el Tipo de pregunta',
+  DIFFICULTIES: 'la Dificultad'
+}
+const catalogMasculine: Record<CatalogType, boolean> = {
+  CATEGORIES: false,
+  TECHNOLOGIES: false,
+  PROFESSIONAL_PROFILES: true,
+  TECHNOLOGICAL_PROFILES: true,
+  QUESTION_TYPES: true,
+  DIFFICULTIES: false
+}
+const catalogDemonstrative: Record<CatalogType, string> = {
+  CATEGORIES: 'Esta Categoría',
+  TECHNOLOGIES: 'Esta Tecnología',
+  PROFESSIONAL_PROFILES: 'Este Perfil',
+  TECHNOLOGICAL_PROFILES: 'Este Perfil tecnológico',
+  QUESTION_TYPES: 'Este Tipo de pregunta',
+  DIFFICULTIES: 'Esta Dificultad'
+}
+
+function usageCheckError(type: CatalogType) {
+  return `No fue posible comprobar si ${catalogSubject[type]} está siendo ${catalogMasculine[type] ? 'utilizado' : 'utilizada'}. Intenta nuevamente.`
+}
+
 function getDialogMode(pathname: string, id?: string): DialogMode | undefined {
   if (pathname.endsWith('/new')) return 'create'
   if (pathname.endsWith('/edit')) return 'edit'
@@ -89,6 +126,7 @@ export function CatalogItemsPage() {
   const [selected, setSelected] = useState<CatalogItem>()
   const [statusCandidate, setStatusCandidate] = useState<{ item: CatalogItem; action: 'activate' | 'deactivate' }>()
   const [deleteCandidate, setDeleteCandidate] = useState<CatalogItem>()
+  const [blockedDelete, setBlockedDelete] = useState<{ item: CatalogItem; dependencies: CatalogDependencies }>()
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<CatalogPayload>({ code: '', name: '', description: '', displayOrder: 0 })
   const debouncedQuery = useDebouncedValue(query, 250)
@@ -278,9 +316,10 @@ export function CatalogItemsPage() {
         statusCandidate.action,
         statusCandidate.item.version
       )
+      const itemLabel = catalogSubject[type]
       toast.success(statusCandidate.action === 'activate'
-        ? 'Registro activado correctamente.'
-        : 'El registro fue inactivado y ya no estará disponible para nuevas asignaciones. Las relaciones existentes se conservarán.')
+        ? `${itemLabel.charAt(0).toLocaleUpperCase('es-MX')}${itemLabel.slice(1)} fue ${catalogMasculine[type] ? 'activado' : 'activada'} correctamente.`
+        : `${itemLabel.charAt(0).toLocaleUpperCase('es-MX')}${itemLabel.slice(1)} fue ${catalogMasculine[type] ? 'inactivado' : 'inactivada'} correctamente.`)
       setStatusCandidate(undefined)
       reload()
     } catch (requestError) {
@@ -297,15 +336,12 @@ export function CatalogItemsPage() {
     try {
       const dependencyResult: CatalogDependencies = await getCatalogDependencies(type, item.id)
       if (!dependencyResult.deletable || dependencyResult.total > 0) {
-        toast.error(
-          `No es posible eliminar este registro porque actualmente está siendo utilizado por ${dependencyResult.total} ${dependencyResult.total === 1 ? 'registro' : 'registros'}. Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.`,
-          dependencyResult.details.join(' ') || undefined
-        )
+        setBlockedDelete({ item, dependencies: dependencyResult })
         return
       }
       setDeleteCandidate(item)
     } catch (requestError) {
-      toast.error('No se pudo comprobar si el registro está en uso', requestError instanceof ApiRequestError ? requestError.message : 'La eliminación no se realizó. Intenta nuevamente.')
+      toast.error(requestError instanceof ApiRequestError ? requestError.message : usageCheckError(type))
     } finally {
       setBusy(false)
     }
@@ -317,11 +353,21 @@ export function CatalogItemsPage() {
     setBusy(true)
     try {
       await deleteCatalogItem(type, deleteCandidate.id, deleteCandidate.version)
-      toast.success('El registro fue eliminado definitivamente.')
+      toast.success(`${catalogSubject[type].charAt(0).toLocaleUpperCase('es-MX')}${catalogSubject[type].slice(1)} fue ${catalogMasculine[type] ? 'eliminado' : 'eliminada'} definitivamente.`)
       setDeleteCandidate(undefined)
       reload()
     } catch (requestError) {
-      toast.error('No fue posible eliminar el registro', requestError instanceof ApiRequestError ? requestError.message : undefined)
+      if (requestError instanceof ApiRequestError && requestError.code === 'CATALOG_IN_USE') {
+        try {
+          const dependencies = await getCatalogDependencies(type, deleteCandidate.id)
+          setBlockedDelete({ item: deleteCandidate, dependencies })
+        } catch {
+          toast.error(usageCheckError(type))
+        }
+        setDeleteCandidate(undefined)
+      } else {
+        toast.error('No fue posible eliminar el registro', requestError instanceof ApiRequestError ? requestError.message : undefined)
+      }
     } finally {
       setBusy(false)
     }
@@ -520,12 +566,12 @@ export function CatalogItemsPage() {
 
       <ConfirmDialog
         open={Boolean(statusCandidate)}
-        title={statusCandidate?.action === 'activate' ? 'Activar registro' : 'Inactivar registro'}
+        title={`${statusCandidate?.action === 'activate' ? 'Activar' : 'Inactivar'} ${catalogSingular[type]}`}
         description={statusCandidate?.action === 'activate'
-          ? 'Este registro volverá a estar disponible para nuevas asignaciones. ¿Deseas continuar?'
+          ? `${catalogSubject[type].charAt(0).toLocaleUpperCase('es-MX')}${catalogSubject[type].slice(1)} volverá a estar disponible para nuevas asignaciones. ¿Deseas continuar?`
           : statusCandidate?.item.dependencyCount
-            ? `Este registro está siendo utilizado por ${statusCandidate.item.dependencyCount} ${statusCandidate.item.dependencyCount === 1 ? 'registro' : 'registros'}. Al inactivarlo, se conservarán las relaciones existentes, pero dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?`
-            : 'Este registro dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?'}
+            ? `${catalogDemonstrative[type]} está siendo ${catalogMasculine[type] ? 'utilizado' : 'utilizada'} por ${statusCandidate.item.dependencyCount} ${statusCandidate.item.dependencyCount === 1 ? 'registro' : 'registros'}. Las relaciones existentes se conservarán, pero dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?`
+            : `${catalogDemonstrative[type]} dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?`}
         confirmLabel={statusCandidate?.action === 'activate' ? 'Confirmar activación' : 'Confirmar inactivación'}
         busy={busy}
         onCancel={() => setStatusCandidate(undefined)}
@@ -534,14 +580,30 @@ export function CatalogItemsPage() {
 
       <ConfirmDialog
         open={Boolean(deleteCandidate)}
-        title="Eliminar registro"
-        description="Esta acción eliminará permanentemente el registro del catálogo. ¿Deseas continuar?"
+        title={`Eliminar ${catalogSingular[type]}`}
+        description={deleteCandidate
+          ? `Esta acción eliminará permanentemente ${catalogSubject[type]} “${deleteCandidate.name}”. Una vez ${catalogMasculine[type] ? 'eliminado' : 'eliminada'}, dejará de estar disponible en la plataforma. ¿Deseas continuar?`
+          : ''}
         confirmLabel="Confirmar eliminación"
         tone="danger"
         busy={busy}
         onCancel={() => setDeleteCandidate(undefined)}
         onConfirm={() => void confirmDelete()}
       />
+
+      <ConfirmDialog
+        open={Boolean(blockedDelete)}
+        title={`No es posible eliminar ${catalogSubject[type]}`}
+        description={blockedDelete
+          ? `${catalogDemonstrative[type]} “${blockedDelete.item.name}” está siendo ${catalogMasculine[type] ? 'utilizado' : 'utilizada'} actualmente por ${blockedDelete.dependencies.total} ${blockedDelete.dependencies.total === 1 ? 'registro' : 'registros'}. Puedes ${catalogMasculine[type] ? 'inactivarlo' : 'inactivarla'} para evitar que continúe disponible en nuevas asignaciones.`
+          : ''}
+        tone="danger"
+        onCancel={() => setBlockedDelete(undefined)}
+      >
+        {blockedDelete?.dependencies.details.length ? (
+          <p>{blockedDelete.dependencies.details.join(' ')}</p>
+        ) : undefined}
+      </ConfirmDialog>
     </main>
   )
 }

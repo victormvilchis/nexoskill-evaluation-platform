@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { searchOrganizations } from '../features/organizations/api/organizationApi'
@@ -14,6 +14,7 @@ import { SelectField } from '../shared/components/SelectField'
 import { useToast } from '../shared/components/ToastProvider'
 import { useSaveNavigation } from '../shared/hooks/useSaveNavigation'
 import type { TalentCatalogs, TalentCvMetadata, TalentProfileCode, TalentSummary } from '../shared/types/talentBank'
+import { formatPersonName } from '../shared/utils/personNames'
 
 interface Props { mode: 'create' | 'edit' }
 function today() { return new Date().toISOString().slice(0, 10) }
@@ -33,6 +34,8 @@ export function AcademyTalentEditorPage({ mode }: Props) {
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const originalName = useRef({ firstName: '', lastName: '' })
+  const nameEdited = useRef({ firstName: false, lastName: false })
   const [validFrom, setValidFrom] = useState(today())
   const [expiresAt, setExpiresAt] = useState('2999-12-31')
   const [organizationHiredOn, setOrganizationHiredOn] = useState('')
@@ -73,7 +76,10 @@ export function AcademyTalentEditorPage({ mode }: Props) {
       const catalogResult = await getTalentCatalogs(administrator ? detail.organization.publicId : undefined)
       if (!active) return
       setTalent(detail); setCurrentCv(cvMetadata); setCatalogs(catalogResult); setOrganizationPublicId(detail.organization.publicId)
-      setStudentCode(detail.studentCode); setEmail(detail.email); setFirstName(detail.firstName); setLastName(detail.lastName)
+      setStudentCode(detail.studentCode); setEmail(detail.email)
+      originalName.current = { firstName: detail.firstName, lastName: detail.lastName }
+      nameEdited.current = { firstName: false, lastName: false }
+      setFirstName(formatPersonName(detail.firstName)); setLastName(formatPersonName(detail.lastName))
       setValidFrom(detail.validFrom); setExpiresAt(detail.expiresAt); setOrganizationHiredOn(detail.organizationHiredOn ?? '')
       setProfileCode((detail.profileCode ?? 'JR') as TalentProfileCode); setTechnologyPublicId(detail.technology?.publicId ?? '')
     }).catch((requestError) => { if (active) setError(requestError instanceof ApiRequestError ? requestError.message : String(requestError)) })
@@ -87,7 +93,6 @@ export function AcademyTalentEditorPage({ mode }: Props) {
     try { setCatalogs(await getTalentCatalogs(value)) }
     catch (requestError) { setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible cargar los catálogos.') }
   }
-
 
   async function viewCurrentCv() {
     if (!publicId) return
@@ -120,11 +125,17 @@ export function AcademyTalentEditorPage({ mode }: Props) {
   async function submit(event: FormEvent) {
     event.preventDefault(); if (saving || !validate()) return
     setSaving(true); setError(undefined)
+    const savedFirstName = (mode === 'edit' && !nameEdited.current.firstName
+      ? originalName.current.firstName
+      : firstName).trim()
+    const savedLastName = (mode === 'edit' && !nameEdited.current.lastName
+      ? originalName.current.lastName
+      : lastName).trim()
     const payload = {
       ...(administrator && mode === 'create' ? { organizationPublicId } : {}),
       studentCode: manualCode ? studentCode.trim() : undefined,
-      email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
-      displayName: `${firstName.trim()} ${lastName.trim()}`.trim(), validFrom, expiresAt,
+      email: email.trim(), firstName: savedFirstName, lastName: savedLastName,
+      displayName: `${savedFirstName} ${savedLastName}`.trim(), validFrom, expiresAt,
       organizationHiredOn, profileCode, technologyPublicId
     }
     try {
@@ -162,8 +173,16 @@ export function AcademyTalentEditorPage({ mode }: Props) {
         })
       }
     } catch (requestError) {
-      if (requestError instanceof ApiRequestError) { setError(requestError.message); setFieldErrors(requestError.fieldErrors ?? {}) }
-      else setError('No fue posible guardar el talento.')
+      if (requestError instanceof ApiRequestError) {
+        const errors = { ...(requestError.fieldErrors ?? {}) }
+        if (requestError.code === 'STUDENT_EMAIL_EXISTS') errors.email = 'Correo ya utilizado.'
+        setFieldErrors(errors)
+        toast.error(requestError.code === 'STUDENT_EMAIL_EXISTS'
+          ? `El correo ${email.trim()} ya está utilizado por otro colaborador de la organización.`
+          : requestError.message)
+      } else {
+        toast.error('No fue posible guardar el talento.')
+      }
     } finally { setSaving(false) }
   }
 
@@ -176,9 +195,9 @@ export function AcademyTalentEditorPage({ mode }: Props) {
       {organizationResolved && <>
         <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Academia</p><h2>Información del talento</h2></div></div><div className="foundation-form-grid">
           <label className="form-field ns-field-span-4"><span>Código a nivel organización</span>{manualCode ? <input name="studentCode" value={studentCode} onChange={(event) => setStudentCode(event.target.value.toUpperCase())} /> : <strong className="readonly-value">{mode === 'create' ? 'Se generará automáticamente' : studentCode}</strong>}{fieldErrors.studentCode && <small className="field-error">{fieldErrors.studentCode}</small>}</label>
-          <label className="form-field ns-field-span-8"><span>Correo</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />{fieldErrors.email && <small className="field-error">{fieldErrors.email}</small>}</label>
-          <label className="form-field ns-field-span-6"><span>Nombre</span><input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} />{fieldErrors.firstName && <small className="field-error">{fieldErrors.firstName}</small>}</label>
-          <label className="form-field ns-field-span-6"><span>Apellidos</span><input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} />{fieldErrors.lastName && <small className="field-error">{fieldErrors.lastName}</small>}</label>
+          <label className="form-field ns-field-span-8"><span>Correo</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(fieldErrors.email)} />{fieldErrors.email && <small className="field-error">{fieldErrors.email}</small>}</label>
+          <label className="form-field ns-field-span-6"><span>Nombre</span><input name="firstName" value={firstName} onChange={(event) => { nameEdited.current.firstName = true; setFirstName(event.target.value) }} aria-invalid={Boolean(fieldErrors.firstName)} />{fieldErrors.firstName && <small className="field-error">{fieldErrors.firstName}</small>}</label>
+          <label className="form-field ns-field-span-6"><span>Apellidos</span><input name="lastName" value={lastName} onChange={(event) => { nameEdited.current.lastName = true; setLastName(event.target.value) }} aria-invalid={Boolean(fieldErrors.lastName)} />{fieldErrors.lastName && <small className="field-error">{fieldErrors.lastName}</small>}</label>
           <label className="form-field ns-field-span-4"><span>Fecha de contratación en la organización</span><DateField name="organizationHiredOn" value={organizationHiredOn} onChange={setOrganizationHiredOn} />{fieldErrors.organizationHiredOn && <small className="field-error">{fieldErrors.organizationHiredOn}</small>}</label>
           <label className="form-field ns-field-span-4"><span>Perfil</span><SelectField name="profileCode" value={profileCode} onChange={(value) => setProfileCode(value as TalentProfileCode)} options={(catalogs?.profiles ?? []).map((value) => ({ value, label: value }))} /></label>
           <label className="form-field ns-field-span-8"><span>Tecnología</span><SelectField name="technologyPublicId" value={technologyPublicId} onChange={setTechnologyPublicId} options={[{ value: '', label: 'Seleccionar tecnología' }, ...(catalogs?.technologies ?? []).map((item) => ({ value: item.publicId, label: item.name }))]} />{fieldErrors.technologyPublicId && <small className="field-error">{fieldErrors.technologyPublicId}</small>}</label>

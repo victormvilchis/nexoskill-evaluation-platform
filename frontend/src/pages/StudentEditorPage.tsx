@@ -116,6 +116,8 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   const [email, setEmail] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const originalTalentName = useRef({ firstName: '', lastName: '' })
+  const talentNameEdited = useRef({ firstName: false, lastName: false })
   const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
   const [validFrom, setValidFrom] = useState(todayInput())
   const [expiresAt, setExpiresAt] = useState('2999-12-31')
@@ -171,8 +173,12 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
         setStudentCode(detail.studentCode)
         setCorporateUser(detail.corporateUser ?? '')
         setEmail(detail.email)
-        setFirstName(detail.firstName)
-        setLastName(detail.lastName)
+        if (talentWorkspace) {
+          originalTalentName.current = { firstName: detail.firstName, lastName: detail.lastName }
+          talentNameEdited.current = { firstName: false, lastName: false }
+        }
+        setFirstName(talentWorkspace ? formatPersonName(detail.firstName) : detail.firstName)
+        setLastName(talentWorkspace ? formatPersonName(detail.lastName) : detail.lastName)
         setValidFrom(detail.validFrom ?? '')
         setExpiresAt(detail.expiresAt ?? '')
         setAdmissionDate(detail.admissionDate ?? '')
@@ -315,6 +321,12 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   async function persistStudent() {
     if (readOnly || saving) return
     setSaving(true); setError(null)
+    const savedFirstName = (talentWorkspace && mode !== 'create' && !talentNameEdited.current.firstName
+      ? originalTalentName.current.firstName
+      : firstName).trim()
+    const savedLastName = (talentWorkspace && mode !== 'create' && !talentNameEdited.current.lastName
+      ? originalTalentName.current.lastName
+      : lastName).trim()
     const certificationPayload = appliesCertifications ? {
       ...(professionalProfilePublicId ? { professionalProfilePublicId } : {}),
       ...(technologicalProfilePublicId ? { technologicalProfilePublicId } : {}), ...flags
@@ -323,8 +335,8 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       if (mode === 'create') {
         const payload = {
           ...(administrator ? { organizationPublicId } : {}), email: email.trim(),
-          firstName: firstName.trim(), lastName: lastName.trim(),
-          displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+          firstName: savedFirstName, lastName: savedLastName,
+          displayName: `${savedFirstName} ${savedLastName}`.trim(),
           status: admissionDate ? 'ACTIVE' as const : 'INACTIVE' as const, validFrom, expiresAt,
           admissionDate: talentWorkspace ? undefined : (admissionDate || undefined),
           studentCode: manualStudentCode ? studentCode.trim() : undefined,
@@ -354,8 +366,8 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
         const admissionChanged = (student.admissionDate ?? '') !== admissionDate
         const movedToTalentBank = Boolean(student.admissionDate && !admissionDate && !talentWorkspace)
         const updatePayload = {
-          email: email.trim(), firstName: firstName.trim(), lastName: lastName.trim(),
-          displayName: `${firstName.trim()} ${lastName.trim()}`.trim(), validFrom, expiresAt,
+          email: email.trim(), firstName: savedFirstName, lastName: savedLastName,
+          displayName: `${savedFirstName} ${savedLastName}`.trim(), validFrom, expiresAt,
           admissionDate: conversion || !talentWorkspace
             ? (admissionDate || undefined)
             : (student.admissionDate ?? undefined),
@@ -411,8 +423,16 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       }
     } catch (requestError) {
       if (requestError instanceof ApiRequestError) {
-        const errors = requestError.fieldErrors ?? {}; setError(requestError.message); setFieldErrors(errors); focusFirstFieldError(errors)
-      } else setError(talentWorkspace ? 'No fue posible guardar el talento.' : 'No fue posible guardar al colaborador.')
+        const errors = { ...(requestError.fieldErrors ?? {}) }
+        if (requestError.code === 'STUDENT_EMAIL_EXISTS') errors.email = 'Correo ya utilizado.'
+        setFieldErrors(errors)
+        focusFirstFieldError(errors)
+        toast.error(requestError.code === 'STUDENT_EMAIL_EXISTS'
+          ? `El correo ${email.trim()} ya está utilizado por otro colaborador de la organización.`
+          : requestError.message)
+      } else {
+        toast.error(talentWorkspace ? 'No fue posible guardar el talento.' : 'No fue posible guardar al colaborador.')
+      }
     } finally { setSaving(false) }
   }
 
@@ -436,8 +456,8 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
               : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate || (talentWorkspace && !conversion)}
                   onChange={(event) => setCorporateUser(event.target.value)} aria-invalid={Boolean(fieldErrors.corporateUser)} />}{field('corporateUser')}{!readOnly && !admissionDate && <small>Captura una Fecha de alta para habilitar el campo Usuario corporativo.</small>}</label>
             <label className="form-field ns-field-span-6"><span>Correo</span>{readOnly ? <strong className="readonly-value">{email}</strong> : <input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required aria-invalid={Boolean(fieldErrors.email)} />}{field('email')}</label>
-            <label className="form-field ns-field-span-6"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{formatPersonName(firstName)}</strong> : <input name="firstName" value={firstName} onChange={(event) => setFirstName(event.target.value)} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
-            <label className="form-field ns-field-span-6"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{formatPersonName(lastName)}</strong> : <input name="lastName" value={lastName} onChange={(event) => setLastName(event.target.value)} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
+            <label className="form-field ns-field-span-6"><span>Nombre</span>{readOnly ? <strong className="readonly-value">{formatPersonName(firstName)}</strong> : <input name="firstName" value={firstName} onChange={(event) => { if (talentWorkspace) talentNameEdited.current.firstName = true; setFirstName(event.target.value) }} required aria-invalid={Boolean(fieldErrors.firstName)} />}{field('firstName')}</label>
+            <label className="form-field ns-field-span-6"><span>Apellidos</span>{readOnly ? <strong className="readonly-value">{formatPersonName(lastName)}</strong> : <input name="lastName" value={lastName} onChange={(event) => { if (talentWorkspace) talentNameEdited.current.lastName = true; setLastName(event.target.value) }} required aria-invalid={Boolean(fieldErrors.lastName)} />}{field('lastName')}</label>
             <label className="form-field ns-field-span-4"><span>Fecha de alta <small>(opcional)</small></span>{readOnly ? <strong className="readonly-value">{admissionDate ? formatDate(admissionDate) : 'N/A'}</strong> : <DateField name="admissionDate" value={admissionDate} onChange={setAdmissionDate} disabled={talentWorkspace && !conversion} ariaInvalid={Boolean(fieldErrors.admissionDate)} ariaLabel="Seleccionar Fecha de alta" />}{field('admissionDate')}{!readOnly && !admissionDate && <small className="warning-text">{talentWorkspace && !conversion ? 'La Fecha de alta se capturará durante la conversión a colaborador.' : 'Sin Fecha de alta, el colaborador permanecerá inactivo y no podrá gestionar certificaciones.'}</small>}</label>
             {readOnly && student?.organization && <label className="form-field ns-field-span-6"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
             {readOnly && student && <label className="form-field ns-field-span-6"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Dado de baja' : 'Dado de baja'}</strong></label>}

@@ -150,3 +150,9 @@
     min-width: 94px;
   }
 }
+
+.ns-person-name {
+  display: block;
+  font-weight: 500;
+  line-height: 1.25;
+}

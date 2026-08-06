@@ -209,7 +209,7 @@ export function AdminStudentsPage() {
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
             <td className="ns-primary-cell">
-              <strong>{formatPersonName(student.displayName)}</strong>
+              <span className="ns-person-name">{formatPersonName(student.displayName)}</span>
               <small>{student.email?.trim() || 'N/A'}</small>
             </td>
             {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}

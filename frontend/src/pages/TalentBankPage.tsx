@@ -15,6 +15,7 @@ import { useToast } from '../shared/components/ToastProvider'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import type { TalentCatalogs, TalentPage, TalentSummary, TalentType } from '../shared/types/talentBank'
+import { formatPersonName } from '../shared/utils/personNames'
 
 const TYPES: Array<{ value: TalentType | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'Todos los tipos' },
@@ -162,7 +163,7 @@ export function TalentBankPage() {
           {loading && <tr><td colSpan={administrator ? 7 : 6} className="ns-table-empty">Cargando talentos…</td></tr>}
           {!loading && !error && !data?.content.length && <tr><td colSpan={administrator ? 7 : 6} className="ns-table-empty">No se encontraron talentos.</td></tr>}
           {!loading && data?.content.map((talent) => <tr key={talent.publicId}>
-            <td className="ns-primary-cell"><strong>{talent.displayName}</strong><small>{talent.email}</small></td>
+            <td className="ns-primary-cell"><span className="ns-person-name">{formatPersonName(talent.displayName)}</span><small>{talent.email}</small></td>
             {administrator && <td>{talent.organization.name}<small className="ns-cell-secondary">{talent.organization.code}</small></td>}
             <td><span className={`status-badge talent-type-${talent.talentType.toLowerCase()}`}>{TYPE_LABELS[talent.talentType]}</span></td>
             <td>{talent.profileCode ?? 'N/A'}</td><td>{talent.talentType === 'BBVA_EXIT' ? (talent.currentTechnologyExpertise || 'N/A') : (talent.technology?.name ?? 'N/A')}</td>
@@ -183,7 +184,7 @@ export function TalentBankPage() {
       description="Esta acción eliminará de forma permanente el registro, su historial, sus documentos y toda la información asociada. La información no podrá continuar consultándose en la plataforma. ¿Deseas continuar?"
       confirmLabel="Eliminar definitivamente" tone="danger" busy={deleting}
       onCancel={() => setDeleteCandidate(undefined)} onConfirm={() => void confirmPermanentDeletion()}>
-      {deleteCandidate && <div className="permanent-deletion-warning"><strong>{deleteCandidate.displayName}</strong><p>{deleteCandidate.organization.name} · {TYPE_LABELS[deleteCandidate.talentType]}</p></div>}
+      {deleteCandidate && <div className="permanent-deletion-warning"><span className="ns-person-name">{formatPersonName(deleteCandidate.displayName)}</span><p>{deleteCandidate.organization.name} · {TYPE_LABELS[deleteCandidate.talentType]}</p></div>}
     </ConfirmDialog>
   </main>
 }

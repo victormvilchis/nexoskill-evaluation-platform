@@ -43,6 +43,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -52,6 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CatalogAdministrationService {
+	private static final Logger LOGGER = LoggerFactory.getLogger(CatalogAdministrationService.class);
 	private static final String ACTIVE = "ACTIVE";
 	private static final String INACTIVE = "INACTIVE";
 	private static final Set<CatalogType> DIRECT_LIFECYCLE_TYPES = Set.of(CatalogType.CATEGORIES,
@@ -604,33 +608,18 @@ public class CatalogAdministrationService {
 	}
 
 	private long dependencyCount(CatalogType type, Object key) {
-		String sql = switch (type) {
-		case CATEGORIES -> "SELECT " + "(SELECT COUNT(*) FROM QUESTION WHERE CATEGORY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM QUESTION_CATEGORY_RELATION WHERE CATEGORY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM COLLECTION_CATEGORY_RELATION WHERE CATEGORY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM FORM_QUESTION_POOL WHERE CATEGORY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM QUESTION_CATEGORY WHERE SOURCE_GLOBAL_ID = :key) FROM DUAL";
-		case TECHNOLOGIES -> "SELECT (SELECT COUNT(*) FROM QUESTION WHERE TECHNOLOGY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM STUDENT WHERE TECHNOLOGY_ID = :key OR TALENT_TECHNOLOGY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM STUDENT_CERTIFICATION_CYCLE WHERE TECHNOLOGY_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM STUDENT_CERTIFICATION_PROFILE profile "
-				+ "JOIN CERTIFICATION_TECHNOLOGY_CATALOG certification "
-				+ "ON certification.CERTIFICATION_TECHNOLOGY_ID = profile.CERTIFICATION_TECHNOLOGY_ID "
-				+ "WHERE certification.MASTER_TECHNOLOGY_ID = :key) FROM DUAL";
-		case PROFESSIONAL_PROFILES -> "SELECT "
-				+ "(SELECT COUNT(*) FROM STUDENT WHERE PROFESSIONAL_PROFILE_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM STUDENT_CERTIFICATION_PROFILE WHERE PROFESSIONAL_PROFILE_ID = :key) FROM DUAL";
-		case TECHNOLOGICAL_PROFILES -> "SELECT "
-				+ "(SELECT COUNT(*) FROM STUDENT WHERE TECHNOLOGICAL_PROFILE_ID = :key) + "
-				+ "(SELECT COUNT(*) FROM STUDENT_CERTIFICATION_PROFILE WHERE TECHNOLOGICAL_PROFILE = "
-				+ "(SELECT PROFILE_CODE FROM TECHNOLOGICAL_PROFILE_CATALOG WHERE TECHNOLOGICAL_PROFILE_ID = :key)) + "
-				+ "(SELECT COUNT(*) FROM CERTIFICATION_PROFILE_CATALOG WHERE SUGGESTED_TECH_PROFILE = "
-				+ "(SELECT PROFILE_CODE FROM TECHNOLOGICAL_PROFILE_CATALOG WHERE TECHNOLOGICAL_PROFILE_ID = :key)) FROM DUAL";
-		case QUESTION_TYPES -> "SELECT COUNT(*) FROM QUESTION WHERE TYPE_CODE = :key";
-		case DIFFICULTIES -> "SELECT COUNT(*) FROM QUESTION WHERE DIFFICULTY_CODE = :key";
-		};
-		Long result = jdbc.queryForObject(sql, new MapSqlParameterSource("key", key), Long.class);
-		return result == null ? 0 : result;
+		MapSqlParameterSource parameters = new MapSqlParameterSource("key", key);
+		try {
+			long total = 0;
+			for (String sql : CatalogDependencyQueries.forType(type)) {
+				Long result = jdbc.queryForObject(sql, parameters, Long.class);
+				total += result == null ? 0 : result;
+			}
+			return total;
+		} catch (DataAccessException exception) {
+			LOGGER.warn("No fue posible calcular los usos del catálogo {} para la clave {}.", type, key, exception);
+			throw usageCheckFailed(type);
+		}
 	}
 
 	private Object dependencyKey(CatalogType type, String id) {
@@ -647,7 +636,7 @@ public class CatalogAdministrationService {
 		return switch (type) {
 		case CATEGORIES -> count + " preguntas relacionadas";
 		case TECHNOLOGIES -> count + " usos en preguntas o certificaciones";
-		case PROFESSIONAL_PROFILES -> count + " perfiles de estudiantes";
+		case PROFESSIONAL_PROFILES -> count + " perfiles de colaboradores";
 		case TECHNOLOGICAL_PROFILES -> count + " perfiles o sugerencias";
 		case QUESTION_TYPES, DIFFICULTIES -> count + " preguntas relacionadas";
 		};
@@ -687,6 +676,19 @@ public class CatalogAdministrationService {
 		case QUESTION_TYPES -> typeItem(requireType(id));
 		case DIFFICULTIES -> difficultyItem(requireDifficulty(id));
 		};
+	}
+
+	private BusinessException usageCheckFailed(CatalogType type) {
+		String label = switch (type) {
+		case TECHNOLOGIES -> "la Tecnología está siendo utilizada";
+		case PROFESSIONAL_PROFILES -> "el Perfil está siendo utilizado";
+		case TECHNOLOGICAL_PROFILES -> "el Perfil tecnológico está siendo utilizado";
+		case CATEGORIES -> "la Categoría está siendo utilizada";
+		case QUESTION_TYPES -> "el Tipo de pregunta está siendo utilizado";
+		case DIFFICULTIES -> "la Dificultad está siendo utilizada";
+		};
+		return new BusinessException("CATALOG_USAGE_CHECK_FAILED",
+				"No fue posible comprobar si " + label + ". Intenta nuevamente.");
 	}
 
 	private BusinessException catalogInUse(long count) {

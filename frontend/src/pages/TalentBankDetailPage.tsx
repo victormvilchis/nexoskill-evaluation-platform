@@ -7,6 +7,7 @@ import { LoadingScreen } from '../shared/components/LoadingScreen'
 import { TablePagination } from '../shared/components/TablePagination'
 import { useToast } from '../shared/components/ToastProvider'
 import type { TalentCvMetadata, TalentHistoryPage, TalentSummary, TalentType } from '../shared/types/talentBank'
+import { formatPersonName } from '../shared/utils/personNames'
 
 const typeLabels: Record<TalentType, string> = { ACADEMY: 'Academia', PROSPECT: 'Prospecto', BBVA_EXIT: 'Baja' }
 function formatDate(value?: string | null) {
@@ -66,12 +67,11 @@ export function TalentBankDetailPage() {
 
   if (loading) return <LoadingScreen />
   if (!talent || error) return <main className="content-page"><BackButton fallback="/admin/talent-bank" /><div className="error-message">{error ?? 'El talento no existe.'}</div></main>
-
   return <main className="content-page editor-page talent-detail-page">
     <BackButton fallback="/admin/talent-bank" />
     <section className="editor-card">
       <div className="talent-detail-grid">
-        <div><span>Persona</span><strong>{talent.displayName}</strong></div>
+        <div><span>Persona</span><span className="ns-person-name">{formatPersonName(talent.displayName)}</span></div>
         <div><span>Correo</span><strong>{talent.email}</strong></div>
         <div><span>Código</span><strong>{talent.studentCode}</strong></div>
         <div><span>Organización</span><strong>{talent.organization.name} · {talent.organization.code}</strong></div>
