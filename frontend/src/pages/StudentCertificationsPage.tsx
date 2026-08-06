@@ -33,6 +33,7 @@ import type {
   StudentCertificationDetail
 } from '../shared/types/certifications'
 import type { PageSize } from '../shared/types/pagination'
+import { formatPersonName } from '../shared/utils/personNames'
 
 type TabId = 'SUMMARY' | CertificationType | 'ATTEMPTS' | 'EXPIRATIONS' | 'HISTORY'
 
@@ -635,7 +636,7 @@ export function StudentCertificationsPage() {
         : 'El colaborador no se encuentra activo. No es posible gestionar sus certificaciones. La información existente permanece disponible para consulta.'}</div>}
 
       <section className="ns-card certification-student-summary">
-        <div><span>Colaborador</span><strong>{detail.student.displayName}</strong></div>
+        <div><span>Colaborador</span><strong>{formatPersonName(detail.student.displayName)}</strong></div>
         <div><span>Organización</span><strong>{detail.student.organizationName}</strong></div>
         <div><span>Estado</span><strong>{STUDENT_STATUS_LABELS[detail.student.status] ?? detail.student.status}</strong></div>
         <div><span>Fecha de alta</span><strong>{detail.student.admissionDate ? formatDate(detail.student.admissionDate) : 'N/A'}</strong></div>

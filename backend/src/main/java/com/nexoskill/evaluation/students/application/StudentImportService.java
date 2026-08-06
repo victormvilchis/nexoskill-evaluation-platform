@@ -910,9 +910,9 @@ public class StudentImportService {
         List<Issue> parseIssues = new ArrayList<>();
         List<String> rowWarnings = new ArrayList<>();
         String fullName = normalizedText(value(row, "NOMBRE EXTERNO"), 250);
-        String profile = normalizedText(value(row, "PERFIL"), 200);
-        String technology = normalizedText(value(row, "TECNOLOGÍA EN LA QUE SE CERTIFICA"), 200);
-        String technologicalProfile = normalizedText(value(row, "PERFIL TECNOLOGICO"), 200);
+        String profile = normalizeImportedCatalogValue(value(row, "PERFIL"), 200);
+        String technology = normalizeImportedCatalogValue(value(row, "TECNOLOGÍA EN LA QUE SE CERTIFICA"), 200);
+        String technologicalProfile = normalizeImportedCatalogValue(value(row, "PERFIL TECNOLOGICO"), 200);
         LocalDate admission = parseDate(value(row, "FECHA DE ALTA"), "FECHA DE ALTA",
                 row.rowNumber(), parseIssues, false);
         if (admission == null) {
@@ -984,7 +984,7 @@ public class StudentImportService {
         String matchKey = normalizedEmail != null ? "EMAIL:" + normalizedEmail
                 : normalizedName == null || normalizedName.isBlank() ? null : "NAME:" + normalizedName;
         String subject = fullName == null || fullName.isBlank()
-                ? "Fila " + row.rowNumber() : "Colaborador " + fullName;
+                ? "Fila " + row.rowNumber() : "Colaborador " + displayPersonName(fullName);
         List<Issue> contextualWarnings = new ArrayList<>();
         for (Issue issue : parseIssues) {
             contextualWarnings.add(new Issue(issue.row(), issue.code(), subject + ": " + issue.message()));
@@ -1239,11 +1239,13 @@ public class StudentImportService {
     }
 
     private static String collaboratorName(ImportedStudent imported) {
-        return blank(imported.fullName()) ? "Fila " + imported.rowNumber() : imported.fullName();
+        return blank(imported.fullName()) ? "Fila " + imported.rowNumber() : displayPersonName(imported.fullName());
     }
 
     private static String collaboratorLabel(ImportedStudent imported) {
-        return blank(imported.fullName()) ? "Fila " + imported.rowNumber() : "Colaborador " + imported.fullName();
+        return blank(imported.fullName())
+                ? "Fila " + imported.rowNumber()
+                : "Colaborador " + displayPersonName(imported.fullName());
     }
 
     private ConflictPreview omissionConflict(ImportedStudent imported, String code, String title, String reason) {
@@ -1902,6 +1904,9 @@ public class StudentImportService {
 
     private ImportedStudent materializeCatalogs(Long organizationId, ImportedStudent imported, Long actorId,
             Set<String> selectedFields) {
+        String profileName = normalizeImportedCatalogValue(imported.profileName(), 200);
+        String primaryTechnology = normalizeImportedCatalogValue(imported.primaryTechnology(), 200);
+        String technologicalProfileName = normalizeImportedCatalogValue(imported.technologicalProfileName(), 200);
         boolean completeRow = selectedFields == null;
         boolean resolveProfile = completeRow || selectedFields.contains("profile");
         boolean resolveTechnologicalProfile = completeRow || selectedFields.contains("technologicalProfile");
@@ -1909,22 +1914,22 @@ public class StudentImportService {
                 || selectedFields.stream().anyMatch(field -> field.startsWith("cert:TECHNOLOGICAL:"));
 
         CatalogRef profile = resolveProfile
-                ? ensureProfessionalProfile(organizationId, imported.profileName(), actorId)
+                ? ensureProfessionalProfile(organizationId, profileName, actorId)
                 : imported.profilePublicId() == null ? null
-                        : new CatalogRef(imported.profilePublicId(), null, imported.profileName());
+                        : new CatalogRef(imported.profilePublicId(), null, profileName);
         CatalogRef technologicalProfile = resolveTechnologicalProfile
-                ? ensureTechnologicalProfile(organizationId, imported.technologicalProfileName(), actorId)
+                ? ensureTechnologicalProfile(organizationId, technologicalProfileName, actorId)
                 : imported.technologicalProfilePublicId() == null ? null
                         : new CatalogRef(imported.technologicalProfilePublicId(), null,
-                                imported.technologicalProfileName());
-        if (resolveTechnology && imported.primaryTechnology() != null) {
-            ensureQuestionTechnology(organizationId, imported.primaryTechnology(), actorId);
+                                technologicalProfileName);
+        if (resolveTechnology && primaryTechnology != null) {
+            ensureQuestionTechnology(organizationId, primaryTechnology, actorId);
         }
         return new ImportedStudent(imported.rowKey(), imported.rowNumber(), imported.fullName(),
                 imported.firstName(), imported.lastName(), imported.normalizedName(), imported.email(),
-                imported.normalizedEmail(), imported.matchKey(), imported.profileName(),
+                imported.normalizedEmail(), imported.matchKey(), profileName,
                 profile == null ? null : profile.publicId(), imported.admissionDate(),
-                imported.primaryTechnology(), imported.technologicalProfileName(),
+                primaryTechnology, technologicalProfileName,
                 technologicalProfile == null ? null : technologicalProfile.publicId(),
                 imported.certificationLevel(), imported.certifications(), imported.currentTechnologies(),
                 imported.languages(), imported.knownTechnologies(), imported.warnings(),
@@ -1932,7 +1937,8 @@ public class StudentImportService {
     }
 
     private CatalogRef ensureProfessionalProfile(Long organizationId, String name, Long actorId) {
-        if (name == null || name.isBlank()) return null;
+        name = normalizeImportedCatalogValue(name, 200);
+        if (name == null) return null;
         String code = catalogCode("PRF", name, organizationId, 120, "CERTIFICATION_PROFILE_CATALOG", "PROFILE_CODE");
         CatalogState existing = resolveCatalogAnyStatus("CERTIFICATION_PROFILE_CATALOG",
                 "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
@@ -1973,7 +1979,8 @@ public class StudentImportService {
     }
 
     private CatalogRef ensureTechnologicalProfile(Long organizationId, String name, Long actorId) {
-        if (name == null || name.isBlank()) return null;
+        name = normalizeImportedCatalogValue(name, 200);
+        if (name == null) return null;
         String code = catalogCode("TPR", name, organizationId, 40, "TECHNOLOGICAL_PROFILE_CATALOG", "PROFILE_CODE");
         CatalogState existing = resolveCatalogAnyStatus("TECHNOLOGICAL_PROFILE_CATALOG",
                 "PROFILE_CODE", "PROFILE_NAME", organizationId, name, code,
@@ -2014,7 +2021,8 @@ public class StudentImportService {
     }
 
     private CatalogRef ensureQuestionTechnology(Long organizationId, String name, Long actorId) {
-        if (name == null || name.isBlank()) return null;
+        name = normalizeImportedCatalogValue(name, 200);
+        if (name == null) return null;
         String code = catalogCode("TEC", name, organizationId, 80, "QUESTION_TECHNOLOGY", "TECHNOLOGY_CODE");
         CatalogState existing = resolveCatalogAnyStatus("QUESTION_TECHNOLOGY",
                 "TECHNOLOGY_CODE", "TECHNOLOGY_NAME", organizationId, name, code,
@@ -2391,6 +2399,31 @@ public class StudentImportService {
         if (value == null || value.isBlank()) return null;
         String normalized = value.trim().replaceAll("\\s+", " ");
         return normalized.length() <= max ? normalized : normalized.substring(0, max);
+    }
+
+    static String normalizeImportedCatalogValue(String value, int max) {
+        if (value == null || value.isBlank()) return null;
+        String normalized = value.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+        return normalized.length() <= max ? normalized : normalized.substring(0, max);
+    }
+
+    static String displayPersonName(String value) {
+        if (value == null || value.isBlank()) return value;
+        String normalized = value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.forLanguageTag("es-MX"));
+        StringBuilder display = new StringBuilder(normalized.length());
+        boolean capitalizeNext = true;
+        for (int offset = 0; offset < normalized.length();) {
+            int codePoint = normalized.codePointAt(offset);
+            if (Character.isLetter(codePoint)) {
+                display.appendCodePoint(capitalizeNext ? Character.toTitleCase(codePoint) : codePoint);
+                capitalizeNext = false;
+            } else {
+                display.appendCodePoint(codePoint);
+                capitalizeNext = Character.isWhitespace(codePoint) || codePoint == '-' || codePoint == '\'';
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return display.toString();
     }
 
     private static boolean intersects(Set<String> values, Set<String> target) {

@@ -53,6 +53,14 @@
   grid-column: 1 / -1;
 }
 
+.profile-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.profile-readonly-summary {
+  grid-column: 1 / -1;
+}
+
 .permission-readonly {
   cursor: default;
 }

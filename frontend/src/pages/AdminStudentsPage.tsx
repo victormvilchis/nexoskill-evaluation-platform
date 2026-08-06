@@ -15,6 +15,7 @@ import { useToast } from '../shared/components/ToastProvider'
 import { parsePage, parsePageSize, type PageSize } from '../shared/types/pagination'
 import { useDebouncedValue } from '../shared/hooks/useDebouncedValue'
 import type { StudentEffectiveStatus, StudentFilterOptions, StudentPage } from '../shared/types/students'
+import { formatPersonName } from '../shared/utils/personNames'
 const statuses: Array<{ value: StudentEffectiveStatus | 'ALL'; label: string }> = [
   { value: 'ACTIVE', label: 'Activo' },
   { value: 'ALL', label: 'Todos los estados' },
@@ -207,8 +208,8 @@ export function AdminStudentsPage() {
           {loading && <tr><td colSpan={columnCount} className="ns-table-empty">Cargando colaboradores…</td></tr>}
           {!loading && !error && data?.content.length === 0 && <tr><td colSpan={columnCount} className="ns-table-empty">No se encontraron colaboradores con los filtros seleccionados.</td></tr>}
           {!loading && data?.content.map((student) => <tr key={student.publicId}>
-            <td className="ns-primary-cell ns-collaborator-cell">
-              <strong>{student.displayName}</strong>
+            <td className="ns-primary-cell">
+              <strong>{formatPersonName(student.displayName)}</strong>
               <small>{student.email?.trim() || 'N/A'}</small>
             </td>
             {showCertificationColumns && <td>{formatRole(student.professionalProfile?.name, student.technologicalProfile?.name)}</td>}
@@ -232,7 +233,7 @@ export function AdminStudentsPage() {
         description="Esta acción eliminará de forma permanente el registro, su historial, sus documentos y toda la información asociada. La información no podrá continuar consultándose en la plataforma. ¿Deseas continuar?"
         confirmLabel="Eliminar definitivamente" tone="danger" busy={deleting}
         onCancel={() => setDeleteCandidate(undefined)} onConfirm={() => void confirmPermanentDeletion()}>
-        {deleteCandidate && <div className="permanent-deletion-warning"><strong>{deleteCandidate.displayName}</strong><p>{deleteCandidate.email} · {deleteCandidate.studentCode}</p></div>}
+        {deleteCandidate && <div className="permanent-deletion-warning"><strong>{formatPersonName(deleteCandidate.displayName)}</strong><p>{deleteCandidate.email} · {deleteCandidate.studentCode}</p></div>}
       </ConfirmDialog>
     </main>
   )

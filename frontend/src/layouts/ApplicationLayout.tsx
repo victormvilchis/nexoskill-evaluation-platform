@@ -340,10 +340,12 @@ export function ApplicationLayout() {
                     <small>{user?.email}</small>
                   </div>
                 </div>
-                {user?.permissions.includes('PROFILE_VIEW') && (
+                {(administrator || user?.permissions.includes('PROFILE_VIEW')) && (
                   <NavLink to="/profile"><Icon name="profile" size={17} />Perfil</NavLink>
                 )}
-                <NavLink to="/change-password" state={{ from: `${location.pathname}${location.search}` }}><Icon name="lock" size={17} />Cambiar contraseña</NavLink>
+                {(administrator || user?.permissions.includes('PASSWORD_CHANGE')) && (
+                  <NavLink to="/change-password" state={{ from: `${location.pathname}${location.search}` }}><Icon name="lock" size={17} />Cambiar contraseña</NavLink>
+                )}
                 <div className="account-dropdown-separator" />
                 <button type="button" onClick={() => void handleLogout()}>
                   <Icon name="logout" size={17} />Cerrar sesión

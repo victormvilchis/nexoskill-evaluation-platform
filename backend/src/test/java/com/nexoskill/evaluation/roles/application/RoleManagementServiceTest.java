@@ -27,7 +27,7 @@ class RoleManagementServiceTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
-    void shouldExposeOnlyOrganizationalPermissionsAndKeepBasicsReadOnly() {
+    void shouldExposeOnlyOrganizationalPermissionsAndKeepProfilePermissionsConfigurable() {
         Fixture fixture = fixture();
 
         RoleManagementService.PermissionCatalog catalog = fixture.service.permissionCatalog("ORGANIZATIONAL");
@@ -42,8 +42,9 @@ class RoleManagementServiceTest {
         assertThat(catalog.modules().stream()
                 .flatMap(module -> module.permissions().stream())
                 .filter(permission -> permission.code().equals("PROFILE_VIEW")
+                        || permission.code().equals("PROFILE_UPDATE")
                         || permission.code().equals("PASSWORD_CHANGE"))
-                .allMatch(RoleManagementService.PermissionDescriptor::required)).isTrue();
+                .noneMatch(RoleManagementService.PermissionDescriptor::required)).isTrue();
     }
 
     @Test
@@ -58,8 +59,9 @@ class RoleManagementServiceTest {
                 actor());
 
         assertThat(created.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE", "STUDENT_VIEW", "STUDENT_IMPORT");
+                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "ORGANIZATION_VIEW", "USER_VIEW",
+                        "ROLE_MANAGE", "STUDENT_VIEW", "STUDENT_IMPORT");
     }
 
     @Test
@@ -79,8 +81,9 @@ class RoleManagementServiceTest {
                 new RoleManagementService.UpsertCommand("Gestor", null, Set.of("TALENT_CONVERT")), actor());
 
         assertThat(updated.permissionCodes())
-                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("TALENT_VIEW", "TALENT_CONVERT", "ORGANIZATION_VIEW", "ROLE_MANAGE", "STUDENT_VIEW");
+                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "TALENT_VIEW", "TALENT_CONVERT",
+                        "ORGANIZATION_VIEW", "ROLE_MANAGE", "STUDENT_VIEW");
     }
 
     @Test
@@ -98,8 +101,9 @@ class RoleManagementServiceTest {
                 new RoleManagementService.CloneCommand("Supervisor copia", null), actor());
 
         assertThat(cloned.permissionCodes())
-                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("QUESTION_VIEW", "QUESTION_UPDATE", "ORGANIZATION_VIEW");
+                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "QUESTION_VIEW", "QUESTION_UPDATE",
+                        "ORGANIZATION_VIEW");
     }
 
 
@@ -115,8 +119,8 @@ class RoleManagementServiceTest {
                 actor());
 
         assertThat(created.permissionCodes())
-                .contains("TALENT_VIEW", "TALENT_CONVERT",
-                        "DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE");
+                .contains("TALENT_VIEW", "TALENT_CONVERT", "DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE");
     }
 
     @Test
@@ -135,9 +139,32 @@ class RoleManagementServiceTest {
                 new RoleManagementService.UpsertCommand("Supervisor", null, Set.of("STUDENT_IMPORT")), actor());
 
         assertThat(updated.permissionCodes())
-                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
+                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "STUDENT_VIEW", "STUDENT_IMPORT");
         assertThat(role.getPermissions()).extracting(PermissionJpaEntity::getCode)
+                .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
+    }
+
+    @Test
+    void shouldGroupCertificationManagementWithCollaboratorsAndPersistProfileSelections() {
+        Fixture fixture = fixture();
+        when(fixture.roles.countByNormalizedName("Perfil configurable", null)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoleManagementService.PermissionCatalog catalog = fixture.service.permissionCatalog("ORGANIZATIONAL");
+        RoleManagementService.PermissionModule collaborators = catalog.modules().stream()
+                .filter(module -> module.code().equals("STUDENTS"))
+                .findFirst().orElseThrow();
+        assertThat(collaborators.permissions()).extracting(RoleManagementService.PermissionDescriptor::code)
+                .contains("STUDENT_VIEW", "STUDENT_IMPORT", "STUDENT_CERTIFICATION_MANAGE");
+
+        RoleManagementService.RoleDetail created = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Perfil configurable", null,
+                        Set.of("PROFILE_VIEW", "PROFILE_UPDATE", "PASSWORD_CHANGE")),
+                actor());
+
+        assertThat(created.permissionCodes())
+                .contains("PROFILE_VIEW", "PROFILE_UPDATE", "PASSWORD_CHANGE")
                 .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
     }
 
@@ -155,6 +182,7 @@ class RoleManagementServiceTest {
                 permission("PROFILE_UPDATE", "Actualizar perfil propio", "PROFILE"),
                 permission("STUDENT_VIEW", "Ver colaboradores", "STUDENTS"),
                 permission("STUDENT_IMPORT", "Importar colaboradores", "STUDENTS"),
+                permission("STUDENT_CERTIFICATION_MANAGE", "Gestionar certificaciones", "STUDENTS"),
                 permission("STUDENT_CERTIFICATION_CATALOG_VIEW", "Consultar catálogos de certificación", "STUDENTS"),
                 permission("TALENT_VIEW", "Ver Talent Bank", "TALENT_BANK"),
                 permission("TALENT_CONVERT", "Convertir a colaborador", "TALENT_BANK"),

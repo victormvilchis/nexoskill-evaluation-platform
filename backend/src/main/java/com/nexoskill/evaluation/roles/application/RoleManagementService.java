@@ -31,7 +31,7 @@ public class RoleManagementService {
 
     private static final String STUDENT_PORTAL_ROLE = "USER";
     private static final Set<String> BASE_PERMISSIONS = Set.of(
-            "DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE");
+            "DASHBOARD_VIEW", "USER_PANEL_VIEW");
     private static final Set<String> NON_APPLICABLE_PERMISSIONS = Set.of(
             "QUESTION_REVIEW", "QUESTION_PUBLISH", "QUESTION_VERSION_VIEW",
             "STUDENT_CERTIFICATION_CATALOG_VIEW");
@@ -309,7 +309,7 @@ public class RoleManagementService {
         if (code.startsWith("COLLECTION_")) return "COLLECTIONS";
         if (code.startsWith("FORM_")) return "FORMS";
         if (code.startsWith("TALENT_")) return "TALENT_BANK";
-        if (code.startsWith("STUDENT_CERTIFICATION_")) return "CERTIFICATIONS";
+        if (code.startsWith("STUDENT_CERTIFICATION_")) return "STUDENTS";
         if (code.startsWith("STUDENT_")) return "STUDENTS";
         return permission.getModuleCode();
     }

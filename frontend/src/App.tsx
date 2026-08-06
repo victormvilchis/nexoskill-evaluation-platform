@@ -80,7 +80,9 @@ export default function App() {
         <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
       </Route>
       <Route element={<ProtectedRoute />}>
-        <Route path="/change-password" element={<ChangePasswordPage />} />
+        <Route element={<PermissionRoute permission="PASSWORD_CHANGE" />}>
+          <Route path="/change-password" element={<ChangePasswordPage />} />
+        </Route>
 
         <Route element={<ApplicationLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />

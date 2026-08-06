@@ -17,6 +17,17 @@ function resolveCrumbs(pathname: string): Crumb[] {
   if (pathname === '/dashboard') return [{ label: 'Inicio' }]
   if (pathname === '/profile') return [{ label: 'Cuenta' }, { label: 'Perfil' }]
   if (pathname === '/change-password') return [{ label: 'Cuenta' }, { label: 'Contraseña' }]
+  if (pathname.startsWith('/admin/roles')) {
+    const segments = pathname.split('/').filter(Boolean)
+    const base: Crumb[] = [{ label: 'Administración' }, { label: 'Roles', to: '/admin/roles' }]
+    if (pathname === '/admin/roles/new') base.push({ label: 'Crear rol' })
+    else if (pathname.endsWith('/edit')) base.push({ label: 'Editar rol' })
+    else if (pathname !== '/admin/roles') {
+      const roleCode = decodeURIComponent(segments[2] ?? '').toUpperCase()
+      base.push({ label: roleCode === 'ADMINISTRATOR' ? 'Ver acceso' : 'Ver rol' })
+    }
+    return base
+  }
   if (pathname.startsWith('/admin/talent-bank')) {
     const base: Crumb[] = [{ label: 'Administración' }, { label: 'Talent Bank', to: '/admin/talent-bank' }]
     if (pathname === '/admin/talent-bank/new') base.push({ label: 'Nuevo talento' })

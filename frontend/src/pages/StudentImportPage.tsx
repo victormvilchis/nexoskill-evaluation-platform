@@ -19,6 +19,7 @@ import { FormActions } from '../shared/components/FormActions'
 import { Icon } from '../shared/components/Icon'
 import { SelectField } from '../shared/components/SelectField'
 import { useToast } from '../shared/components/ToastProvider'
+import { formatPersonName } from '../shared/utils/personNames'
 
 type LowAction = 'KEEP' | 'DEACTIVATE' | 'IGNORE'
 type NewState = NewStudentPreview & {
@@ -458,7 +459,7 @@ export function StudentImportPage() {
           <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Correo</th>{preview.manualStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th>{!preview.manualStudentCode && <th>Código a nivel organización</th>}</tr></thead><tbody>
             {newRows.map((row, index) => <tr key={row.rowKey} className={omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
               <td><input type="checkbox" checked={row.selected} disabled={omittedRows.has(row.rowKey)} onChange={(event) => setNewRows((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))} /></td>
-              <td><strong>{row.collaborator}</strong>
+              <td><strong>{formatPersonName(row.collaborator)}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
               <td>{row.profile || 'N/A'}</td><td>{row.primaryTechnology || 'N/A'}</td><td>{row.admissionDate || 'N/A'}</td>
               <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
@@ -478,7 +479,7 @@ export function StudentImportPage() {
         </section>}
 
         {preview.changedStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Actualizaciones</p><h2>Colaboradores con cambios</h2></div></div>
-          {changedRows.map((row, rowIndex) => <article className={`ns-import-change-card${omittedRows.has(row.rowKey) ? ' is-muted' : ''}`} key={row.studentPublicId}><h3>{row.collaborator}</h3>{row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Aplicar</th><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th></tr></thead><tbody>
+          {changedRows.map((row, rowIndex) => <article className={`ns-import-change-card${omittedRows.has(row.rowKey) ? ' is-muted' : ''}`} key={row.studentPublicId}><h3>{formatPersonName(row.collaborator)}</h3>{row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Aplicar</th><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th></tr></thead><tbody>
             {row.changes.map((change) => <tr key={change.key}><td><input type="checkbox" disabled={omittedRows.has(row.rowKey)} checked={!omittedRows.has(row.rowKey) && row.selectedFields.has(change.key)} onChange={(event) => setChangedRows((current) => current.map((item, itemIndex) => { if (itemIndex !== rowIndex) return item; const selectedFields = new Set(item.selectedFields); if (event.target.checked) selectedFields.add(change.key); else selectedFields.delete(change.key); return { ...item, selectedFields } }))} /></td><td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td></tr>)}
           </tbody></table></div></article>)}
         </section>}
@@ -498,7 +499,7 @@ export function StudentImportPage() {
             const decision = conflictDecisions[conflict.id] ?? ''
             const selectedAction = conflict.actions.find((action) => action.value === decision)
             return <article className="ns-import-conflict-card" key={conflict.id}>
-              <div className="ns-import-conflict-heading"><div><span>Fila {conflict.row}</span><h3>{conflict.title}</h3><p>{conflict.collaborator}</p></div><span className={`status-badge ${decision ? 'active' : 'warning'}`}>{conflict.reusedDecision ? 'Resuelto previamente' : decision ? 'Resuelto' : 'Pendiente'}</span></div>
+              <div className="ns-import-conflict-heading"><div><span>Fila {conflict.row}</span><h3>{conflict.title}</h3><p>{formatPersonName(conflict.collaborator)}</p></div><span className={`status-badge ${decision ? 'active' : 'warning'}`}>{conflict.reusedDecision ? 'Resuelto previamente' : decision ? 'Resuelto' : 'Pendiente'}</span></div>
               <div className="ns-import-conflict-values"><div><strong>Excel</strong><span>{conflict.excelValue}</span></div><div><strong>Plataforma actual</strong><span>{conflict.currentValue}</span></div><div><strong>Cálculo de la plataforma</strong><span>{conflict.calculatedValue}</span></div></div>
               <p className="ns-import-conflict-reason">{conflict.reason}</p>
               {conflict.reusedDecision
@@ -517,7 +518,7 @@ export function StudentImportPage() {
 
         {visibleErrors.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Corrección requerida</p><h2>Filas con error</h2></div></div><p className="muted">El error afecta únicamente al colaborador indicado y no detiene los demás registros válidos.</p><ul className="ns-import-issues">{visibleErrors.map((issue, index) => <li key={`${issue.code}-${issue.row}-${index}`}><strong>Fila {issue.row}: </strong>{issue.message}</li>)}</ul></section>}
 
-        {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{row.collaborator}</td><td>{row.email}</td><td><SelectField value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(nextValue) => setLowActions((current) => ({ ...current, [row.studentPublicId]: nextValue as LowAction }))} ariaLabel={`Acción para ${row.collaborator}`} options={[{ value: 'KEEP', label: 'Mantener activo' }, { value: 'IGNORE', label: 'Ignorar' }, { value: 'DEACTIVATE', label: 'Desactivar' }]} /></td></tr>)}</tbody></table></div></section>}
+        {preview.possibleLows.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Revisión</p><h2>Posibles bajas</h2></div></div><p className="muted">La desactivación solo se ejecuta cuando la seleccionas expresamente.</p><div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Correo</th><th>Acción</th></tr></thead><tbody>{preview.possibleLows.map((row) => <tr key={row.studentPublicId}><td>{formatPersonName(row.collaborator)}</td><td>{row.email}</td><td><SelectField value={lowActions[row.studentPublicId] ?? 'KEEP'} onChange={(nextValue) => setLowActions((current) => ({ ...current, [row.studentPublicId]: nextValue as LowAction }))} ariaLabel={`Acción para ${formatPersonName(row.collaborator)}`} options={[{ value: 'KEEP', label: 'Mantener activo' }, { value: 'IGNORE', label: 'Ignorar' }, { value: 'DEACTIVATE', label: 'Desactivar' }]} /></td></tr>)}</tbody></table></div></section>}
 
         <FormActions className="ns-import-final-actions" sticky>
           <button type="button" className="secondary-button" disabled={applying} onClick={() => void changeFile(undefined)}>

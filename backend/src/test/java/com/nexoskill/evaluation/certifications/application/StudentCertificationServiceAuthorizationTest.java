@@ -49,6 +49,46 @@ class StudentCertificationServiceAuthorizationTest {
 	}
 
 	@Test
+	void importPermissionAuthorizesCertificationSnapshotsWithoutManualManagementPermission() {
+		AuditLogPort audit = mock(AuditLogPort.class);
+		StudentRepository students = mock(StudentRepository.class);
+		when(students.findByOrganizationIdAndPublicId(10L, "student-public"))
+				.thenReturn(java.util.Optional.empty());
+		StudentCertificationService service = new StudentCertificationService(students,
+				mock(OrganizationRepository.class), mock(NamedParameterJdbcTemplate.class), audit,
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AuthenticatedUser importer = new AuthenticatedUser(2L, "importer-public", "importer@nexoskill.local",
+				"Service", "Manager", "Service Manager", Set.of("CUSTOM_SERVICE_MANAGER"),
+				Set.of("STUDENT_IMPORT"), NOW, UserAccessStatus.ACTIVE, null, null, false, NOW, null);
+		TenantContext tenant = TenantContext.organization(10L, "organization-public", "ORG", false);
+
+		assertThatThrownBy(() -> service.importSnapshot(tenant, "student-public", null, importer))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
+
+		verify(students).findByOrganizationIdAndPublicId(10L, "student-public");
+	}
+
+	@Test
+	void manualCertificationPermissionDoesNotAuthorizeImportSnapshots() {
+		AuditLogPort audit = mock(AuditLogPort.class);
+		StudentCertificationService service = new StudentCertificationService(mock(StudentRepository.class),
+				mock(OrganizationRepository.class), mock(NamedParameterJdbcTemplate.class), audit,
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AuthenticatedUser manager = new AuthenticatedUser(3L, "manager-public", "manager@nexoskill.local",
+				"Certification", "Manager", "Certification Manager", Set.of("CUSTOM_CERT_MANAGER"),
+				Set.of("STUDENT_VIEW", "STUDENT_CERTIFICATION_MANAGE"), NOW, UserAccessStatus.ACTIVE,
+				null, null, false, NOW, null);
+		TenantContext tenant = TenantContext.organization(10L, "organization-public", "ORG", false);
+
+		assertThatThrownBy(() -> service.importSnapshot(tenant, "student-public", null, manager))
+				.isInstanceOfSatisfying(BusinessException.class, exception -> {
+					assertThat(exception.getCode()).isEqualTo("CERTIFICATION_OPERATION_FORBIDDEN");
+					assertThat(exception.getMessage()).isEqualTo("No tienes permiso para importar colaboradores.");
+				});
+	}
+
+	@Test
 	void bindsNullableCertificationDatesAsOracleDates() {
 		MapSqlParameterSource parameters = new MapSqlParameterSource();
 		StudentCertificationService.addDateParameter(parameters, "applicationDate", null);

@@ -7,12 +7,16 @@ import {
   type OwnProfile
 } from '../features/profile/api/profileApi'
 import { ApiRequestError } from '../shared/api/apiClient'
+import { BackButton } from '../shared/components/BackButton'
 import { FormActions } from '../shared/components/FormActions'
 import { useToast } from '../shared/components/ToastProvider'
 
 export function ProfilePage() {
-  const { refresh } = useAuth()
+  const { user, refresh } = useAuth()
   const toast = useToast()
+  const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
+  const canUpdate = administrator || user?.permissions.includes('PROFILE_UPDATE') === true
+  const canChangePassword = administrator || user?.permissions.includes('PASSWORD_CHANGE') === true
   const [profile, setProfile] = useState<OwnProfile | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -54,6 +58,7 @@ export function ProfilePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!canUpdate || submitting) return
     setSubmitting(true)
     setError(null)
 
@@ -82,87 +87,100 @@ export function ProfilePage() {
   }
 
   return (
-    <main className="content-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">Mi cuenta</p>
-          <h1>Perfil y seguridad</h1>
-          <p className="muted">Administra tus datos personales y contraseña.</p>
-        </div>
+    <main className="content-page profile-page">
+      <div className="editor-page-navigation">
+        <BackButton fallback="/dashboard" label="Regresar" />
       </div>
 
       {error && <div className="error-message" role="alert">{error}</div>}
 
-      <div className="management-grid profile-grid">
-        <form className="management-section" onSubmit={(event) => void handleSubmit(event)}>
-          <div>
-            <h2>Datos personales</h2>
-            <p className="muted">El correo solo puede cambiarlo un administrador.</p>
-          </div>
+      <div className={`management-grid profile-grid${canChangePassword ? '' : ' profile-grid-single'}`}>
+        {canUpdate ? (
+          <form className="management-section" onSubmit={(event) => void handleSubmit(event)}>
+            <div>
+              <h2>Datos personales</h2>
+              <p className="muted">El correo solo puede cambiarlo un administrador.</p>
+            </div>
 
-          <div className="form-field form-wide">
-            <label htmlFor="profile-email">Correo electrónico</label>
-            <input id="profile-email" value={profile?.email ?? ''} disabled />
-          </div>
+            <div className="form-field form-wide">
+              <label htmlFor="profile-email">Correo electrónico</label>
+              <input id="profile-email" value={profile?.email ?? ''} disabled />
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="profile-first-name">Nombre</label>
-            <input
-              id="profile-first-name"
-              value={firstName}
-              onChange={(event) => setFirstName(event.target.value)}
-              required
-              maxLength={100}
-            />
-          </div>
+            <div className="form-field">
+              <label htmlFor="profile-first-name">Nombre</label>
+              <input
+                id="profile-first-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                required
+                maxLength={100}
+              />
+            </div>
 
-          <div className="form-field">
-            <label htmlFor="profile-last-name">Apellidos</label>
-            <input
-              id="profile-last-name"
-              value={lastName}
-              onChange={(event) => setLastName(event.target.value)}
-              required
-              maxLength={150}
-            />
-          </div>
+            <div className="form-field">
+              <label htmlFor="profile-last-name">Apellidos</label>
+              <input
+                id="profile-last-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                required
+                maxLength={150}
+              />
+            </div>
 
-          <div className="form-field form-wide">
-            <label htmlFor="profile-display-name">Nombre visible</label>
-            <input
-              id="profile-display-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              maxLength={250}
-            />
-          </div>
+            <div className="form-field form-wide">
+              <label htmlFor="profile-display-name">Nombre visible</label>
+              <input
+                id="profile-display-name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                maxLength={250}
+              />
+            </div>
 
-          <FormActions className="form-wide">
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={submitting || !profile}
-              onClick={() => profile && synchronize(profile)}
-            >
-              Cancelar
-            </button>
-            <button className="primary-button" type="submit" disabled={submitting}>
-              {submitting ? 'Guardando…' : 'Guardar cambios'}
-            </button>
-          </FormActions>
-        </form>
+            <FormActions className="form-wide">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={submitting || !profile}
+                onClick={() => profile && synchronize(profile)}
+              >
+                Cancelar
+              </button>
+              <button className="primary-button" type="submit" disabled={submitting}>
+                {submitting ? 'Guardando…' : 'Guardar cambios'}
+              </button>
+            </FormActions>
+          </form>
+        ) : (
+          <section className="management-section" aria-label="Datos personales">
+            <div>
+              <h2>Datos personales</h2>
+              <p className="muted">Información de consulta.</p>
+            </div>
+            <dl className="role-readonly-summary profile-readonly-summary">
+              <div><dt>Correo electrónico</dt><dd>{profile?.email ?? 'N/A'}</dd></div>
+              <div><dt>Nombre</dt><dd>{firstName || 'N/A'}</dd></div>
+              <div><dt>Apellidos</dt><dd>{lastName || 'N/A'}</dd></div>
+              <div><dt>Nombre visible</dt><dd>{displayName || 'N/A'}</dd></div>
+            </dl>
+          </section>
+        )}
 
-        <section className="management-section security-panel">
-          <div>
-            <h2>Contraseña</h2>
-            <p className="muted">
-              Cambiarla revocará las demás sesiones activas de tu cuenta.
-            </p>
-          </div>
-          <Link className="primary-button button-link" to="/change-password">
-            Cambiar contraseña
-          </Link>
-        </section>
+        {canChangePassword && (
+          <section className="management-section security-panel">
+            <div>
+              <h2>Contraseña</h2>
+              <p className="muted">
+                Cambiarla revocará las demás sesiones activas de tu cuenta.
+              </p>
+            </div>
+            <Link className="primary-button button-link" to="/change-password">
+              Cambiar contraseña
+            </Link>
+          </section>
+        )}
       </div>
     </main>
   )

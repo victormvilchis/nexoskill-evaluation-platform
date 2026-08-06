@@ -201,6 +201,23 @@ class StudentImportServiceParsingTest {
 	}
 
 	@Test
+	void normalizesImportedCatalogValuesBeforeComparisonAndCreation() {
+		assertEquals("DESARROLLADOR",
+				StudentImportService.normalizeImportedCatalogValue("  Desarrollador  ", 200));
+		assertEquals("PERFIL TECNOLÓGICO",
+				StudentImportService.normalizeImportedCatalogValue("Perfil   tecnológico", 200));
+		assertNull(StudentImportService.normalizeImportedCatalogValue("   ", 200));
+	}
+
+	@Test
+	void formatsImportedCollaboratorNamesForDisplayWithoutChangingStoredIdentity() {
+		assertEquals("Cinthia Cristina Hernandez Hernandez",
+				StudentImportService.displayPersonName("CINTHIA CRISTINA HERNANDEZ HERNANDEZ"));
+		assertEquals("Ángel De-la Cruz", StudentImportService.displayPersonName("  ÁNGEL   DE-LA CRUZ  "));
+		assertNull(StudentImportService.displayPersonName(null));
+	}
+
+	@Test
 	void importsAdministrativeFailuresOnlyForSpreadsheetAttemptColumns() {
 		assertTrue(StudentImportService.importsAttempt("TECHNOLOGICAL"));
 		assertTrue(StudentImportService.importsAttempt("DEVELOPMENT_SECURITY"));
