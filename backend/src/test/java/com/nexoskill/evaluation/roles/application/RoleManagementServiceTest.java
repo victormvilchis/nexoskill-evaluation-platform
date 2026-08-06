@@ -36,9 +36,11 @@ class RoleManagementServiceTest {
                 .flatMap(module -> module.permissions().stream())
                 .map(RoleManagementService.PermissionDescriptor::code)
                 .collect(java.util.stream.Collectors.toSet());
-        assertThat(visible).contains("PROFILE_VIEW", "PASSWORD_CHANGE", "STUDENT_VIEW", "STUDENT_IMPORT")
+        assertThat(visible).contains("PROFILE_VIEW", "PASSWORD_CHANGE", "STUDENT_VIEW", "STUDENT_IMPORT",
+                        "CATALOG_VIEW", "CATALOG_CREATE", "CATALOG_UPDATE", "CATALOG_STATUS_CHANGE",
+                        "CATALOG_DELETE")
                 .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE", "GLOBAL_CONTENT_PROMOTE",
-                        "STUDENT_CERTIFICATION_CATALOG_VIEW");
+                        "STUDENT_CERTIFICATION_CATALOG_VIEW", "CATALOG_MANAGE");
         assertThat(catalog.modules().stream()
                 .flatMap(module -> module.permissions().stream())
                 .filter(permission -> permission.code().equals("PROFILE_VIEW")
@@ -146,6 +148,21 @@ class RoleManagementServiceTest {
     }
 
     @Test
+    void shouldPersistCatalogStatusPermissionWithoutGrantingPhysicalDeletion() {
+        Fixture fixture = fixture();
+        when(fixture.roles.countByNormalizedName("Gestor de estados", null)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoleManagementService.RoleDetail created = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Gestor de estados", null,
+                        Set.of("CATALOG_VIEW", "CATALOG_STATUS_CHANGE")), actor());
+
+        assertThat(created.permissionCodes())
+                .contains("CATALOG_VIEW", "CATALOG_STATUS_CHANGE")
+                .doesNotContain("CATALOG_CREATE", "CATALOG_UPDATE", "CATALOG_DELETE", "CATALOG_MANAGE");
+    }
+
+    @Test
     void shouldGroupCertificationManagementWithCollaboratorsAndPersistProfileSelections() {
         Fixture fixture = fixture();
         when(fixture.roles.countByNormalizedName("Perfil configurable", null)).thenReturn(0L);
@@ -186,6 +203,12 @@ class RoleManagementServiceTest {
                 permission("STUDENT_CERTIFICATION_CATALOG_VIEW", "Consultar catálogos de certificación", "STUDENTS"),
                 permission("TALENT_VIEW", "Ver Talent Bank", "TALENT_BANK"),
                 permission("TALENT_CONVERT", "Convertir a colaborador", "TALENT_BANK"),
+                permission("CATALOG_VIEW", "Consultar catálogos", "CATALOGS"),
+                permission("CATALOG_MANAGE", "Administrar catálogos", "CATALOGS"),
+                permission("CATALOG_CREATE", "Crear registros de catálogo", "CATALOGS"),
+                permission("CATALOG_UPDATE", "Editar registros de catálogo", "CATALOGS"),
+                permission("CATALOG_STATUS_CHANGE", "Activar e inactivar registros de catálogo", "CATALOGS"),
+                permission("CATALOG_DELETE", "Eliminar definitivamente registros de catálogo", "CATALOGS"),
                 permission("QUESTION_VIEW", "Ver preguntas", "QUESTION_BANK"),
                 permission("QUESTION_UPDATE", "Editar preguntas", "QUESTION_BANK"),
                 permission("ORGANIZATION_VIEW", "Ver organizaciones", "ORGANIZATIONS"),

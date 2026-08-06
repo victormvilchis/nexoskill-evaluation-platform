@@ -194,8 +194,10 @@ export default function App() {
             <Route path="/admin/catalogs/:type" element={<CatalogItemsPage />} />
             <Route path="/admin/catalogs/:type/:id" element={<CatalogItemsPage />} />
           </Route>
-          <Route element={<PermissionRoute permission="CATALOG_MANAGE" />}>
+          <Route element={<PermissionRoute anyOf={["CATALOG_CREATE", "CATALOG_MANAGE"]} />}>
             <Route path="/admin/catalogs/:type/new" element={<CatalogItemsPage />} />
+          </Route>
+          <Route element={<PermissionRoute anyOf={["CATALOG_UPDATE", "CATALOG_MANAGE"]} />}>
             <Route path="/admin/catalogs/:type/:id/edit" element={<CatalogItemsPage />} />
           </Route>
           <Route path="/admin/question-categories" element={<Navigate to="/admin/catalogs/CATEGORIES" replace />} />

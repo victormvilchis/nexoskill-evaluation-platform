@@ -20,7 +20,6 @@ import com.nexoskill.evaluation.organizations.infrastructure.persistence.Organiz
 import com.nexoskill.evaluation.questionbank.domain.model.CatalogStatus;
 import com.nexoskill.evaluation.questionbank.domain.model.QuestionTechnologyStatus;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryJpaEntity;
-import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryStatusHistoryJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionCategoryStatusHistoryRepository;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionDifficultyJpaEntity;
 import com.nexoskill.evaluation.questionbank.infrastructure.persistence.QuestionTechnologyJpaEntity;
@@ -117,7 +116,7 @@ public class CatalogAdministrationService {
 	@Transactional(readOnly = true)
 	public Item get(CatalogType type, String id, TenantContext tenant) {
 		requireTenant(tenant);
-		Item item = getWithoutSecurity(type, id);
+		Item item = getWithoutSecurity(type, id, true);
 		assertReadable(type, item, tenant);
 		return item;
 	}
@@ -125,38 +124,47 @@ public class CatalogAdministrationService {
 	@Transactional
 	public Item create(CatalogType type, Upsert request, Long actorId, TenantContext tenant) {
 		requireTenant(tenant);
-		validate(request);
+		validate(type, request);
 		OwnershipTarget owner = resolveCreationOwner(type, request.organizationPublicId(), tenant);
 		String code = normalizeCode(request.code());
 		String name = clean(request.name(), 200);
 		assertUnique(type, null, code, name, owner.scope(), owner.organizationPublicId());
 		Instant now = clock.instant();
-		Item result = switch (type) {
-		case CATEGORIES ->
-			categoryItem(categories.saveAndFlush(QuestionCategoryJpaEntity.create(UUID.randomUUID().toString(), code,
-					name, cleanOptional(request.description(), 500), owner.scope(), categoryOwnerId(owner), actorId,
-					now)));
-		case TECHNOLOGIES -> {
-			QuestionTechnologyJpaEntity entity = technologies.saveAndFlush(QuestionTechnologyJpaEntity.create(
-					UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
-					order(request.displayOrder()), owner.scope(), owner.ownerOrganizationId(), actorId, now));
-			synchronizeCertificationTechnology(entity, now);
-			yield technologyItem(entity);
+		Item result;
+		try {
+			result = switch (type) {
+			case CATEGORIES ->
+				categoryItem(categories.saveAndFlush(QuestionCategoryJpaEntity.create(UUID.randomUUID().toString(), code,
+						name, cleanOptional(request.description(), 500), owner.scope(), categoryOwnerId(owner), actorId,
+						now)), false);
+			case TECHNOLOGIES -> {
+				QuestionTechnologyJpaEntity entity = technologies.saveAndFlush(QuestionTechnologyJpaEntity.create(
+						UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
+						order(request.displayOrder()), owner.scope(), owner.ownerOrganizationId(), actorId, now));
+				synchronizeCertificationTechnology(entity, now);
+				yield technologyItem(entity, false);
+			}
+			case PROFESSIONAL_PROFILES -> profileItem(
+					profiles.saveAndFlush(ProfessionalCertificationProfileJpaEntity.create(UUID.randomUUID().toString(),
+							code, name, cleanOptional(request.description(), 500), order(request.displayOrder()),
+							parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner), owner.scope(),
+							owner.ownerOrganizationId(), actorId, now)), false);
+			case TECHNOLOGICAL_PROFILES ->
+				technologicalProfileItem(technologicalProfiles.saveAndFlush(TechnologicalProfileCatalogJpaEntity.create(
+						UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
+						order(request.displayOrder()), owner.scope(), owner.ownerOrganizationId(), actorId, now)), false);
+			case QUESTION_TYPES -> typeItem(types.saveAndFlush(QuestionTypeJpaEntity.create(code, name,
+					cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)), false);
+			case DIFFICULTIES -> difficultyItem(difficulties.saveAndFlush(QuestionDifficultyJpaEntity.create(code, name,
+					cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)), false);
+			};
+		} catch (DataIntegrityViolationException exception) {
+			LOGGER.info("La creación del catálogo {} fue bloqueada por una restricción de unicidad.", type);
+			throw catalogDuplicate(type);
+		} catch (DataAccessException exception) {
+			LOGGER.error("No fue posible crear un valor del catálogo {}.", type, exception);
+			throw catalogOperationFailed();
 		}
-		case PROFESSIONAL_PROFILES -> profileItem(
-				profiles.saveAndFlush(ProfessionalCertificationProfileJpaEntity.create(UUID.randomUUID().toString(),
-						code, name, cleanOptional(request.description(), 500), order(request.displayOrder()),
-						parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner), owner.scope(),
-						owner.ownerOrganizationId(), actorId, now)));
-		case TECHNOLOGICAL_PROFILES ->
-			technologicalProfileItem(technologicalProfiles.saveAndFlush(TechnologicalProfileCatalogJpaEntity.create(
-					UUID.randomUUID().toString(), code, name, cleanOptional(request.description(), 500),
-					order(request.displayOrder()), owner.scope(), owner.ownerOrganizationId(), actorId, now)));
-		case QUESTION_TYPES -> typeItem(types.saveAndFlush(QuestionTypeJpaEntity.create(code, name,
-				cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)));
-		case DIFFICULTIES -> difficultyItem(difficulties.saveAndFlush(QuestionDifficultyJpaEntity.create(code, name,
-				cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now)));
-		};
 		record(actorId, "CATALOG_ITEM_CREATED", type, result, "Se creó un valor de catálogo.", tenant);
 		return result;
 	}
@@ -164,7 +172,7 @@ public class CatalogAdministrationService {
 	@Transactional
 	public Item update(CatalogType type, String id, Upsert request, Long actorId, TenantContext tenant) {
 		requireTenant(tenant);
-		validate(request);
+		validate(type, request);
 		Item current = getWithoutSecurity(type, id);
 		assertWritable(type, current, tenant);
 		String name = clean(request.name(), 200);
@@ -175,49 +183,58 @@ public class CatalogAdministrationService {
 		assertUnique(type, id, current.code(), name, ContentScope.valueOf(current.scope()),
 				current.organizationPublicId());
 		Instant now = clock.instant();
-		Item result = switch (type) {
-		case CATEGORIES -> {
-			QuestionCategoryJpaEntity entity = requireCategory(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			entity.update(entity.getCode(), name, cleanOptional(request.description(), 500), actorId, now);
-			yield categoryItem(categories.saveAndFlush(entity));
+		Item result;
+		try {
+			result = switch (type) {
+			case CATEGORIES -> {
+				QuestionCategoryJpaEntity entity = requireCategory(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				entity.update(entity.getCode(), name, cleanOptional(request.description(), 500), actorId, now);
+				yield categoryItem(categories.saveAndFlush(entity), false);
+			}
+			case TECHNOLOGIES -> {
+				QuestionTechnologyJpaEntity entity = requireTechnology(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
+				entity = technologies.saveAndFlush(entity);
+				synchronizeCertificationTechnology(entity, now);
+				yield technologyItem(entity, false);
+			}
+			case PROFESSIONAL_PROFILES -> {
+				ProfessionalCertificationProfileJpaEntity entity = requireProfile(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				OwnershipTarget owner = new OwnershipTarget(entity.getContentScope(), entity.getOwnerOrganizationId(),
+						current.organizationPublicId());
+				entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()),
+						parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner), actorId, now);
+				yield profileItem(profiles.saveAndFlush(entity), false);
+			}
+			case TECHNOLOGICAL_PROFILES -> {
+				TechnologicalProfileCatalogJpaEntity entity = requireTechnologicalProfile(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
+				yield technologicalProfileItem(technologicalProfiles.saveAndFlush(entity), false);
+			}
+			case QUESTION_TYPES -> {
+				QuestionTypeJpaEntity entity = requireType(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
+				yield typeItem(types.saveAndFlush(entity), false);
+			}
+			case DIFFICULTIES -> {
+				QuestionDifficultyJpaEntity entity = requireDifficulty(id);
+				checkVersion(entity.getVersion(), request.expectedVersion());
+				entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
+				yield difficultyItem(difficulties.saveAndFlush(entity), false);
+			}
+			};
+		} catch (DataIntegrityViolationException exception) {
+			LOGGER.info("La actualización del catálogo {} {} fue bloqueada por una restricción de unicidad.", type, id);
+			throw catalogDuplicate(type);
+		} catch (DataAccessException exception) {
+			LOGGER.error("No fue posible actualizar el catálogo {} {}.", type, id, exception);
+			throw catalogOperationFailed();
 		}
-		case TECHNOLOGIES -> {
-			QuestionTechnologyJpaEntity entity = requireTechnology(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
-			entity = technologies.saveAndFlush(entity);
-			synchronizeCertificationTechnology(entity, now);
-			yield technologyItem(entity);
-		}
-		case PROFESSIONAL_PROFILES -> {
-			ProfessionalCertificationProfileJpaEntity entity = requireProfile(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			OwnershipTarget owner = new OwnershipTarget(entity.getContentScope(), entity.getOwnerOrganizationId(),
-					current.organizationPublicId());
-			entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()),
-					parseSuggestedProfile(request.suggestedTechnologicalProfile(), owner), actorId, now);
-			yield profileItem(profiles.saveAndFlush(entity));
-		}
-		case TECHNOLOGICAL_PROFILES -> {
-			TechnologicalProfileCatalogJpaEntity entity = requireTechnologicalProfile(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
-			yield technologicalProfileItem(technologicalProfiles.saveAndFlush(entity));
-		}
-		case QUESTION_TYPES -> {
-			QuestionTypeJpaEntity entity = requireType(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
-			yield typeItem(types.saveAndFlush(entity));
-		}
-		case DIFFICULTIES -> {
-			QuestionDifficultyJpaEntity entity = requireDifficulty(id);
-			checkVersion(entity.getVersion(), request.expectedVersion());
-			entity.update(name, cleanOptional(request.description(), 500), order(request.displayOrder()), actorId, now);
-			yield difficultyItem(difficulties.saveAndFlush(entity));
-		}
-		};
 		record(actorId, "CATALOG_ITEM_UPDATED", type, result, "Se actualizó un valor de catálogo.", tenant);
 		return result;
 	}
@@ -230,49 +247,55 @@ public class CatalogAdministrationService {
 		assertWritable(type, current, tenant);
 		String target = requireOperationalStatus(nextStatus);
 		Instant now = clock.instant();
-		Item result = switch (type) {
-		case CATEGORIES -> {
-			QuestionCategoryJpaEntity entity = requireCategory(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			if (target.equals(ACTIVE))
-				entity.activate(actorId, now);
-			else
-				entity.deactivate(actorId, now);
-			yield categoryItem(categories.saveAndFlush(entity));
+		Item result;
+		try {
+			result = switch (type) {
+			case CATEGORIES -> {
+				QuestionCategoryJpaEntity entity = requireCategory(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				if (target.equals(ACTIVE))
+					entity.activate(actorId, now);
+				else
+					entity.deactivate(actorId, now);
+				yield categoryItem(categories.saveAndFlush(entity), false);
+			}
+			case TECHNOLOGIES -> {
+				QuestionTechnologyJpaEntity entity = requireTechnology(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				entity.changeStatus(QuestionTechnologyStatus.valueOf(target), actorId, now);
+				entity = technologies.saveAndFlush(entity);
+				synchronizeCertificationTechnology(entity, now);
+				yield technologyItem(entity, false);
+			}
+			case PROFESSIONAL_PROFILES -> {
+				ProfessionalCertificationProfileJpaEntity entity = requireProfile(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				entity.changeStatus(target, actorId, now);
+				yield profileItem(profiles.saveAndFlush(entity), false);
+			}
+			case TECHNOLOGICAL_PROFILES -> {
+				TechnologicalProfileCatalogJpaEntity entity = requireTechnologicalProfile(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				entity.changeStatus(target, actorId, now);
+				yield technologicalProfileItem(technologicalProfiles.saveAndFlush(entity), false);
+			}
+			case QUESTION_TYPES -> {
+				QuestionTypeJpaEntity entity = requireType(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				entity.changeStatus(CatalogStatus.valueOf(target), actorId, now);
+				yield typeItem(types.saveAndFlush(entity), false);
+			}
+			case DIFFICULTIES -> {
+				QuestionDifficultyJpaEntity entity = requireDifficulty(id);
+				checkVersion(entity.getVersion(), expectedVersion);
+				entity.changeStatus(CatalogStatus.valueOf(target), actorId, now);
+				yield difficultyItem(difficulties.saveAndFlush(entity), false);
+			}
+			};
+		} catch (DataAccessException exception) {
+			LOGGER.error("No fue posible cambiar el estado del catálogo {} {}.", type, id, exception);
+			throw catalogOperationFailed();
 		}
-		case TECHNOLOGIES -> {
-			QuestionTechnologyJpaEntity entity = requireTechnology(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			entity.changeStatus(QuestionTechnologyStatus.valueOf(target), actorId, now);
-			entity = technologies.saveAndFlush(entity);
-			synchronizeCertificationTechnology(entity, now);
-			yield technologyItem(entity);
-		}
-		case PROFESSIONAL_PROFILES -> {
-			ProfessionalCertificationProfileJpaEntity entity = requireProfile(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			entity.changeStatus(target, actorId, now);
-			yield profileItem(profiles.saveAndFlush(entity));
-		}
-		case TECHNOLOGICAL_PROFILES -> {
-			TechnologicalProfileCatalogJpaEntity entity = requireTechnologicalProfile(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			entity.changeStatus(target, actorId, now);
-			yield technologicalProfileItem(technologicalProfiles.saveAndFlush(entity));
-		}
-		case QUESTION_TYPES -> {
-			QuestionTypeJpaEntity entity = requireType(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			entity.changeStatus(CatalogStatus.valueOf(target), actorId, now);
-			yield typeItem(types.saveAndFlush(entity));
-		}
-		case DIFFICULTIES -> {
-			QuestionDifficultyJpaEntity entity = requireDifficulty(id);
-			checkVersion(entity.getVersion(), expectedVersion);
-			entity.changeStatus(CatalogStatus.valueOf(target), actorId, now);
-			yield difficultyItem(difficulties.saveAndFlush(entity));
-		}
-		};
 		record(actorId, target.equals(ACTIVE) ? "CATALOG_ITEM_ACTIVATED" : "CATALOG_ITEM_DEACTIVATED", type, result,
 				"Se cambió el estado del valor de catálogo.", tenant);
 		return result;
@@ -280,12 +303,13 @@ public class CatalogAdministrationService {
 
 	@Transactional(readOnly = true)
 	public Dependencies dependencies(CatalogType type, String id, TenantContext tenant) {
-		Item item = get(type, id, tenant);
-		long count = dependencyCount(type, dependencyKey(type, id));
-		List<String> details = count == 0 ? List.of() : List.of(dependencyLabel(type, count));
-		boolean deletable = DIRECT_LIFECYCLE_TYPES.contains(type) ? count == 0
-				: INACTIVE.equals(item.status()) && count == 0;
-		return new Dependencies(count, details, deletable);
+		requireTenant(tenant);
+		Item item = getWithoutSecurity(type, id);
+		assertReadable(type, item, tenant);
+		DependencySummary summary = dependencySummary(type, dependencyKey(type, id));
+		boolean deletable = DIRECT_LIFECYCLE_TYPES.contains(type) ? summary.total() == 0
+				: INACTIVE.equals(item.status()) && summary.total() == 0;
+		return new Dependencies(summary.total(), summary.details(), deletable);
 	}
 
 	@Transactional
@@ -299,13 +323,9 @@ public class CatalogAdministrationService {
 					"Primero debes inactivar el registro antes de eliminarlo.");
 		}
 		checkVersion(item.version(), expectedVersion);
-		long count = dependencyCount(type, dependencyKey(type, id));
-		if (count > 0) {
-			if (directLifecycle)
-				throw catalogInUse(count);
-			throw new BusinessException("CATALOG_IN_USE",
-					"No es posible eliminar este registro porque está siendo utilizado por información existente. "
-							+ "Puedes mantenerlo inactivo para impedir su uso en nuevos registros.");
+		DependencySummary dependencySummary = dependencySummary(type, dependencyKey(type, id));
+		if (dependencySummary.total() > 0) {
+			throw catalogInUse(type, item.name(), dependencySummary.total());
 		}
 		try {
 			switch (type) {
@@ -342,11 +362,11 @@ public class CatalogAdministrationService {
 			}
 			}
 		} catch (DataIntegrityViolationException exception) {
-			if (directLifecycle)
-				throw catalogInUse();
-			throw new BusinessException("CATALOG_IN_USE",
-					"No es posible eliminar este registro porque está siendo utilizado por información existente. "
-							+ "Puedes mantenerlo inactivo para impedir su uso en nuevos registros.");
+			LOGGER.info("La eliminación del catálogo {} {} fue bloqueada por integridad referencial.", type, id);
+			throw catalogInUse(type, item.name(), null);
+		} catch (DataAccessException exception) {
+			LOGGER.error("No fue posible eliminar el catálogo {} {}.", type, id, exception);
+			throw catalogOperationFailed();
 		}
 		record(actorId, "CATALOG_ITEM_DELETED", type, item,
 				directLifecycle ? "Se eliminó físicamente un valor de catálogo sin dependencias."
@@ -355,8 +375,8 @@ public class CatalogAdministrationService {
 	}
 
 	private TypeSummary typeSummary(CatalogType type, TenantContext tenant) {
-		List<Item> values = tenant.globalAdministrator() ? allItems(type, null)
-				: organizationVisibleItems(type, null, tenant.organizationId());
+		List<Item> values = tenant.globalAdministrator() ? allItemsWithoutDependencies(type, null)
+				: organizationVisibleItemsWithoutDependencies(type, null, tenant.organizationId());
 		return new TypeSummary(type, type.label(), type.description(),
 				values.stream().filter(value -> ACTIVE.equals(value.status())).count(),
 				values.stream().filter(value -> INACTIVE.equals(value.status())).count(), values.stream()
@@ -380,8 +400,31 @@ public class CatalogAdministrationService {
 		};
 	}
 
+	private List<Item> organizationVisibleItemsWithoutDependencies(CatalogType type, String status,
+			Long organizationId) {
+		return switch (type) {
+		case CATEGORIES ->
+			categories.findVisible(organizationId, status == null ? null : CatalogStatus.valueOf(status)).stream()
+					.filter(value -> value.getStatus() != CatalogStatus.DELETED)
+					.map(value -> categoryItem(value, false)).toList();
+		case TECHNOLOGIES ->
+			technologies.findVisible(organizationId, status == null ? null : QuestionTechnologyStatus.valueOf(status))
+					.stream().map(value -> technologyItem(value, false)).toList();
+		case PROFESSIONAL_PROFILES -> profiles.findVisible(organizationId, status).stream()
+				.map(value -> profileItem(value, false)).toList();
+		case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findVisible(organizationId, status).stream()
+				.map(value -> technologicalProfileItem(value, false)).toList();
+		case QUESTION_TYPES, DIFFICULTIES -> globalItemsWithoutDependencies(type, status);
+		};
+	}
+
 	private List<Item> globalItems(CatalogType type, String status) {
 		return allItems(type, status).stream().filter(value -> "GLOBAL".equals(value.scope())).toList();
+	}
+
+	private List<Item> globalItemsWithoutDependencies(CatalogType type, String status) {
+		return allItemsWithoutDependencies(type, status).stream()
+				.filter(value -> "GLOBAL".equals(value.scope())).toList();
 	}
 
 	private List<Item> allItems(CatalogType type, String status) {
@@ -409,6 +452,34 @@ public class CatalogAdministrationService {
 		};
 	}
 
+	private List<Item> allItemsWithoutDependencies(CatalogType type, String status) {
+		return switch (type) {
+		case CATEGORIES -> categories.findAll().stream().filter(value -> value.getStatus() != CatalogStatus.DELETED)
+				.filter(value -> matchesStatus(value.getStatus().name(), status))
+				.sorted(Comparator.comparing(QuestionCategoryJpaEntity::getName))
+				.map(value -> categoryItem(value, false)).toList();
+		case TECHNOLOGIES -> technologies.findAllByOrderByDisplayOrderAscNameAsc().stream()
+				.filter(value -> matchesStatus(value.getStatus().name(), status))
+				.map(value -> technologyItem(value, false)).toList();
+		case PROFESSIONAL_PROFILES -> profiles.findAllByOrderBySortOrderAscNameAsc().stream()
+				.filter(value -> matchesStatus(value.getStatus(), status))
+				.map(value -> profileItem(value, false)).toList();
+		case TECHNOLOGICAL_PROFILES -> technologicalProfiles.findAll().stream()
+				.filter(value -> matchesStatus(value.getStatus(), status))
+				.sorted(Comparator.comparingInt(TechnologicalProfileCatalogJpaEntity::getDisplayOrder)
+						.thenComparing(TechnologicalProfileCatalogJpaEntity::getName))
+				.map(value -> technologicalProfileItem(value, false)).toList();
+		case QUESTION_TYPES -> types.findAllByOrderByDisplayOrderAscNameAsc().stream()
+				.filter(value -> value.getStatus() != CatalogStatus.DELETED)
+				.filter(value -> matchesStatus(value.getStatus().name(), status))
+				.map(value -> typeItem(value, false)).toList();
+		case DIFFICULTIES -> difficulties.findAllByOrderBySortOrderAsc().stream()
+				.filter(value -> value.getStatus() != CatalogStatus.DELETED)
+				.filter(value -> matchesStatus(value.getStatus().name(), status))
+				.map(value -> difficultyItem(value, false)).toList();
+		};
+	}
+
 	private List<Item> filterByOrganization(List<Item> values, String organizationPublicId) {
 		if (organizationPublicId == null || organizationPublicId.isBlank())
 			return values;
@@ -426,7 +497,7 @@ public class CatalogAdministrationService {
 	}
 
 	private Item categoryListItem(QuestionCategoryJpaEntity value) {
-		return categoryItem(value, false);
+		return categoryItem(value, true);
 	}
 
 	private Item categoryItem(QuestionCategoryJpaEntity value, boolean includeDependencies) {
@@ -594,32 +665,46 @@ public class CatalogAdministrationService {
 	private void assertUnique(CatalogType type, String excludedId, String code, String name, ContentScope scope,
 			String organizationPublicId) {
 		String normalizedName = normalizeName(name);
-		boolean duplicate = allItems(type, null).stream()
-				.filter(value -> excludedId == null || !value.id().equals(excludedId))
-				.filter(value -> Objects.equals(scope.name(), value.scope()))
-				.filter(value -> scope == ContentScope.GLOBAL
-						|| Objects.equals(organizationPublicId, value.organizationPublicId()))
-				.anyMatch(value -> value.code().equalsIgnoreCase(code)
-						|| normalizeName(value.name()).equals(normalizedName));
-		if (duplicate) {
-			throw new BusinessException("CATALOG_DUPLICATE",
-					"Ya existe un registro con ese nombre o código dentro de la organización propietaria.");
+		try {
+			boolean duplicate = allItemsWithoutDependencies(type, null).stream()
+					.filter(value -> excludedId == null || !value.id().equals(excludedId))
+					.filter(value -> Objects.equals(scope.name(), value.scope()))
+					.filter(value -> scope == ContentScope.GLOBAL
+							|| Objects.equals(organizationPublicId, value.organizationPublicId()))
+					.anyMatch(value -> value.code().equalsIgnoreCase(code)
+							|| normalizeName(value.name()).equals(normalizedName));
+			if (duplicate) {
+				throw catalogDuplicate(type);
+			}
+		} catch (DataAccessException exception) {
+			LOGGER.warn("No fue posible validar duplicados para el catálogo {}.", type, exception);
+			throw duplicateCheckFailed(type);
 		}
 	}
 
 	private long dependencyCount(CatalogType type, Object key) {
+		return dependencySummary(type, key).total();
+	}
+
+	private DependencySummary dependencySummary(CatalogType type, Object key) {
 		MapSqlParameterSource parameters = new MapSqlParameterSource("key", key);
-		try {
-			long total = 0;
-			for (String sql : CatalogDependencyQueries.forType(type)) {
-				Long result = jdbc.queryForObject(sql, parameters, Long.class);
-				total += result == null ? 0 : result;
+		long total = 0;
+		List<String> details = new java.util.ArrayList<>();
+		for (CatalogDependencyQueries.DependencyQuery dependency : CatalogDependencyQueries.forType(type)) {
+			try {
+				Long result = jdbc.queryForObject(dependency.sql(), parameters, Long.class);
+				long count = result == null ? 0 : result;
+				if (count > 0) {
+					total += count;
+					details.add(count + " " + dependency.label());
+				}
+			} catch (DataAccessException exception) {
+				LOGGER.warn("No fue posible calcular la relación '{}' del catálogo {} para la clave {}.",
+						dependency.label(), type, key, exception);
+				throw usageCheckFailed(type);
 			}
-			return total;
-		} catch (DataAccessException exception) {
-			LOGGER.warn("No fue posible calcular los usos del catálogo {} para la clave {}.", type, key, exception);
-			throw usageCheckFailed(type);
 		}
+		return new DependencySummary(total, List.copyOf(details));
 	}
 
 	private Object dependencyKey(CatalogType type, String id) {
@@ -629,16 +714,6 @@ public class CatalogAdministrationService {
 		case PROFESSIONAL_PROFILES -> requireProfile(id).getId();
 		case TECHNOLOGICAL_PROFILES -> requireTechnologicalProfile(id).getId();
 		case QUESTION_TYPES, DIFFICULTIES -> id;
-		};
-	}
-
-	private String dependencyLabel(CatalogType type, long count) {
-		return switch (type) {
-		case CATEGORIES -> count + " preguntas relacionadas";
-		case TECHNOLOGIES -> count + " usos en preguntas o certificaciones";
-		case PROFESSIONAL_PROFILES -> count + " perfiles de colaboradores";
-		case TECHNOLOGICAL_PROFILES -> count + " perfiles o sugerencias";
-		case QUESTION_TYPES, DIFFICULTIES -> count + " preguntas relacionadas";
 		};
 	}
 
@@ -668,13 +743,17 @@ public class CatalogAdministrationService {
 	}
 
 	private Item getWithoutSecurity(CatalogType type, String id) {
+		return getWithoutSecurity(type, id, false);
+	}
+
+	private Item getWithoutSecurity(CatalogType type, String id, boolean includeDependencies) {
 		return switch (type) {
-		case CATEGORIES -> categoryItem(requireCategory(id));
-		case TECHNOLOGIES -> technologyItem(requireTechnology(id));
-		case PROFESSIONAL_PROFILES -> profileItem(requireProfile(id));
-		case TECHNOLOGICAL_PROFILES -> technologicalProfileItem(requireTechnologicalProfile(id));
-		case QUESTION_TYPES -> typeItem(requireType(id));
-		case DIFFICULTIES -> difficultyItem(requireDifficulty(id));
+		case CATEGORIES -> categoryItem(requireCategory(id), includeDependencies);
+		case TECHNOLOGIES -> technologyItem(requireTechnology(id), includeDependencies);
+		case PROFESSIONAL_PROFILES -> profileItem(requireProfile(id), includeDependencies);
+		case TECHNOLOGICAL_PROFILES -> technologicalProfileItem(requireTechnologicalProfile(id), includeDependencies);
+		case QUESTION_TYPES -> typeItem(requireType(id), includeDependencies);
+		case DIFFICULTIES -> difficultyItem(requireDifficulty(id), includeDependencies);
 		};
 	}
 
@@ -691,29 +770,79 @@ public class CatalogAdministrationService {
 				"No fue posible comprobar si " + label + ". Intenta nuevamente.");
 	}
 
-	private BusinessException catalogInUse(long count) {
+	private BusinessException catalogInUse(CatalogType type, String name, Long count) {
+		String usage = count == null
+				? "actualmente está siendo " + usedWord(type)
+				: "actualmente está siendo " + usedWord(type) + " por " + count
+						+ (count == 1 ? " registro" : " registros");
 		return new BusinessException("CATALOG_IN_USE",
-				"No es posible eliminar este registro porque actualmente está siendo utilizado por "
-						+ count + (count == 1 ? " registro. " : " registros. ")
-						+ "Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.");
+				"No es posible eliminar " + catalogSubject(type) + " “" + name + "” porque " + usage + ". "
+						+ "Puedes " + deactivatePronoun(type)
+						+ " para evitar que esté disponible en nuevas asignaciones.");
 	}
 
-	private BusinessException catalogInUse() {
-		return new BusinessException("CATALOG_IN_USE",
-				"No es posible eliminar este registro porque actualmente está siendo utilizado. "
-						+ "Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.");
+	private BusinessException catalogDuplicate(CatalogType type) {
+		return new BusinessException("CATALOG_DUPLICATE",
+				"Ya existe " + catalogSubject(type)
+						+ " con este nombre o código dentro de la organización propietaria.");
+	}
+
+	private BusinessException duplicateCheckFailed(CatalogType type) {
+		return new BusinessException("CATALOG_DUPLICATE_CHECK_FAILED",
+				"No fue posible comprobar si ya existe " + catalogSubject(type) + " con este nombre. Intenta nuevamente.");
+	}
+
+	private BusinessException catalogOperationFailed() {
+		return new BusinessException("CATALOG_OPERATION_FAILED",
+				"No fue posible completar la operación. Intenta nuevamente.");
+	}
+
+	private String catalogSubject(CatalogType type) {
+		return switch (type) {
+		case CATEGORIES -> "la Categoría";
+		case TECHNOLOGIES -> "la Tecnología";
+		case PROFESSIONAL_PROFILES -> "el Perfil";
+		case TECHNOLOGICAL_PROFILES -> "el Perfil tecnológico";
+		case QUESTION_TYPES -> "el Tipo de pregunta";
+		case DIFFICULTIES -> "la Dificultad";
+		};
+	}
+
+	private String catalogNameRequiredMessage(CatalogType type) {
+		return switch (type) {
+		case CATEGORIES -> "Captura el nombre de la Categoría.";
+		case TECHNOLOGIES -> "Captura el nombre de la Tecnología.";
+		case PROFESSIONAL_PROFILES -> "Captura el nombre del Perfil.";
+		case TECHNOLOGICAL_PROFILES -> "Captura el nombre del Perfil tecnológico.";
+		case QUESTION_TYPES -> "Captura el nombre del Tipo de pregunta.";
+		case DIFFICULTIES -> "Captura el nombre de la Dificultad.";
+		};
+	}
+
+	private String usedWord(CatalogType type) {
+		return switch (type) {
+		case PROFESSIONAL_PROFILES, TECHNOLOGICAL_PROFILES, QUESTION_TYPES -> "utilizado";
+		case CATEGORIES, TECHNOLOGIES, DIFFICULTIES -> "utilizada";
+		};
+	}
+
+	private String deactivatePronoun(CatalogType type) {
+		return switch (type) {
+		case PROFESSIONAL_PROFILES, TECHNOLOGICAL_PROFILES, QUESTION_TYPES -> "inactivarlo";
+		case CATEGORIES, TECHNOLOGIES, DIFFICULTIES -> "inactivarla";
+		};
 	}
 
 	private BusinessException notFound() {
 		return new BusinessException("CATALOG_ITEM_NOT_FOUND", "El registro de catálogo solicitado no existe.");
 	}
 
-	private void validate(Upsert request) {
+	private void validate(CatalogType type, Upsert request) {
 		if (request == null || request.code() == null || request.code().isBlank()) {
-			throw new BusinessException("CATALOG_CODE_REQUIRED", "El código es obligatorio.");
+			throw new BusinessException("CATALOG_CODE_REQUIRED", "Captura el código del registro.");
 		}
 		if (request.name() == null || request.name().isBlank()) {
-			throw new BusinessException("CATALOG_NAME_REQUIRED", "El nombre es obligatorio.");
+			throw new BusinessException("CATALOG_NAME_REQUIRED", catalogNameRequiredMessage(type));
 		}
 	}
 
@@ -843,6 +972,9 @@ public class CatalogAdministrationService {
 		values.put("actorOrganizationId", tenant.organizationPublicId());
 		values.put("ownerOrganizationId", item.organizationPublicId());
 		audit.record(actorId, eventType, "CATALOGS", description, null, null, values, clock.instant());
+	}
+
+	private record DependencySummary(long total, List<String> details) {
 	}
 
 	private record OwnershipTarget(ContentScope scope, Long ownerOrganizationId, String organizationPublicId) {

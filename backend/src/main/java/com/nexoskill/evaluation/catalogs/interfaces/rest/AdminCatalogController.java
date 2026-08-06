@@ -30,26 +30,26 @@ public class AdminCatalogController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasAuthority('CATALOG_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAuthority('CATALOG_VIEW')")
 	public List<TypeSummary> types(HttpServletRequest request) {
 		return service.types(tenantContextResolver.resolve(request));
 	}
 
 	@GetMapping("/{type}")
-	@PreAuthorize("hasAuthority('CATALOG_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAuthority('CATALOG_VIEW')")
 	public List<Item> items(@PathVariable String type, @RequestParam(defaultValue = "ACTIVE") String status,
 			@RequestParam(required = false) String organizationPublicId, HttpServletRequest request) {
 		return service.items(parse(type), status, organizationPublicId, tenantContextResolver.resolve(request));
 	}
 
 	@GetMapping("/{type}/{id}")
-	@PreAuthorize("hasAuthority('CATALOG_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAuthority('CATALOG_VIEW')")
 	public Item get(@PathVariable String type, @PathVariable String id, HttpServletRequest request) {
 		return service.get(parse(type), id, tenantContextResolver.resolve(request));
 	}
 
 	@PostMapping("/{type}")
-	@PreAuthorize("hasAuthority('CATALOG_MANAGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAnyAuthority('CATALOG_CREATE','CATALOG_MANAGE')")
 	public ResponseEntity<Item> create(@PathVariable String type, @Valid @RequestBody UpsertRequest body,
 			@AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
 		Item result = service.create(parse(type), body.toCommand(), actor.internalId(),
@@ -58,7 +58,7 @@ public class AdminCatalogController {
 	}
 
 	@PutMapping("/{type}/{id}")
-	@PreAuthorize("hasAuthority('CATALOG_MANAGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAnyAuthority('CATALOG_UPDATE','CATALOG_MANAGE')")
 	public Item update(@PathVariable String type, @PathVariable String id, @Valid @RequestBody UpsertRequest body,
 			@AuthenticationPrincipal AuthenticatedUser actor, HttpServletRequest request) {
 		return service.update(parse(type), id, body.toCommand(), actor.internalId(),
@@ -66,7 +66,7 @@ public class AdminCatalogController {
 	}
 
 	@PostMapping("/{type}/{id}/{action:activate|deactivate}")
-	@PreAuthorize("hasAuthority('CATALOG_MANAGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAnyAuthority('CATALOG_STATUS_CHANGE','CATALOG_MANAGE')")
 	public Item status(@PathVariable String type, @PathVariable String id, @PathVariable String action,
 			@Valid @RequestBody StatusRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
 			HttpServletRequest request) {
@@ -75,13 +75,13 @@ public class AdminCatalogController {
 	}
 
 	@GetMapping("/{type}/{id}/dependencies")
-	@PreAuthorize("hasAuthority('CATALOG_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAuthority('CATALOG_VIEW')")
 	public Dependencies dependencies(@PathVariable String type, @PathVariable String id, HttpServletRequest request) {
 		return service.dependencies(parse(type), id, tenantContextResolver.resolve(request));
 	}
 
 	@DeleteMapping("/{type}/{id}")
-	@PreAuthorize("hasAuthority('CATALOG_MANAGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') or hasAnyAuthority('CATALOG_DELETE','CATALOG_MANAGE')")
 	public ResponseEntity<Void> delete(@PathVariable String type, @PathVariable String id,
 			@Valid @RequestBody DeleteRequest body, @AuthenticationPrincipal AuthenticatedUser actor,
 			HttpServletRequest request) {

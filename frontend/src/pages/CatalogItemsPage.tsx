@@ -101,12 +101,17 @@ export function CatalogItemsPage() {
   const toast = useToast()
   const { user } = useAuth()
   const permissions = useMemo(() => new Set(user?.permissions ?? []), [user?.permissions])
-  const canManage = permissions.has('CATALOG_MANAGE')
   const globalAdministrator = user?.roles.includes('ADMINISTRATOR') ?? false
+  const hasLegacyManage = permissions.has('CATALOG_MANAGE')
+  const canCreate = globalAdministrator || hasLegacyManage || permissions.has('CATALOG_CREATE')
+  const canUpdate = globalAdministrator || hasLegacyManage || permissions.has('CATALOG_UPDATE')
+  const canChangeStatus = globalAdministrator || hasLegacyManage || permissions.has('CATALOG_STATUS_CHANGE')
+  const canDelete = globalAdministrator || hasLegacyManage || permissions.has('CATALOG_DELETE')
   const [searchParams, setSearchParams] = useSearchParams()
   const type = params.type?.toUpperCase() as CatalogType
   const validType = catalogTypes.has(type)
-  const showUsageCount = type === 'TECHNOLOGIES'
+  const showUsageCount = type === 'CATEGORIES'
+    || type === 'TECHNOLOGIES'
     || type === 'PROFESSIONAL_PROFILES'
     || type === 'TECHNOLOGICAL_PROFILES'
   const tableColumnCount = showUsageCount ? 6 : 5
@@ -139,6 +144,17 @@ export function CatalogItemsPage() {
   useEffect(() => {
     if (!validType) navigate('/admin/catalogs/CATEGORIES', { replace: true })
   }, [navigate, validType])
+
+  useEffect(() => {
+    if (mode === 'create' && !canCreate) {
+      toast.error('No tienes permiso para realizar esta acción.')
+      navigate(listPath, { replace: true })
+    }
+    if (mode === 'edit' && !canUpdate) {
+      toast.error('No tienes permiso para realizar esta acción.')
+      navigate(listPath, { replace: true })
+    }
+  }, [canCreate, canUpdate, listPath, mode, navigate, toast])
 
   useEffect(() => {
     if (!validType) return
@@ -377,7 +393,7 @@ export function CatalogItemsPage() {
 
   return (
     <main className="content-page resource-page ns-list-page catalog-items-page">
-      {!mode && canManage && (
+      {!mode && canCreate && (
         <div className="ns-list-action-bar" aria-label={`Acciones de ${summary?.name ?? 'catálogo'}`}>
           <button className="primary-button ns-create-button" type="button" onClick={openCreate}>
             <Icon name="plus" size={15} /> Nuevo registro
@@ -435,7 +451,7 @@ export function CatalogItemsPage() {
                 <tr>
                   <td className="ns-table-empty" colSpan={tableColumnCount}>
                     <strong>No hay registros</strong>
-                    <span>{canManage ? 'Ajusta los filtros o crea un valor nuevo.' : 'Ajusta los filtros para consultar los registros disponibles.'}</span>
+                    <span>{canCreate ? 'Ajusta los filtros o crea un valor nuevo.' : 'Ajusta los filtros para consultar los registros disponibles.'}</span>
                   </td>
                 </tr>
               )}
@@ -449,10 +465,10 @@ export function CatalogItemsPage() {
                   <td>
                     <TableActions>
                       <TableActionButton label="Ver" icon="eye" onClick={() => open('view', item)} />
-                      {canManage && <TableActionButton label="Editar" icon="edit" tone="primary" onClick={() => open('edit', item)} />}
-                      {canManage && item.status === 'ACTIVE' && <TableActionButton label="Inactivar" icon="archive" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'deactivate' })} />}
-                      {canManage && item.status === 'INACTIVE' && <TableActionButton label="Activar" icon="restore" tone="primary" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'activate' })} />}
-                      {canManage && <TableActionButton label="Eliminar" icon="trash" tone="danger" disabled={busy} onClick={() => void requestDelete(item)} />}
+                      {canUpdate && <TableActionButton label="Editar" icon="edit" tone="primary" onClick={() => open('edit', item)} />}
+                      {canChangeStatus && item.status === 'ACTIVE' && <TableActionButton label="Inactivar" icon="archive" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'deactivate' })} />}
+                      {canChangeStatus && item.status === 'INACTIVE' && <TableActionButton label="Activar" icon="restore" tone="primary" disabled={busy} onClick={() => setStatusCandidate({ item, action: 'activate' })} />}
+                      {canDelete && <TableActionButton label="Eliminar" icon="trash" tone="danger" disabled={busy} onClick={() => void requestDelete(item)} />}
                     </TableActions>
                   </td>
                 </tr>
@@ -485,7 +501,7 @@ export function CatalogItemsPage() {
               </button>
             </header>
 
-            {(mode === 'create' || mode === 'edit') && canManage && (
+            {((mode === 'create' && canCreate) || (mode === 'edit' && canUpdate)) && (
               <form className="ns-dialog-form" onSubmit={(event) => void submit(event)}>
                 <div className="catalog-form-grid">
                   <label className="ns-dialog-field">

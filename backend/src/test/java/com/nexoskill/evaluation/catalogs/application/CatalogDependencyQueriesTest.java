@@ -1,31 +1,71 @@
 package com.nexoskill.evaluation.catalogs.application;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.nexoskill.evaluation.catalogs.domain.CatalogType;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CatalogDependencyQueriesTest {
-	@Test
-	void technologyUsageUsesOnlyPersistedStudentTechnologyColumn() {
-		List<String> queries = CatalogDependencyQueries.forType(CatalogType.TECHNOLOGIES);
 
-		assertTrue(queries.stream().anyMatch(query -> query.contains("TALENT_TECHNOLOGY_ID")));
-		assertFalse(queries.stream().anyMatch(query -> query.contains("STUDENT WHERE TECHNOLOGY_ID")));
-	}
+    @Test
+    void shouldCountEveryPersistedTechnologyRelationshipThatBlocksDeletion() {
+        String sql = sqlFor(CatalogType.TECHNOLOGIES);
 
-	@Test
-	void profileUsageDoesNotReferenceColumnsMissingFromStudent() {
-		String professional = String.join(" ",
-				CatalogDependencyQueries.forType(CatalogType.PROFESSIONAL_PROFILES));
-		String technological = String.join(" ",
-				CatalogDependencyQueries.forType(CatalogType.TECHNOLOGICAL_PROFILES));
+        assertThat(sql)
+                .contains("QUESTION WHERE TECHNOLOGY_ID = :key")
+                .contains("STUDENT WHERE TECHNOLOGY_ID = :key")
+                .contains("STUDENT WHERE TALENT_TECHNOLOGY_ID = :key")
+                .contains("STUDENT_CERTIFICATION_CYCLE WHERE TECHNOLOGY_ID = :key")
+                .contains("certification.MASTER_TECHNOLOGY_ID = :key");
+    }
 
-		assertFalse(professional.contains("STUDENT WHERE PROFESSIONAL_PROFILE_ID"));
-		assertFalse(technological.contains("STUDENT WHERE TECHNOLOGICAL_PROFILE_ID"));
-		assertTrue(professional.contains("STUDENT_CERTIFICATION_PROFILE"));
-		assertTrue(technological.contains("STUDENT_CERTIFICATION_PROFILE"));
-	}
+    @Test
+    void shouldCountDirectAndCertificationProfessionalProfileRelationships() {
+        String sql = sqlFor(CatalogType.PROFESSIONAL_PROFILES);
+
+        assertThat(sql)
+                .contains("STUDENT WHERE PROFESSIONAL_PROFILE_ID = :key")
+                .contains("STUDENT_CERTIFICATION_PROFILE WHERE PROFESSIONAL_PROFILE_ID = :key");
+    }
+
+    @Test
+    void shouldCountDirectAndCodeBasedTechnologicalProfileRelationships() {
+        String sql = sqlFor(CatalogType.TECHNOLOGICAL_PROFILES);
+
+        assertThat(sql)
+                .contains("STUDENT WHERE TECHNOLOGICAL_PROFILE_ID = :key")
+                .contains("STUDENT_CERTIFICATION_PROFILE WHERE TECHNOLOGICAL_PROFILE")
+                .contains("CERTIFICATION_PROFILE_CATALOG WHERE SUGGESTED_TECH_PROFILE");
+    }
+
+    @Test
+    void shouldCountEveryCategoryRelationshipThatBlocksDeletion() {
+        String sql = sqlFor(CatalogType.CATEGORIES);
+
+        assertThat(sql)
+                .contains("QUESTION WHERE CATEGORY_ID = :key")
+                .contains("QUESTION_CATEGORY_RELATION WHERE CATEGORY_ID = :key")
+                .contains("COLLECTION_CATEGORY_RELATION WHERE CATEGORY_ID = :key")
+                .contains("FORM_QUESTION_POOL WHERE CATEGORY_ID = :key")
+                .contains("QUESTION_CATEGORY WHERE SOURCE_GLOBAL_ID = :key");
+    }
+
+    @Test
+    void shouldProvideFunctionalLabelsForEveryDependencyQuery() {
+        List<CatalogDependencyQueries.DependencyQuery> queries = CatalogDependencyQueries.forType(
+                CatalogType.TECHNOLOGIES);
+
+        assertThat(queries)
+                .allSatisfy(query -> {
+                    assertThat(query.label()).isNotBlank();
+                    assertThat(query.sql()).contains(":key");
+                });
+    }
+
+    private static String sqlFor(CatalogType type) {
+        return CatalogDependencyQueries.forType(type).stream()
+                .map(CatalogDependencyQueries.DependencyQuery::sql)
+                .collect(java.util.stream.Collectors.joining(" "));
+    }
 }
