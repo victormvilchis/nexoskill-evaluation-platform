@@ -86,7 +86,7 @@ export interface StudentImportPreview {
 export interface StudentImportApplyCommand {
   token: string
   newStudents: Array<{ rowKey: string; email: string; studentCode?: string; corporateUser?: string; selected: boolean }>
-  changedStudents: Array<{ studentPublicId: string; fields: string[] }>
+  changedStudents: Array<{ studentPublicId: string; rowKey: string; fields: string[]; selected: boolean }>
   possibleLows: Array<{ studentPublicId: string; action: 'KEEP' | 'DEACTIVATE' | 'IGNORE' }>
   conflicts: Array<{ conflictId: string; action: StudentImportConflictActionValue }>
 }

@@ -245,14 +245,17 @@ public class RoleManagementService {
         // retira Ver, las acciones dependientes se eliminan en backend en lugar de volver
         // a agregar el permiso de consulta. Esto impide que una selección anterior o un
         // payload manipulado reactive el módulo después de guardar.
-        requested.removeIf(code -> {
-            String viewPermission = viewPermissionFor(code);
-            return !BASE_PERMISSIONS.contains(code)
-                    && viewPermission != null
-                    && !code.equals(viewPermission)
-                    && !BASE_PERMISSIONS.contains(viewPermission)
-                    && !requested.contains(viewPermission);
-        });
+        boolean removedDependentPermission;
+        do {
+            removedDependentPermission = requested.removeIf(code -> {
+                String viewPermission = viewPermissionFor(code);
+                return !BASE_PERMISSIONS.contains(code)
+                        && viewPermission != null
+                        && !code.equals(viewPermission)
+                        && !BASE_PERMISSIONS.contains(viewPermission)
+                        && !requested.contains(viewPermission);
+            });
+        } while (removedDependentPermission);
 
         return requested.stream().map(available::get)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -272,7 +275,9 @@ public class RoleManagementService {
     private String viewPermissionFor(String code) {
         if (code.startsWith("TALENT_")) return "TALENT_VIEW";
         if (code.startsWith("PROFILE_")) return "PROFILE_VIEW";
-        if (code.startsWith("STUDENT_CERTIFICATION_")) return "STUDENT_VIEW";
+        if ("STUDENT_CERTIFICATION_MANAGE".equals(code)) return "STUDENT_CERTIFICATION_VIEW";
+        if ("STUDENT_CERTIFICATION_VIEW".equals(code)) return "STUDENT_VIEW";
+        if (code.startsWith("STUDENT_CERTIFICATION_")) return "STUDENT_CERTIFICATION_VIEW";
         if (code.startsWith("STUDENT_")) return "STUDENT_VIEW";
         if (code.startsWith("ORGANIZATION_")) return "ORGANIZATION_VIEW";
         if (code.startsWith("USER_")) return "USER_VIEW";
@@ -300,7 +305,8 @@ public class RoleManagementService {
 
     private boolean isViewPermission(String code) {
         return Set.of("DASHBOARD_VIEW", "PROFILE_VIEW", "USER_VIEW", "ORGANIZATION_VIEW", "STUDENT_VIEW",
-                "TALENT_VIEW", "CATALOG_VIEW", "QUESTION_VIEW", "COLLECTION_VIEW", "FORM_VIEW").contains(code);
+                "STUDENT_CERTIFICATION_VIEW", "TALENT_VIEW", "CATALOG_VIEW", "QUESTION_VIEW",
+                "COLLECTION_VIEW", "FORM_VIEW").contains(code);
     }
 
     private String logicalModuleCode(PermissionJpaEntity permission) {

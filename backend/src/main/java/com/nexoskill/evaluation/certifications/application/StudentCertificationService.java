@@ -1165,7 +1165,7 @@ public class StudentCertificationService {
 
     private boolean hasReadRole(AuthenticatedUser actor) {
         return actor != null && actor.permissions() != null
-                && (actor.permissions().contains("STUDENT_VIEW") || hasOperationalRole(actor));
+                && (actor.permissions().contains("STUDENT_CERTIFICATION_VIEW") || hasOperationalRole(actor));
     }
 
     private void requireCertificationAccess(AuthenticatedUser actor, TenantContext tenant, String studentPublicId,
@@ -1185,7 +1185,7 @@ public class StudentCertificationService {
                 "STUDENT_CERTIFICATIONS", "Intento de acceso no autorizado a certificaciones de colaboradores.",
                 null, null, data, clock.instant());
         String message = switch (access) {
-            case MANAGE -> "No tienes permiso para modificar las certificaciones de este colaborador.";
+            case MANAGE -> "No tienes permiso para gestionar las certificaciones de este colaborador.";
             case IMPORT -> "No tienes permiso para importar colaboradores.";
             case VIEW -> "No tienes permiso para consultar las certificaciones de este colaborador.";
         };

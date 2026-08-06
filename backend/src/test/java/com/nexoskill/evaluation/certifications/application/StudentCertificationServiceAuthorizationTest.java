@@ -49,6 +49,45 @@ class StudentCertificationServiceAuthorizationTest {
 	}
 
 	@Test
+	void certificationViewAuthorizesReadOnlyConsultation() {
+		StudentRepository students = mock(StudentRepository.class);
+		when(students.findByOrganizationIdAndPublicId(10L, "student-public"))
+				.thenReturn(java.util.Optional.empty());
+		StudentCertificationService service = new StudentCertificationService(students,
+				mock(OrganizationRepository.class), mock(NamedParameterJdbcTemplate.class), mock(AuditLogPort.class),
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AuthenticatedUser reader = new AuthenticatedUser(4L, "reader-public", "reader@nexoskill.local",
+				"Certification", "Reader", "Certification Reader", Set.of("CUSTOM_READER"),
+				Set.of("STUDENT_VIEW", "STUDENT_CERTIFICATION_VIEW"), NOW, UserAccessStatus.ACTIVE,
+				null, null, false, NOW, null);
+		TenantContext tenant = TenantContext.organization(10L, "organization-public", "ORG", false);
+
+		assertThatThrownBy(() -> service.get(tenant, "student-public", reader))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getCode()).isEqualTo("STUDENT_NOT_FOUND"));
+
+		verify(students).findByOrganizationIdAndPublicId(10L, "student-public");
+	}
+
+	@Test
+	void collaboratorViewAloneDoesNotAuthorizeCertificationConsultation() {
+		StudentCertificationService service = new StudentCertificationService(mock(StudentRepository.class),
+				mock(OrganizationRepository.class), mock(NamedParameterJdbcTemplate.class), mock(AuditLogPort.class),
+				Clock.fixed(NOW, ZoneOffset.UTC));
+		AuthenticatedUser reader = new AuthenticatedUser(5L, "reader-public", "reader@nexoskill.local",
+				"Student", "Reader", "Student Reader", Set.of("CUSTOM_READER"), Set.of("STUDENT_VIEW"), NOW,
+				UserAccessStatus.ACTIVE, null, null, false, NOW, null);
+		TenantContext tenant = TenantContext.organization(10L, "organization-public", "ORG", false);
+
+		assertThatThrownBy(() -> service.get(tenant, "student-public", reader))
+				.isInstanceOfSatisfying(BusinessException.class, exception -> {
+					assertThat(exception.getCode()).isEqualTo("CERTIFICATION_OPERATION_FORBIDDEN");
+					assertThat(exception.getMessage())
+							.isEqualTo("No tienes permiso para consultar las certificaciones de este colaborador.");
+				});
+	}
+
+	@Test
 	void importPermissionAuthorizesCertificationSnapshotsWithoutManualManagementPermission() {
 		AuditLogPort audit = mock(AuditLogPort.class);
 		StudentRepository students = mock(StudentRepository.class);

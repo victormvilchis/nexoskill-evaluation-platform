@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class StudentImportServiceParsingTest {
@@ -215,6 +217,24 @@ class StudentImportServiceParsingTest {
 				StudentImportService.displayPersonName("CINTHIA CRISTINA HERNANDEZ HERNANDEZ"));
 		assertEquals("Ángel De-la Cruz", StudentImportService.displayPersonName("  ÁNGEL   DE-LA CRUZ  "));
 		assertNull(StudentImportService.displayPersonName(null));
+	}
+
+	@Test
+	void filtersConflictsToCollaboratorsThatRemainSelected() {
+		StudentImportService.ConflictAction action = new StudentImportService.ConflictAction(
+				"USE_PLATFORM", "Usar plataforma", "Conserva el valor actual.");
+		StudentImportService.ConflictPreview selected = new StudentImportService.ConflictPreview(
+				"conflict-selected", "row-selected", 2, "Persona seleccionada", "CODE", "GROUP",
+				"Conflicto", "Campo", null, null, "Excel", "Actual", "Calculado", "Motivo",
+				List.of(action), null, false);
+		StudentImportService.ConflictPreview excluded = new StudentImportService.ConflictPreview(
+				"conflict-excluded", "row-excluded", 3, "Persona excluida", "CODE", "GROUP",
+				"Conflicto", "Campo", null, null, "Excel", "Actual", "Calculado", "Motivo",
+				List.of(action), null, false);
+
+		assertEquals(List.of(selected), StudentImportService.selectedConflicts(
+				List.of(selected, excluded), Set.of("row-selected")));
+		assertTrue(StudentImportService.selectedConflicts(List.of(selected, excluded), Set.of()).isEmpty());
 	}
 
 	@Test

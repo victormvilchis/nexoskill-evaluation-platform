@@ -38,7 +38,9 @@ function moduleViewPermission(module: PermissionModule) {
 
 function requiredViewPermission(code: string) {
   if (code.startsWith('TALENT_')) return 'TALENT_VIEW'
-  if (code.startsWith('STUDENT_CERTIFICATION_')) return 'STUDENT_VIEW'
+  if (code === 'STUDENT_CERTIFICATION_MANAGE') return 'STUDENT_CERTIFICATION_VIEW'
+  if (code === 'STUDENT_CERTIFICATION_VIEW') return 'STUDENT_VIEW'
+  if (code.startsWith('STUDENT_CERTIFICATION_')) return 'STUDENT_CERTIFICATION_VIEW'
   if (code.startsWith('STUDENT_')) return 'STUDENT_VIEW'
   if (code.startsWith('FORM_')) return 'FORM_VIEW'
   if (code.startsWith('COLLECTION_')) return 'COLLECTION_VIEW'
@@ -54,6 +56,28 @@ function configurablePermissions(module: PermissionModule) {
 
 function basicPermissions(module: PermissionModule) {
   return module.permissions.filter((permission) => permission.required)
+}
+
+function addWithRequiredViews(next: Set<string>, code: string, availableCodes: Set<string>) {
+  let current: string | undefined = code
+  while (current && availableCodes.has(current) && !next.has(current)) {
+    next.add(current)
+    current = requiredViewPermission(current)
+  }
+}
+
+function removePermissionsWithoutRequiredView(next: Set<string>, availableCodes: Set<string>) {
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const code of Array.from(next)) {
+      const viewCode = requiredViewPermission(code)
+      if (viewCode && availableCodes.has(viewCode) && !next.has(viewCode)) {
+        next.delete(code)
+        changed = true
+      }
+    }
+  }
 }
 
 function permissionCountLabel(module: PermissionModule, selected: Set<string>, protectedRole: boolean) {
@@ -144,16 +168,12 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
     setSelected((current) => {
       const next = new Set(current)
       if (checked) {
-        next.add(code)
-        const viewCode = requiredViewPermission(code) ?? moduleViewPermission(module)
-        if (viewCode && availableCodes.has(viewCode)) next.add(viewCode)
+        addWithRequiredViews(next, code, availableCodes)
+        const moduleView = requiredViewPermission(code) ?? moduleViewPermission(module)
+        if (moduleView) addWithRequiredViews(next, moduleView, availableCodes)
       } else {
         next.delete(code)
-        if (target.viewPermission) {
-          allPermissions
-            .filter((permission) => requiredViewPermission(permission.code) === code)
-            .forEach((permission) => next.delete(permission.code))
-        }
+        removePermissionsWithoutRequiredView(next, availableCodes)
       }
       return next
     })
@@ -167,19 +187,13 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
       const next = new Set(current)
       configurablePermissions(module).forEach((permission) => {
         if (checked) {
-          next.add(permission.code)
-          const viewCode = requiredViewPermission(permission.code)
-          if (viewCode && availableCodes.has(viewCode)) next.add(viewCode)
+          addWithRequiredViews(next, permission.code, availableCodes)
         } else {
           next.delete(permission.code)
-          if (permission.viewPermission) {
-            allPermissions
-              .filter((candidate) => requiredViewPermission(candidate.code) === permission.code)
-              .forEach((candidate) => next.delete(candidate.code))
-          }
         }
       })
       basicPermissions(module).forEach((permission) => next.add(permission.code))
+      removePermissionsWithoutRequiredView(next, availableCodes)
       return next
     })
   }

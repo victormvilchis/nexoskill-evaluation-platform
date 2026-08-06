@@ -368,6 +368,27 @@
   border-top: 0;
 }
 
+.ns-import-change-selection {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.ns-import-change-selection label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #365e49;
+  font-size: .86rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ns-import-change-selection h3 {
+  margin: 0;
+}
+
 .ns-import-row-actions,
 .ns-import-copy-actions,
 .ns-import-final-actions {

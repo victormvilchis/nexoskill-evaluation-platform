@@ -148,6 +148,36 @@ class RoleManagementServiceTest {
     }
 
     @Test
+    void shouldRequireCertificationViewBeforeKeepingCertificationManagement() {
+        Fixture fixture = fixture();
+        when(fixture.roles.countByNormalizedName("Gestor de certificaciones", null)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoleManagementService.RoleDetail incoherent = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Gestor de certificaciones", null,
+                        Set.of("STUDENT_VIEW", "STUDENT_CERTIFICATION_MANAGE")), actor());
+
+        assertThat(incoherent.permissionCodes())
+                .contains("STUDENT_VIEW")
+                .doesNotContain("STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE");
+
+        when(fixture.roles.countByNormalizedName("Gestor incoherente", null)).thenReturn(0L);
+        RoleManagementService.RoleDetail missingCollaboratorView = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Gestor incoherente", null,
+                        Set.of("STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE")), actor());
+        assertThat(missingCollaboratorView.permissionCodes())
+                .doesNotContain("STUDENT_VIEW", "STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE");
+
+        when(fixture.roles.countByNormalizedName("Gestor de certificaciones completo", null)).thenReturn(0L);
+        RoleManagementService.RoleDetail coherent = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Gestor de certificaciones completo", null,
+                        Set.of("STUDENT_VIEW", "STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE")), actor());
+
+        assertThat(coherent.permissionCodes())
+                .contains("STUDENT_VIEW", "STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE");
+    }
+
+    @Test
     void shouldPersistCatalogStatusPermissionWithoutGrantingPhysicalDeletion() {
         Fixture fixture = fixture();
         when(fixture.roles.countByNormalizedName("Gestor de estados", null)).thenReturn(0L);
@@ -173,7 +203,8 @@ class RoleManagementServiceTest {
                 .filter(module -> module.code().equals("STUDENTS"))
                 .findFirst().orElseThrow();
         assertThat(collaborators.permissions()).extracting(RoleManagementService.PermissionDescriptor::code)
-                .contains("STUDENT_VIEW", "STUDENT_IMPORT", "STUDENT_CERTIFICATION_MANAGE");
+                .contains("STUDENT_VIEW", "STUDENT_IMPORT", "STUDENT_CERTIFICATION_VIEW",
+                        "STUDENT_CERTIFICATION_MANAGE");
 
         RoleManagementService.RoleDetail created = fixture.service.create(
                 new RoleManagementService.UpsertCommand("Perfil configurable", null,
@@ -199,6 +230,7 @@ class RoleManagementServiceTest {
                 permission("PROFILE_UPDATE", "Actualizar perfil propio", "PROFILE"),
                 permission("STUDENT_VIEW", "Ver colaboradores", "STUDENTS"),
                 permission("STUDENT_IMPORT", "Importar colaboradores", "STUDENTS"),
+                permission("STUDENT_CERTIFICATION_VIEW", "Consultar certificaciones", "STUDENTS"),
                 permission("STUDENT_CERTIFICATION_MANAGE", "Gestionar certificaciones", "STUDENTS"),
                 permission("STUDENT_CERTIFICATION_CATALOG_VIEW", "Consultar catálogos de certificación", "STUDENTS"),
                 permission("TALENT_VIEW", "Ver Talent Bank", "TALENT_BANK"),

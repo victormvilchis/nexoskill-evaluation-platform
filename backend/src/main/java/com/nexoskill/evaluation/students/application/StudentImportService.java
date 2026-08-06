@@ -302,7 +302,13 @@ public class StudentImportService {
         Map<String, ChangeSelection> changeSelections = indexChanges(command.changedStudents());
         Map<String, LowSelection> lowSelections = indexLows(command.possibleLows());
         Map<String, String> submittedConflictResolutions = indexConflictResolutions(command.conflicts());
-        Map<String, String> conflictResolutions = effectiveConflictResolutions(state, submittedConflictResolutions);
+        if (!state.conflicts().keySet().containsAll(submittedConflictResolutions.keySet())) {
+            throw new BusinessException("STUDENT_IMPORT_SELECTION_INVALID",
+                    "La selección contiene conflictos que no pertenecen a la vista previa autorizada.");
+        }
+        Set<String> selectedRowKeys = selectedRowKeys(state, newSelections, changeSelections);
+        Map<String, String> conflictResolutions = effectiveConflictResolutions(
+                state, submittedConflictResolutions, selectedRowKeys);
         if (!applying.add(normalizedToken)) {
             throw new BusinessException("STUDENT_IMPORT_APPLY_IN_PROGRESS",
                     "La importación ya se está aplicando. Espera a que termine antes de volver a confirmar.");
@@ -311,16 +317,17 @@ public class StudentImportService {
         boolean receiptReserved = false;
         try {
             validateSelectedNewStudents(effectiveTenant.organizationId(), state, newSelections);
-            validateSelections(state, newSelections, changeSelections, lowSelections, conflictResolutions);
+            validateSelections(state, newSelections, changeSelections, lowSelections,
+                    conflictResolutions, selectedRowKeys);
             Map<String, ChangeSelection> effectiveChangeSelections = includeConflictFields(
-                    state, changeSelections, conflictResolutions);
+                    state, changeSelections, conflictResolutions, selectedRowKeys);
             if (pending.get(normalizedToken) != state) {
                 throw new BusinessException("STUDENT_IMPORT_TOKEN_UNAVAILABLE",
                         "La vista previa fue descartada antes de iniciar la importación. Vuelve a validar el archivo.");
             }
 
             importReceipts.reserve(state.token(), state.organizationId(), state.digest(),
-                    state.imported().size(), actor.internalId());
+                    selectedRowKeys.size(), actor.internalId());
             receiptReserved = true;
 
             List<ExistingStudent> lowCandidates = existingStudents(effectiveTenant.organizationId());
@@ -331,7 +338,7 @@ public class StudentImportService {
             int deactivated = 0;
             for (ImportedStudent imported : state.imported()) {
                 Match match = state.matches().get(imported.rowKey());
-                if (match == null) continue;
+                if (match == null || !selectedRowKeys.contains(imported.rowKey())) continue;
                 ImportedStudent resolvedImported = resolveConflictDecisions(imported, state, conflictResolutions);
                 if (resolvedImported == null) {
                     if (match.existing() != null) {
@@ -447,7 +454,7 @@ public class StudentImportService {
                     result.temporaryPassword()));
         }
         ChangeSelection selection = changeSelections.get(match.existing().publicId());
-        if (selection == null || selection.fields().isEmpty()) return RowOutcome.none();
+        if (selection == null || !selection.selected() || selection.fields().isEmpty()) return RowOutcome.none();
         ImportedStudent resolved = materializeCatalogs(tenant.organizationId(), imported, actor.internalId(),
                 selection.fields());
         updateExisting(tenant, match.existing(), resolved, selection.fields(), requestActor, actor);
@@ -1808,36 +1815,88 @@ public class StudentImportService {
         return result;
     }
 
+    private Set<String> selectedRowKeys(PendingImport state,
+            Map<String, NewSelection> newSelections, Map<String, ChangeSelection> changeSelections) {
+        Set<String> selectableRows = new HashSet<>(state.newRowKeys());
+        Map<String, String> changedRowKeys = new HashMap<>();
+        state.matches().forEach((rowKey, match) -> {
+            if (match != null && match.existing() != null
+                    && state.allowedChangeFields().containsKey(match.existing().publicId())) {
+                changedRowKeys.put(match.existing().publicId(), rowKey);
+                selectableRows.add(rowKey);
+            }
+        });
+
+        Set<String> selected = new HashSet<>();
+        newSelections.values().stream()
+                .filter(NewSelection::selected)
+                .map(NewSelection::rowKey)
+                .filter(state.newRowKeys()::contains)
+                .forEach(selected::add);
+        changeSelections.values().stream()
+                .filter(ChangeSelection::selected)
+                .map(ChangeSelection::studentPublicId)
+                .map(changedRowKeys::get)
+                .filter(Objects::nonNull)
+                .forEach(selected::add);
+
+        // Los conflictos de filas que no exponen un selector propio conservan el
+        // comportamiento anterior y requieren una decisión explícita.
+        state.conflicts().values().stream()
+                .map(ConflictPreview::rowKey)
+                .filter(rowKey -> !selectableRows.contains(rowKey))
+                .forEach(selected::add);
+        return Set.copyOf(selected);
+    }
+
+    static List<ConflictPreview> selectedConflicts(Collection<ConflictPreview> conflicts,
+            Set<String> selectedRowKeys) {
+        if (conflicts == null || selectedRowKeys == null || selectedRowKeys.isEmpty()) return List.of();
+        return conflicts.stream()
+                .filter(conflict -> selectedRowKeys.contains(conflict.rowKey()))
+                .toList();
+    }
+
     private Map<String, String> effectiveConflictResolutions(PendingImport state,
-            Map<String, String> submitted) {
-        Map<String, String> result = new HashMap<>(submitted);
-        state.automaticConflictResolutions().forEach(result::put);
+            Map<String, String> submitted, Set<String> selectedRowKeys) {
+        Set<String> activeConflictIds = selectedConflicts(state.conflicts().values(), selectedRowKeys).stream()
+                .map(ConflictPreview::id)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, String> result = new HashMap<>();
+        submitted.forEach((conflictId, action) -> {
+            if (activeConflictIds.contains(conflictId)) result.put(conflictId, action);
+        });
+        state.automaticConflictResolutions().forEach((conflictId, action) -> {
+            if (activeConflictIds.contains(conflictId)) result.put(conflictId, action);
+        });
         return Map.copyOf(result);
     }
 
     private Map<String, ChangeSelection> includeConflictFields(PendingImport state,
-            Map<String, ChangeSelection> selections, Map<String, String> resolutions) {
+            Map<String, ChangeSelection> selections, Map<String, String> resolutions,
+            Set<String> selectedRowKeys) {
         Map<String, ChangeSelection> result = new HashMap<>(selections);
-        for (ConflictPreview conflict : state.conflicts().values()) {
+        for (ConflictPreview conflict : selectedConflicts(state.conflicts().values(), selectedRowKeys)) {
             String action = resolutions.get(conflict.id());
             if (conflict.certificationType() == null || "OMIT_ROW".equals(action)) continue;
             Match match = state.matches().get(conflict.rowKey());
             if (match == null || match.existing() == null) continue;
             String studentPublicId = match.existing().publicId();
             ChangeSelection current = result.get(studentPublicId);
+            if (current != null && !current.selected()) continue;
             Set<String> fields = new HashSet<>(current == null ? Set.of() : current.fields());
             String prefix = "cert:" + conflict.certificationType() + ":";
             fields.add(prefix + "status");
             fields.add(prefix + "applicationDate");
             fields.add(prefix + "lifecycle");
-            result.put(studentPublicId, new ChangeSelection(studentPublicId, fields));
+            result.put(studentPublicId, new ChangeSelection(studentPublicId, conflict.rowKey(), fields, true));
         }
         return result;
     }
 
     private void validateSelections(PendingImport state, Map<String, NewSelection> newSelections,
             Map<String, ChangeSelection> changeSelections, Map<String, LowSelection> lowSelections,
-            Map<String, String> conflictResolutions) {
+            Map<String, String> conflictResolutions, Set<String> selectedRowKeys) {
         if (!state.newRowKeys().containsAll(newSelections.keySet())
                 || !state.allowedChangeFields().keySet().containsAll(changeSelections.keySet())
                 || !state.possibleLowPublicIds().containsAll(lowSelections.keySet())
@@ -1847,6 +1906,15 @@ public class StudentImportService {
         }
         for (ChangeSelection selection : changeSelections.values()) {
             Set<String> allowed = state.allowedChangeFields().getOrDefault(selection.studentPublicId(), Set.of());
+            String expectedRowKey = state.matches().entrySet().stream()
+                    .filter(entry -> entry.getValue() != null && entry.getValue().existing() != null
+                            && selection.studentPublicId().equals(entry.getValue().existing().publicId()))
+                    .map(Map.Entry::getKey)
+                    .findFirst().orElse(null);
+            if (selection.rowKey() != null && !Objects.equals(expectedRowKey, selection.rowKey())) {
+                throw new BusinessException("STUDENT_IMPORT_SELECTION_INVALID",
+                        "La selección de colaboradores no corresponde con la vista previa autorizada.");
+            }
             if (!allowed.containsAll(selection.fields())) {
                 throw new BusinessException("STUDENT_IMPORT_FIELDS_INVALID",
                         "La selección contiene campos que no fueron mostrados en la comparación.");
@@ -1858,7 +1926,7 @@ public class StudentImportService {
             throw new BusinessException("STUDENT_IMPORT_LOW_ACTION_INVALID",
                     "Selecciona una acción válida para cada posible baja.");
         }
-        for (ConflictPreview conflict : state.conflicts().values()) {
+        for (ConflictPreview conflict : selectedConflicts(state.conflicts().values(), selectedRowKeys)) {
             String action = conflictResolutions.get(conflict.id());
             if (action == null || action.isBlank()) {
                 throw new BusinessException("STUDENT_IMPORT_CONFLICT_PENDING",
@@ -2633,8 +2701,14 @@ public class StudentImportService {
             this(rowKey, email, null, null, selected);
         }
     }
-    public record ChangeSelection(String studentPublicId, Set<String> fields) {
-        public ChangeSelection { fields = fields == null ? Set.of() : Set.copyOf(fields); }
+    public record ChangeSelection(String studentPublicId, String rowKey, Set<String> fields, boolean selected) {
+        public ChangeSelection {
+            rowKey = rowKey == null || rowKey.isBlank() ? null : rowKey.trim();
+            fields = fields == null ? Set.of() : Set.copyOf(fields);
+        }
+        public ChangeSelection(String studentPublicId, Set<String> fields) {
+            this(studentPublicId, null, fields, true);
+        }
     }
     public record LowSelection(String studentPublicId, String action) {}
     public record ConflictResolution(String conflictId, String action) {}

@@ -13,10 +13,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 class StudentCertificationControllerSecurityTest {
 
     @Test
-    void shouldAuthorizeConsultationEndpointsWithStudentView() {
+    void shouldAuthorizeConsultationEndpointsWithCertificationView() {
         Arrays.stream(StudentCertificationController.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(GetMapping.class))
-                .forEach(method -> assertAuthorization(method, "hasAuthority('STUDENT_VIEW')"));
+                .forEach(method -> assertAuthorization(method, "hasAuthority('STUDENT_CERTIFICATION_VIEW')"));
     }
 
     @Test

@@ -149,7 +149,7 @@ export default function App() {
           <Route element={<PermissionRoute anyOf={['STUDENT_STATUS_CHANGE', 'STUDENT_SESSION_MANAGE', 'STUDENT_DELETE']} />}>
             <Route path="/admin/collaborators/:publicId/manage" element={<StudentManagementPage />} />
           </Route>
-          <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
+          <Route element={<PermissionRoute permission="STUDENT_CERTIFICATION_VIEW" />}>
             <Route path="/admin/collaborators/:publicId/certifications" element={<StudentCertificationsPage />} />
           </Route>
           <Route element={<PermissionRoute permission="USER_CREATE" roles={['ADMINISTRATOR']} />}>
