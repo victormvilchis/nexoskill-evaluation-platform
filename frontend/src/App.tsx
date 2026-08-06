@@ -93,27 +93,27 @@ export default function App() {
             <Route path="/admin/roles/:roleCode" element={<RoleEditorPage mode="view" />} />
             <Route path="/admin/roles/:roleCode/edit" element={<RoleEditorPage mode="edit" />} />
           </Route>
-          <Route element={<PermissionRoute permission="ORGANIZATION_VIEW" />}>
+          <Route element={<PermissionRoute permission="ORGANIZATION_VIEW" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/organizations" element={<AdminOrganizationsPage />} />
             <Route path="/admin/organizations/:publicId" element={<OrganizationEditorPage mode="view" />} />
           </Route>
-          <Route element={<PermissionRoute permission="ORGANIZATION_CREATE" />}>
+          <Route element={<PermissionRoute permission="ORGANIZATION_CREATE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/organizations/new" element={<OrganizationEditorPage mode="create" />} />
           </Route>
-          <Route element={<PermissionRoute permission="ORGANIZATION_UPDATE" />}>
+          <Route element={<PermissionRoute permission="ORGANIZATION_UPDATE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/organizations/:publicId/edit" element={<OrganizationEditorPage mode="edit" />} />
           </Route>
-          <Route element={<PermissionRoute permission="ORGANIZATION_STATUS_CHANGE" />}>
+          <Route element={<PermissionRoute permission="ORGANIZATION_STATUS_CHANGE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/organizations/:publicId/manage" element={<OrganizationManagementPage />} />
           </Route>
-          <Route element={<PermissionRoute permission="USER_VIEW" />}>
+          <Route element={<PermissionRoute permission="USER_VIEW" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/users/:publicId" element={<AdminUserDetailPage mode="view" />} />
           </Route>
-          <Route element={<PermissionRoute permission="USER_UPDATE" />}>
+          <Route element={<PermissionRoute permission="USER_UPDATE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/users/:publicId/edit" element={<AdminUserDetailPage mode="edit" />} />
           </Route>
-          <Route element={<PermissionRoute permission="USER_STATUS_CHANGE" />}>
+          <Route element={<PermissionRoute permission="USER_STATUS_CHANGE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/users/:publicId/manage" element={<AdminUserManagementPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_VIEW" />}>
@@ -150,7 +150,7 @@ export default function App() {
           <Route element={<PermissionRoute permission="STUDENT_CERTIFICATION_MANAGE" />}>
             <Route path="/admin/collaborators/:publicId/certifications" element={<StudentCertificationsPage />} />
           </Route>
-          <Route element={<PermissionRoute permission="USER_CREATE" />}>
+          <Route element={<PermissionRoute permission="USER_CREATE" roles={['ADMINISTRATOR']} />}>
             <Route path="/admin/users/new" element={<CreateUserPage />} />
           </Route>
           <Route element={<PermissionRoute permission="QUESTION_VIEW" />}>

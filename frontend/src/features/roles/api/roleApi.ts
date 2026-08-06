@@ -32,8 +32,8 @@ export function getRole(code: string) {
   return apiRequest<RoleDetail>(`/admin/role-management/${encodeURIComponent(code)}`)
 }
 
-export function getPermissionCatalog() {
-  return apiRequest<PermissionCatalog>('/admin/role-management/permissions')
+export function getPermissionCatalog(scope: 'ORGANIZATIONAL' | 'ADMINISTRATOR' = 'ORGANIZATIONAL') {
+  return apiRequest<PermissionCatalog>(`/admin/role-management/permissions?scope=${scope}`)
 }
 
 export function createRole(request: SaveRoleRequest) {

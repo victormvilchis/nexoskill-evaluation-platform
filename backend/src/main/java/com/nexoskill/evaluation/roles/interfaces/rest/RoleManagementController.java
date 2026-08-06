@@ -60,8 +60,9 @@ public class RoleManagementController {
     }
 
     @GetMapping("/permissions")
-    public PermissionCatalog permissions() {
-        return service.permissionCatalog();
+    public PermissionCatalog permissions(
+            @RequestParam(defaultValue = "ORGANIZATIONAL") String scope) {
+        return service.permissionCatalog(scope);
     }
 
     @GetMapping("/{roleCode}")

@@ -38,7 +38,12 @@ public class SecurityConfig {
 				.authorizeHttpRequests(authorize -> authorize.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers("/api/v1/auth/login", "/api/v1/student-auth/login", "/actuator/health",
 								"/error")
-						.permitAll().anyRequest().authenticated())
+						.permitAll()
+						.requestMatchers("/api/v1/admin/organizations", "/api/v1/admin/organizations/**",
+								"/api/v1/admin/users", "/api/v1/admin/users/**", "/api/v1/admin/roles",
+								"/api/v1/admin/role-management", "/api/v1/admin/role-management/**")
+						.hasRole("ADMINISTRATOR")
+						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
 					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);

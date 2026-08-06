@@ -41,7 +41,7 @@ public class OrganizationController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasAuthority('ORGANIZATION_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_VIEW')")
 	public PageResponse list(@RequestParam(required = false) String query,
 			@RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size) {
@@ -53,14 +53,14 @@ public class OrganizationController {
 	}
 
 	@GetMapping("/{publicId}")
-	@PreAuthorize("hasAuthority('ORGANIZATION_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_VIEW')")
 	public OrganizationResponse get(@PathVariable String publicId) {
 		return response(service.get(publicId));
 	}
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	@PreAuthorize("hasAuthority('ORGANIZATION_CREATE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_CREATE')")
 	public OrganizationResponse create(@Valid @RequestBody CreateRequest request) {
 		return response(service.create(new OrganizationService.CreateCommand(request.name(), request.code(),
 				request.contentMode(), request.expiresOn(), request.contractedSeats(), request.includedReplacements(),
@@ -70,7 +70,7 @@ public class OrganizationController {
 	}
 
 	@PutMapping("/{publicId}")
-	@PreAuthorize("hasAuthority('ORGANIZATION_UPDATE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_UPDATE')")
 	public OrganizationResponse update(@PathVariable String publicId, @Valid @RequestBody UpdateRequest request) {
 		return response(service.update(publicId,
 				new OrganizationService.UpdateCommand(request.name(), request.contentMode(), request.expiresOn(),
@@ -81,34 +81,34 @@ public class OrganizationController {
 	}
 
 	@PostMapping("/{publicId}/activate")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public OrganizationResponse activate(@PathVariable String publicId,
 			@RequestBody(required = false) ActionRequest request) {
 		return response(service.activate(publicId, request == null ? null : request.reason()));
 	}
 
 	@PostMapping("/{publicId}/deactivate")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public OrganizationResponse deactivate(@PathVariable String publicId,
 			@RequestBody(required = false) ActionRequest request) {
 		return response(service.deactivate(publicId, request == null ? null : request.reason()));
 	}
 
 	@DeleteMapping("/{publicId}")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public OrganizationResponse delete(@PathVariable String publicId, @Valid @RequestBody ActionRequest request) {
 		return response(service.softDelete(publicId, request.reason()));
 	}
 
 	@PostMapping("/{publicId}/restore")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public OrganizationResponse restore(@PathVariable String publicId,
 			@RequestBody(required = false) ActionRequest request) {
 		return response(service.restore(publicId, request == null ? null : request.reason()));
 	}
 
 	@GetMapping("/{publicId}/status-history")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public List<StatusHistoryResponse> statusHistory(@PathVariable String publicId) {
 		return service.statusHistory(publicId).stream().map(row -> new StatusHistoryResponse(row.previousStatus(),
 				row.newStatus(), row.reason(), row.changedBy(), row.changedAt())).toList();
@@ -119,7 +119,7 @@ public class OrganizationController {
 	 * del servicio.
 	 */
 	@PostMapping("/{publicId}/status/{status}")
-	@PreAuthorize("hasAuthority('ORGANIZATION_STATUS_CHANGE')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('ORGANIZATION_STATUS_CHANGE')")
 	public OrganizationResponse changeStatus(@PathVariable String publicId, @PathVariable OrganizationStatus status) {
 		return response(service.changeStatus(publicId, status));
 	}

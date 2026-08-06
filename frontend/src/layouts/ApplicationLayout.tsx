@@ -11,6 +11,7 @@ interface NavItem {
   to?: string
   icon: IconName
   permission?: string
+  roles?: string[]
   children?: NavItem[]
 }
 
@@ -27,9 +28,9 @@ const navigationConfig: NavSection[] = [
     label: 'Administración',
     icon: 'users',
     items: [
-      { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW' },
-      { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW' },
-      { id: 'roles', label: 'Roles', to: '/admin/roles', icon: 'lock', permission: 'ROLE_MANAGE' },
+      { id: 'organizations', label: 'Organizaciones', to: '/admin/organizations', icon: 'collections', permission: 'ORGANIZATION_VIEW', roles: ['ADMINISTRATOR'] },
+      { id: 'users', label: 'Usuarios', to: '/admin/users', icon: 'users', permission: 'USER_VIEW', roles: ['ADMINISTRATOR'] },
+      { id: 'roles', label: 'Roles', to: '/admin/roles', icon: 'lock', permission: 'ROLE_MANAGE', roles: ['ADMINISTRATOR'] },
       { id: 'students', label: 'Colaboradores', to: '/admin/collaborators', icon: 'profile', permission: 'STUDENT_VIEW' },
       { id: 'talent-bank', label: 'Talent Bank', to: '/admin/talent-bank', icon: 'users', permission: 'TALENT_VIEW' }
     ]
@@ -91,7 +92,10 @@ export function ApplicationLayout() {
   const accountRef = useRef<HTMLDivElement>(null)
 
   const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
-  const canShow = (item: NavItem) => administrator || !item.permission || user?.permissions.includes(item.permission)
+  const canShow = (item: NavItem) => {
+    if (item.roles && !item.roles.some((role) => user?.roles.includes(role))) return false
+    return administrator || !item.permission || user?.permissions.includes(item.permission)
+  }
 
   const sections = useMemo(
     () => navigationConfig
@@ -106,7 +110,7 @@ export function ApplicationLayout() {
           .filter((item) => item.to || (item.children?.length ?? 0) > 0)
       }))
       .filter((section) => section.items.length > 0),
-    [administrator, user?.permissions]
+    [administrator, user?.permissions, user?.roles]
   )
 
   function itemIsActive(item: NavItem): boolean {

@@ -55,7 +55,7 @@ public class AdminUserController {
 	}
 
 	@GetMapping("/users")
-	@PreAuthorize("hasAuthority('USER_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('USER_VIEW')")
 	public AdminUserPage search(@RequestParam(required = false) String query,
 			@RequestParam(defaultValue = "ACTIVE") String status, @RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "10") int size) {
@@ -64,7 +64,7 @@ public class AdminUserController {
 	}
 
 	@GetMapping("/users/{publicId}")
-	@PreAuthorize("hasAuthority('USER_VIEW')")
+	@PreAuthorize("hasRole('ADMINISTRATOR') and hasAuthority('USER_VIEW')")
 	public AdminUserSummary get(@PathVariable String publicId) {
 		return getAdminUserService.get(publicId);
 	}

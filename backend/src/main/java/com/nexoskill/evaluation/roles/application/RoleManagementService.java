@@ -32,12 +32,14 @@ public class RoleManagementService {
     private static final String STUDENT_PORTAL_ROLE = "USER";
     private static final Set<String> BASE_PERMISSIONS = Set.of(
             "DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE");
-    private static final Set<String> NON_CONFIGURABLE_PERMISSIONS = Set.of(
-            "ROLE_MANAGE", "ADMIN_PANEL_VIEW", "TENANT_CONTEXT_SELECT", "USER_PANEL_VIEW",
+    private static final Set<String> ADMINISTRATOR_EXCLUSIVE_PERMISSIONS = Set.of(
+            "ROLE_MANAGE", "ADMIN_PANEL_VIEW", "TENANT_CONTEXT_SELECT",
             "USER_VIEW", "USER_CREATE", "USER_UPDATE", "USER_STATUS_CHANGE", "USER_PASSWORD_RESET",
             "USER_ACCESS_MANAGE", "USER_ROLE_ASSIGN",
             "ORGANIZATION_VIEW", "ORGANIZATION_CREATE", "ORGANIZATION_UPDATE",
-            "ORGANIZATION_STATUS_CHANGE", "ORGANIZATION_LICENSE_VIEW", "ORGANIZATION_LICENSE_UPDATE");
+            "ORGANIZATION_STATUS_CHANGE", "ORGANIZATION_LICENSE_VIEW", "ORGANIZATION_LICENSE_UPDATE",
+            "GLOBAL_CONTENT_DISTRIBUTE", "GLOBAL_CONTENT_PROMOTE", "GLOBAL_CONTENT_PUBLISH",
+            "GLOBAL_CONTENT_REVIEW", "GLOBAL_CONTENT_SYNCHRONIZE", "GLOBAL_CONTENT_VERSION_MANAGE");
 
     private static final Map<String, String> MODULE_NAMES = Map.ofEntries(
             Map.entry("DASHBOARD", "Inicio"),
@@ -91,13 +93,14 @@ public class RoleManagementService {
     }
 
     @Transactional(readOnly = true)
-    public PermissionCatalog permissionCatalog() {
-        List<PermissionJpaEntity> configurable = permissions.findAllByOrderByModuleCodeAscNameAsc().stream()
-                .filter(permission -> !NON_CONFIGURABLE_PERMISSIONS.contains(permission.getCode()))
+    public PermissionCatalog permissionCatalog(String requestedScope) {
+        boolean administratorScope = "ADMINISTRATOR".equals(normalizeCatalogScope(requestedScope));
+        List<PermissionJpaEntity> visible = permissions.findAllByOrderByModuleCodeAscNameAsc().stream()
                 .filter(permission -> !"USER".equals(permission.getModuleCode()))
+                .filter(permission -> administratorScope || isOrganizationalPermission(permission))
                 .toList();
 
-        Map<String, List<PermissionJpaEntity>> grouped = configurable.stream()
+        Map<String, List<PermissionJpaEntity>> grouped = visible.stream()
                 .collect(Collectors.groupingBy(this::logicalModuleCode, LinkedHashMap::new, Collectors.toList()));
 
         List<PermissionModule> modules = grouped.entrySet().stream()
@@ -116,7 +119,7 @@ public class RoleManagementService {
     public RoleDetail create(UpsertCommand command, Actor actor) {
         String name = normalizedName(command.name());
         assertUniqueName(name, null);
-        Set<PermissionJpaEntity> granted = resolvePermissions(command.permissionCodes(), Set.of());
+        Set<PermissionJpaEntity> granted = resolvePermissions(command.permissionCodes());
         Instant now = clock.instant();
         String code = "CUSTOM_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT);
         RoleJpaEntity created = roles.saveAndFlush(RoleJpaEntity.custom(code, name,
@@ -131,7 +134,7 @@ public class RoleManagementService {
         RoleJpaEntity role = requireConfigurable(roleCode);
         String name = normalizedName(command.name());
         assertUniqueName(name, role.getId());
-        Set<PermissionJpaEntity> granted = resolvePermissions(command.permissionCodes(), role.getPermissions());
+        Set<PermissionJpaEntity> granted = resolvePermissions(command.permissionCodes());
         role.update(name, normalizeDescription(command.description()), granted, clock.instant());
         RoleJpaEntity saved = roles.saveAndFlush(role);
         revokeAssignedSessions(saved.getId());
@@ -146,9 +149,11 @@ public class RoleManagementService {
         String name = normalizedName(command.name());
         assertUniqueName(name, null);
         Instant now = clock.instant();
+        Set<PermissionJpaEntity> granted = resolvePermissions(source.getPermissions().stream()
+                .map(PermissionJpaEntity::getCode).toList());
         RoleJpaEntity copy = RoleJpaEntity.custom(
                 "CUSTOM_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT),
-                name, normalizeDescription(command.description()), source.getPermissions(), now);
+                name, normalizeDescription(command.description()), granted, now);
         copy = roles.saveAndFlush(copy);
         record(actor, "ROLE_CLONED", "Se clonó un rol con todos sus permisos.", copy,
                 Map.of("sourceRoleCode", source.getCode(), "permissionCount", copy.getPermissions().size()));
@@ -190,56 +195,69 @@ public class RoleManagementService {
     }
 
     private RoleSummary summary(RoleJpaEntity role) {
+        int configurablePermissionCount = role.isProtectedAdministrator()
+                ? 0 : (int) role.getPermissions().stream()
+                        .filter(this::isConfigurableOrganizationalPermission).count();
         return new RoleSummary(role.getCode(), role.getName(), role.getStatus(), role.isProtectedAdministrator(),
-                users.countAssignedToRole(role.getId()), role.getPermissions().size(), role.getUpdatedAt());
+                users.countAssignedToRole(role.getId()), configurablePermissionCount, role.getUpdatedAt());
     }
 
     private RoleDetail detail(RoleJpaEntity role) {
         Set<String> permissionCodes = role.isProtectedAdministrator()
                 ? permissions.findAll().stream().map(PermissionJpaEntity::getCode)
                         .collect(Collectors.toCollection(LinkedHashSet::new))
-                : role.getPermissions().stream().map(PermissionJpaEntity::getCode)
+                : role.getPermissions().stream()
+                        .filter(permission -> BASE_PERMISSIONS.contains(permission.getCode())
+                                || isOrganizationalPermission(permission))
+                        .map(PermissionJpaEntity::getCode)
                         .collect(Collectors.toCollection(LinkedHashSet::new));
         return new RoleDetail(role.getCode(), role.getName(), role.getDescription(), role.getStatus(),
                 role.isProtectedAdministrator(), users.countAssignedToRole(role.getId()), Set.copyOf(permissionCodes),
                 role.getCreatedAt(), role.getUpdatedAt(), role.getVersion());
     }
 
-    private Set<PermissionJpaEntity> resolvePermissions(Collection<String> requestedCodes,
-            Collection<PermissionJpaEntity> currentPermissions) {
-        Set<String> requested = requestedCodes == null ? new LinkedHashSet<>() : requestedCodes.stream()
-                .filter(value -> value != null && !value.isBlank())
-                .map(value -> value.trim().toUpperCase(Locale.ROOT))
-                .filter(code -> !NON_CONFIGURABLE_PERMISSIONS.contains(code))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        requested.addAll(BASE_PERMISSIONS);
-        if (currentPermissions != null) {
-            currentPermissions.stream()
-                    .map(PermissionJpaEntity::getCode)
-                    .filter(NON_CONFIGURABLE_PERMISSIONS::contains)
-                    .forEach(requested::add);
-        }
-
+    private Set<PermissionJpaEntity> resolvePermissions(Collection<String> requestedCodes) {
         Map<String, PermissionJpaEntity> available = permissions.findAll().stream()
                 .collect(Collectors.toMap(PermissionJpaEntity::getCode, Function.identity()));
-        Set<String> unknown = requested.stream().filter(code -> !available.containsKey(code))
+        Set<String> normalized = requestedCodes == null ? new LinkedHashSet<>() : requestedCodes.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toUpperCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> unknown = normalized.stream().filter(code -> !available.containsKey(code))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!unknown.isEmpty()) {
             throw new BusinessException("ROLE_PERMISSION_INVALID",
                     "La configuración contiene permisos que no existen: " + String.join(", ", unknown));
         }
 
+        Set<String> requested = normalized.stream()
+                .filter(code -> isOrganizationalPermission(available.get(code)))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        BASE_PERMISSIONS.stream().filter(available::containsKey).forEach(requested::add);
+
         // Toda acción requiere el permiso de consulta del módulo. Se completa de forma
         // determinista también en backend para impedir matrices incoherentes manipuladas.
         List.copyOf(requested).forEach(code -> {
             String viewPermission = viewPermissionFor(code);
-            if (viewPermission != null && available.containsKey(viewPermission)) {
+            if (viewPermission != null && available.containsKey(viewPermission)
+                    && (BASE_PERMISSIONS.contains(viewPermission)
+                            || isOrganizationalPermission(available.get(viewPermission)))) {
                 requested.add(viewPermission);
             }
         });
 
         return requested.stream().map(available::get)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private boolean isOrganizationalPermission(PermissionJpaEntity permission) {
+        return permission != null
+                && !ADMINISTRATOR_EXCLUSIVE_PERMISSIONS.contains(permission.getCode())
+                && !"USER".equals(permission.getModuleCode());
+    }
+
+    private boolean isConfigurableOrganizationalPermission(PermissionJpaEntity permission) {
+        return isOrganizationalPermission(permission) && !BASE_PERMISSIONS.contains(permission.getCode());
     }
 
     private String viewPermissionFor(String code) {
@@ -373,6 +391,15 @@ public class RoleManagementService {
             throw new BusinessException("ROLE_DESCRIPTION_TOO_LONG",
                     "La descripción del rol no puede superar 500 caracteres.",
                     Map.of("description", "La descripción no puede superar 500 caracteres."));
+        }
+        return normalized;
+    }
+
+    private String normalizeCatalogScope(String value) {
+        String normalized = value == null || value.isBlank()
+                ? "ORGANIZATIONAL" : value.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ORGANIZATIONAL", "ADMINISTRATOR").contains(normalized)) {
+            throw new BusinessException("ROLE_SCOPE_INVALID", "El alcance de permisos solicitado no es válido.");
         }
         return normalized;
     }

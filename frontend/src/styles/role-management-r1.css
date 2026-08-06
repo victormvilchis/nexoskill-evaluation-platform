@@ -322,3 +322,55 @@
     justify-self: start;
   }
 }
+
+.permission-total-summary {
+  display: inline-block;
+  margin-top: 0.45rem;
+  color: #344054;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.permission-basic {
+  background: #f8fafc;
+  cursor: default;
+}
+
+.permission-basic input:disabled {
+  opacity: 1;
+  accent-color: #475467;
+}
+
+.permission-basic em {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.permission-select-all input:indeterminate {
+  accent-color: #475467;
+}
+
+.permission-search:focus-within {
+  border-color: #667085;
+  box-shadow: 0 0 0 3px rgba(102, 112, 133, 0.12);
+}
+
+@media (max-width: 760px) {
+  .permission-module > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .permission-module-trigger {
+    flex: 1 1 100%;
+  }
+
+  .permission-select-all {
+    margin-left: 1.55rem;
+  }
+
+  .permission-total-summary,
+  .permission-module-trigger small {
+    line-height: 1.35;
+  }
+}
