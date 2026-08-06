@@ -37,7 +37,8 @@ class RoleManagementServiceTest {
                 .map(RoleManagementService.PermissionDescriptor::code)
                 .collect(java.util.stream.Collectors.toSet());
         assertThat(visible).contains("PROFILE_VIEW", "PASSWORD_CHANGE", "STUDENT_VIEW", "STUDENT_IMPORT")
-                .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE", "GLOBAL_CONTENT_PROMOTE");
+                .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE", "GLOBAL_CONTENT_PROMOTE",
+                        "STUDENT_CERTIFICATION_CATALOG_VIEW");
         assertThat(catalog.modules().stream()
                 .flatMap(module -> module.permissions().stream())
                 .filter(permission -> permission.code().equals("PROFILE_VIEW")
@@ -46,7 +47,7 @@ class RoleManagementServiceTest {
     }
 
     @Test
-    void shouldIgnoreAdministratorPermissionsAndCompleteViewDependencyWhenCreatingRole() {
+    void shouldIgnoreAdministratorPermissionsAndDropActionsWithoutExplicitViewWhenCreatingRole() {
         Fixture fixture = fixture();
         when(fixture.roles.countByNormalizedName("Operador", null)).thenReturn(0L);
         when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -57,9 +58,8 @@ class RoleManagementServiceTest {
                 actor());
 
         assertThat(created.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE",
-                        "STUDENT_VIEW", "STUDENT_IMPORT")
-                .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE");
+                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE")
+                .doesNotContain("ORGANIZATION_VIEW", "USER_VIEW", "ROLE_MANAGE", "STUDENT_VIEW", "STUDENT_IMPORT");
     }
 
     @Test
@@ -79,8 +79,8 @@ class RoleManagementServiceTest {
                 new RoleManagementService.UpsertCommand("Gestor", null, Set.of("TALENT_CONVERT")), actor());
 
         assertThat(updated.permissionCodes())
-                .contains("TALENT_VIEW", "TALENT_CONVERT", "PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("ORGANIZATION_VIEW", "ROLE_MANAGE", "STUDENT_VIEW");
+                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
+                .doesNotContain("TALENT_VIEW", "TALENT_CONVERT", "ORGANIZATION_VIEW", "ROLE_MANAGE", "STUDENT_VIEW");
     }
 
     @Test
@@ -98,8 +98,47 @@ class RoleManagementServiceTest {
                 new RoleManagementService.CloneCommand("Supervisor copia", null), actor());
 
         assertThat(cloned.permissionCodes())
-                .contains("QUESTION_VIEW", "QUESTION_UPDATE", "PROFILE_VIEW", "PASSWORD_CHANGE")
-                .doesNotContain("ORGANIZATION_VIEW");
+                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
+                .doesNotContain("QUESTION_VIEW", "QUESTION_UPDATE", "ORGANIZATION_VIEW");
+    }
+
+
+    @Test
+    void shouldKeepActionWhenItsViewPermissionIsExplicitlySelected() {
+        Fixture fixture = fixture();
+        when(fixture.roles.countByNormalizedName("Operador Talent", null)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoleManagementService.RoleDetail created = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Operador Talent", null,
+                        Set.of("TALENT_VIEW", "TALENT_CONVERT")),
+                actor());
+
+        assertThat(created.permissionCodes())
+                .contains("TALENT_VIEW", "TALENT_CONVERT",
+                        "DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE");
+    }
+
+    @Test
+    void shouldPersistRemovalOfViewAndAllDependentPermissionsWhenUpdatingRole() {
+        Fixture fixture = fixture();
+        RoleJpaEntity role = RoleJpaEntity.custom("SUPERVISOR", "Supervisor", null,
+                Set.of(permission("STUDENT_VIEW", "Ver colaboradores", "STUDENTS"),
+                        permission("STUDENT_IMPORT", "Importar colaboradores", "STUDENTS")), NOW);
+        setField(role, "id", 40L);
+        when(fixture.roles.findByCodeIgnoreCase("SUPERVISOR")).thenReturn(Optional.of(role));
+        when(fixture.roles.countByNormalizedName("Supervisor", 40L)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(role)).thenReturn(role);
+        when(fixture.users.findUserIdsAssignedToRole(40L)).thenReturn(List.of());
+
+        RoleManagementService.RoleDetail updated = fixture.service.update("SUPERVISOR",
+                new RoleManagementService.UpsertCommand("Supervisor", null, Set.of("STUDENT_IMPORT")), actor());
+
+        assertThat(updated.permissionCodes())
+                .contains("PROFILE_VIEW", "PASSWORD_CHANGE")
+                .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
+        assertThat(role.getPermissions()).extracting(PermissionJpaEntity::getCode)
+                .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
     }
 
     private static Fixture fixture() {
@@ -116,6 +155,7 @@ class RoleManagementServiceTest {
                 permission("PROFILE_UPDATE", "Actualizar perfil propio", "PROFILE"),
                 permission("STUDENT_VIEW", "Ver colaboradores", "STUDENTS"),
                 permission("STUDENT_IMPORT", "Importar colaboradores", "STUDENTS"),
+                permission("STUDENT_CERTIFICATION_CATALOG_VIEW", "Consultar catálogos de certificación", "STUDENTS"),
                 permission("TALENT_VIEW", "Ver Talent Bank", "TALENT_BANK"),
                 permission("TALENT_CONVERT", "Convertir a colaborador", "TALENT_BANK"),
                 permission("QUESTION_VIEW", "Ver preguntas", "QUESTION_BANK"),

@@ -32,6 +32,9 @@ public class RoleManagementService {
     private static final String STUDENT_PORTAL_ROLE = "USER";
     private static final Set<String> BASE_PERMISSIONS = Set.of(
             "DASHBOARD_VIEW", "USER_PANEL_VIEW", "PROFILE_VIEW", "PASSWORD_CHANGE");
+    private static final Set<String> NON_APPLICABLE_PERMISSIONS = Set.of(
+            "QUESTION_REVIEW", "QUESTION_PUBLISH", "QUESTION_VERSION_VIEW",
+            "STUDENT_CERTIFICATION_CATALOG_VIEW");
     private static final Set<String> ADMINISTRATOR_EXCLUSIVE_PERMISSIONS = Set.of(
             "ROLE_MANAGE", "ADMIN_PANEL_VIEW", "TENANT_CONTEXT_SELECT",
             "USER_VIEW", "USER_CREATE", "USER_UPDATE", "USER_STATUS_CHANGE", "USER_PASSWORD_RESET",
@@ -97,6 +100,7 @@ public class RoleManagementService {
         boolean administratorScope = "ADMINISTRATOR".equals(normalizeCatalogScope(requestedScope));
         List<PermissionJpaEntity> visible = permissions.findAllByOrderByModuleCodeAscNameAsc().stream()
                 .filter(permission -> !"USER".equals(permission.getModuleCode()))
+                .filter(permission -> !NON_APPLICABLE_PERMISSIONS.contains(permission.getCode()))
                 .filter(permission -> administratorScope || isOrganizationalPermission(permission))
                 .toList();
 
@@ -204,7 +208,9 @@ public class RoleManagementService {
 
     private RoleDetail detail(RoleJpaEntity role) {
         Set<String> permissionCodes = role.isProtectedAdministrator()
-                ? permissions.findAll().stream().map(PermissionJpaEntity::getCode)
+                ? permissions.findAll().stream()
+                        .map(PermissionJpaEntity::getCode)
+                        .filter(code -> !NON_APPLICABLE_PERMISSIONS.contains(code))
                         .collect(Collectors.toCollection(LinkedHashSet::new))
                 : role.getPermissions().stream()
                         .filter(permission -> BASE_PERMISSIONS.contains(permission.getCode())
@@ -235,15 +241,17 @@ public class RoleManagementService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         BASE_PERMISSIONS.stream().filter(available::containsKey).forEach(requested::add);
 
-        // Toda acción requiere el permiso de consulta del módulo. Se completa de forma
-        // determinista también en backend para impedir matrices incoherentes manipuladas.
-        List.copyOf(requested).forEach(code -> {
+        // La consulta del módulo debe estar seleccionada de forma explícita. Cuando se
+        // retira Ver, las acciones dependientes se eliminan en backend en lugar de volver
+        // a agregar el permiso de consulta. Esto impide que una selección anterior o un
+        // payload manipulado reactive el módulo después de guardar.
+        requested.removeIf(code -> {
             String viewPermission = viewPermissionFor(code);
-            if (viewPermission != null && available.containsKey(viewPermission)
-                    && (BASE_PERMISSIONS.contains(viewPermission)
-                            || isOrganizationalPermission(available.get(viewPermission)))) {
-                requested.add(viewPermission);
-            }
+            return !BASE_PERMISSIONS.contains(code)
+                    && viewPermission != null
+                    && !code.equals(viewPermission)
+                    && !BASE_PERMISSIONS.contains(viewPermission)
+                    && !requested.contains(viewPermission);
         });
 
         return requested.stream().map(available::get)
@@ -252,6 +260,7 @@ public class RoleManagementService {
 
     private boolean isOrganizationalPermission(PermissionJpaEntity permission) {
         return permission != null
+                && !NON_APPLICABLE_PERMISSIONS.contains(permission.getCode())
                 && !ADMINISTRATOR_EXCLUSIVE_PERMISSIONS.contains(permission.getCode())
                 && !"USER".equals(permission.getModuleCode());
     }

@@ -298,7 +298,7 @@ public class CatalogAdministrationService {
 		long count = dependencyCount(type, dependencyKey(type, id));
 		if (count > 0) {
 			if (directLifecycle)
-				throw catalogInUse();
+				throw catalogInUse(count);
 			throw new BusinessException("CATALOG_IN_USE",
 					"No es posible eliminar este registro porque está siendo utilizado por información existente. "
 							+ "Puedes mantenerlo inactivo para impedir su uso en nuevos registros.");
@@ -439,7 +439,7 @@ public class CatalogAdministrationService {
 	}
 
 	private Item technologyListItem(QuestionTechnologyJpaEntity value) {
-		return technologyItem(value, false);
+		return technologyItem(value, true);
 	}
 
 	private Item technologyItem(QuestionTechnologyJpaEntity value, boolean includeDependencies) {
@@ -457,7 +457,7 @@ public class CatalogAdministrationService {
 	}
 
 	private Item profileListItem(ProfessionalCertificationProfileJpaEntity value) {
-		return profileItem(value, false);
+		return profileItem(value, true);
 	}
 
 	private Item profileItem(ProfessionalCertificationProfileJpaEntity value, boolean includeDependencies) {
@@ -476,7 +476,7 @@ public class CatalogAdministrationService {
 	}
 
 	private Item technologicalProfileListItem(TechnologicalProfileCatalogJpaEntity value) {
-		return technologicalProfileItem(value, false);
+		return technologicalProfileItem(value, true);
 	}
 
 	private Item technologicalProfileItem(TechnologicalProfileCatalogJpaEntity value, boolean includeDependencies) {
@@ -486,7 +486,7 @@ public class CatalogAdministrationService {
 				owner == null ? null : owner.getPublicId(),
 				owner == null ? scopeName(value.getContentScope()) : owner.getName(), null, value.getCreatedBy(),
 				value.getUpdatedBy(), value.getCreatedAt(), value.getUpdatedAt(), value.getVersion(),
-				includeDependencies ? dependencyCount(CatalogType.TECHNOLOGICAL_PROFILES, value.getCode()) : 0);
+				includeDependencies ? dependencyCount(CatalogType.TECHNOLOGICAL_PROFILES, value.getId()) : 0);
 	}
 
 	private Item typeItem(QuestionTypeJpaEntity value) {
@@ -689,10 +689,17 @@ public class CatalogAdministrationService {
 		};
 	}
 
+	private BusinessException catalogInUse(long count) {
+		return new BusinessException("CATALOG_IN_USE",
+				"No es posible eliminar este registro porque actualmente está siendo utilizado por "
+						+ count + (count == 1 ? " registro. " : " registros. ")
+						+ "Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.");
+	}
+
 	private BusinessException catalogInUse() {
 		return new BusinessException("CATALOG_IN_USE",
 				"No es posible eliminar este registro porque actualmente está siendo utilizado. "
-						+ "Puedes inactivarlo para evitar que esté disponible en nuevos registros.");
+						+ "Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.");
 	}
 
 	private BusinessException notFound() {

@@ -219,7 +219,7 @@ export function AdminStudentsPage() {
               <TableActionLink icon="eye" label="Ver" to={`/admin/collaborators/${student.publicId}`} />
               {permissions.has('STUDENT_UPDATE') && <TableActionLink icon="edit" label="Editar" to={`/admin/collaborators/${student.publicId}/edit`} />}
               {(permissions.has('STUDENT_STATUS_CHANGE') || permissions.has('STUDENT_SESSION_MANAGE') || permissions.has('STUDENT_DELETE')) && <TableActionLink icon="lock" label="Gestionar" to={`/admin/collaborators/${student.publicId}/manage`} tone="primary" />}
-              {student.certificationsEnabled && student.effectiveStatus === 'ACTIVE' && permissions.has('STUDENT_CERTIFICATION_MANAGE') && <TableActionLink icon="clipboard" label="Certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
+              {student.certificationsEnabled && permissions.has('STUDENT_VIEW') && <TableActionLink icon="clipboard" label="Certificaciones" to={`/admin/collaborators/${student.publicId}/certifications`} />}
               {permissions.has('STUDENT_DELETE') && <TableActionButton icon="trash" label="Eliminar definitivamente" tone="danger" onClick={() => setDeleteCandidate(student)} />}
             </TableActions></td>
           </tr>)}

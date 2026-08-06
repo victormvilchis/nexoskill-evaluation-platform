@@ -43,14 +43,14 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/certification-settings/current")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public Availability availability(HttpServletRequest request,
             @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.availability(tenantContextResolver.resolve(request), actor);
     }
 
     @GetMapping("/certification-catalogs")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public Catalogs catalogs(@RequestParam(required = false) String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         TenantContext tenant = tenantContextResolver.resolve(request);
@@ -59,7 +59,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public StudentCertificationDetail get(@PathVariable String studentPublicId,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {
         return service.get(tenantContextResolver.resolve(request), studentPublicId, actor);
@@ -109,7 +109,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/{certificationId}/attempts")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public PageResult<AttemptView> attempts(@PathVariable String studentPublicId,
             @PathVariable String certificationId, @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size, HttpServletRequest request,
@@ -138,7 +138,7 @@ public class StudentCertificationController {
     }
 
     @GetMapping("/students/{studentPublicId}/certifications/history")
-    @PreAuthorize("hasAuthority('STUDENT_CERTIFICATION_MANAGE')")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
     public PageResult<HistoryView> history(@PathVariable String studentPublicId,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "10") int size,
             HttpServletRequest request, @AuthenticationPrincipal AuthenticatedUser actor) {

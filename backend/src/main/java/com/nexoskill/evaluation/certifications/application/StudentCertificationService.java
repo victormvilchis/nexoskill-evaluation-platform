@@ -57,6 +57,7 @@ public class StudentCertificationService {
 
     @Transactional(readOnly = true)
     public Availability availability(TenantContext tenant, AuthenticatedUser actor) {
+        requireCertificationAccess(actor, tenant, null, false);
         if (tenant == null || !tenant.hasOrganization()) {
             return new Availability(false, hasOperationalRole(actor), null, null);
         }
@@ -75,20 +76,20 @@ public class StudentCertificationService {
 
     @Transactional(readOnly = true)
     public Catalogs catalogs(TenantContext tenant, String studentPublicId, AuthenticatedUser actor) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, false);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, false, false);
         return catalogs(scope.organizationId());
     }
 
     @Transactional(readOnly = true)
     public StudentCertificationDetail get(TenantContext tenant, String studentPublicId, AuthenticatedUser actor) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, false);
         return detail(scope);
     }
 
     @Transactional
     public StudentCertificationDetail save(TenantContext tenant, String studentPublicId, SaveCommand command,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         if (command == null) {
             throw new BusinessException("CERTIFICATION_CONFIGURATION_REQUIRED",
@@ -122,7 +123,7 @@ public class StudentCertificationService {
     @Transactional
     public CycleView createCycle(TenantContext tenant, String studentPublicId, CycleCommand command,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         String publicId = createCycle(scope, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_CYCLE_CREATED", scope, publicId,
@@ -133,7 +134,7 @@ public class StudentCertificationService {
     @Transactional
     public CycleView updateCycle(TenantContext tenant, String studentPublicId, String cyclePublicId,
             CycleCommand command, AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         updateCycle(scope, cyclePublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_CYCLE_UPDATED", scope, cyclePublicId,
@@ -144,7 +145,7 @@ public class StudentCertificationService {
     @Transactional
     public CycleView makePrimary(TenantContext tenant, String studentPublicId, String cyclePublicId,
             AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         CycleRow row = requireCycle(scope, cyclePublicId);
         if (row.type() != CertificationType.TECHNOLOGICAL || !row.active()) {
@@ -171,7 +172,7 @@ public class StudentCertificationService {
     @Transactional
     public CycleView cancel(TenantContext tenant, String studentPublicId, String cyclePublicId,
             String reason, AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         CycleRow row = requireCycle(scope, cyclePublicId);
         jdbc.update("""
@@ -190,7 +191,7 @@ public class StudentCertificationService {
     @Transactional
     public StudentCertificationDetail importSnapshot(TenantContext tenant, String studentPublicId,
             ImportSnapshotCommand command, AuthenticatedUser actor) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         if (command == null || command.type() == null) {
             throw new BusinessException("CERTIFICATION_IMPORT_REQUIRED",
                     "La información de certificación importada es obligatoria.");
@@ -377,7 +378,7 @@ public class StudentCertificationService {
     @Transactional(readOnly = true)
     public PageResult<AttemptView> attempts(TenantContext tenant, String studentPublicId, String cyclePublicId,
             int page, int size, AuthenticatedUser actor) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, false);
         CycleRow cycle = requireCycle(scope, cyclePublicId);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
@@ -401,7 +402,7 @@ public class StudentCertificationService {
     @Transactional
     public AttemptView addAttempt(TenantContext tenant, String studentPublicId, String cyclePublicId,
             AttemptCommand command, AuthenticatedUser actor, String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         AttemptView created = addAttemptInternal(scope, cyclePublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_ATTEMPT_CREATED", scope, cyclePublicId,
@@ -413,7 +414,7 @@ public class StudentCertificationService {
     public AttemptView updateAttempt(TenantContext tenant, String studentPublicId, String cyclePublicId,
             String attemptPublicId, AttemptCommand command, AuthenticatedUser actor,
             String ipAddress, String userAgent) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, true);
         requireActiveStudent(scope);
         AttemptView updated = updateAttemptInternal(scope, cyclePublicId, attemptPublicId, command, actor.internalId());
         audit(actor.internalId(), "STUDENT_CERTIFICATION_ATTEMPT_UPDATED", scope, cyclePublicId,
@@ -489,7 +490,7 @@ public class StudentCertificationService {
     @Transactional(readOnly = true)
     public PageResult<HistoryView> history(TenantContext tenant, String studentPublicId, int page, int size,
             AuthenticatedUser actor) {
-        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true);
+        Scope scope = resolveStudentScope(tenant, studentPublicId, actor, true, false);
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         MapSqlParameterSource params = new MapSqlParameterSource("studentId", scope.student().getId())
@@ -1102,8 +1103,8 @@ public class StudentCertificationService {
     }
 
     private Scope resolveStudentScope(TenantContext tenant, String studentPublicId, AuthenticatedUser actor,
-            boolean requireCertifications) {
-        requireOperationalRole(actor, tenant, studentPublicId);
+            boolean requireCertifications, boolean managementOperation) {
+        requireCertificationAccess(actor, tenant, studentPublicId, managementOperation);
         if (tenant == null) throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED",
                 "No existe un contexto organizacional autorizado.");
         StudentJpaEntity student;
@@ -1137,7 +1138,7 @@ public class StudentCertificationService {
     }
 
     private Scope requireTenantOrganization(TenantContext tenant, AuthenticatedUser actor) {
-        requireOperationalRole(actor, tenant, null);
+        requireCertificationAccess(actor, tenant, null, false);
         if (tenant == null || !tenant.hasOrganization() || tenant.globalScope()) {
             throw new BusinessException("ORGANIZATION_CONTEXT_REQUIRED", "Selecciona una organización comercial autorizada.");
         }
@@ -1157,17 +1158,27 @@ public class StudentCertificationService {
                 && actor.permissions().contains("STUDENT_CERTIFICATION_MANAGE");
     }
 
-    private void requireOperationalRole(AuthenticatedUser actor, TenantContext tenant, String studentPublicId) {
-        if (hasOperationalRole(actor)) return;
+    private boolean hasReadRole(AuthenticatedUser actor) {
+        return actor != null && actor.permissions() != null
+                && (actor.permissions().contains("STUDENT_VIEW") || hasOperationalRole(actor));
+    }
+
+    private void requireCertificationAccess(AuthenticatedUser actor, TenantContext tenant, String studentPublicId,
+            boolean managementOperation) {
+        boolean authorized = managementOperation ? hasOperationalRole(actor) : hasReadRole(actor);
+        if (authorized) return;
         Map<String, Object> data = new HashMap<>();
         if (studentPublicId != null) data.put("studentPublicId", studentPublicId);
         if (tenant != null && tenant.hasOrganization()) data.put("organizationId", tenant.organizationId());
         if (actor != null) data.put("roles", actor.roles());
+        data.put("operation", managementOperation ? "MANAGE" : "VIEW");
         audit.record(actor == null ? null : actor.internalId(), "STUDENT_CERTIFICATION_ACCESS_DENIED",
-                "STUDENT_CERTIFICATIONS", "Intento de acceso no autorizado a la gestión operativa de certificaciones.",
+                "STUDENT_CERTIFICATIONS", "Intento de acceso no autorizado a certificaciones de colaboradores.",
                 null, null, data, clock.instant());
         throw new BusinessException("CERTIFICATION_OPERATION_FORBIDDEN",
-                "No tienes permisos para gestionar las certificaciones de este colaborador.");
+                managementOperation
+                        ? "No tienes permiso para modificar las certificaciones de este colaborador."
+                        : "No tienes permiso para consultar las certificaciones de este colaborador.");
     }
 
     private Policy policy(Long organizationId, CertificationType type) {

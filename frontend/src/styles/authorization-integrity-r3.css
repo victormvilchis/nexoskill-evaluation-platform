@@ -1,0 +1,144 @@
+/* Tercera revisión: autorización efectiva, vistas de consulta y densidad visual. */
+
+/* El breadcrumb ya identifica la ubicación; se retiran banners de texto repetidos. */
+.content-page > .page-heading,
+.content-page > .resource-heading {
+  display: none !important;
+}
+
+.editor-page-navigation {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+}
+
+.role-readonly-summary,
+.certification-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .55rem;
+  margin: 0;
+}
+
+.role-readonly-summary > div,
+.certification-readonly-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: .18rem;
+  border: 1px solid #e4e7ec;
+  border-radius: 9px;
+  background: #f8fafc;
+  padding: .58rem .68rem;
+}
+
+.role-readonly-summary dt,
+.certification-readonly-grid dt {
+  color: #667085;
+  font-size: .7rem;
+  font-weight: 700;
+}
+
+.role-readonly-summary dd,
+.certification-readonly-grid dd {
+  margin: 0;
+  color: #17233a;
+  font-size: .82rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.role-readonly-summary-wide,
+.certification-readonly-wide {
+  grid-column: 1 / -1;
+}
+
+.permission-readonly {
+  cursor: default;
+}
+
+.permission-readonly-state {
+  display: grid !important;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.permission-readonly.is-granted .permission-readonly-state {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.permission-readonly.is-not-granted {
+  opacity: .72;
+}
+
+.permission-readonly.is-not-granted em {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.certification-readonly-section .certification-section-heading {
+  min-height: 0;
+}
+
+.catalog-usage-column {
+  width: 1%;
+  min-width: 108px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.catalog-items-page .catalog-usage-column strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Refuerzo final para que todos los buscadores se perciban como un único control. */
+:is(.ns-resource-search, .resource-search, .permission-search, .ns-search-field) {
+  overflow: hidden;
+  border: 1px solid var(--ns-filter-border, #c9d5e4) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+:is(.ns-resource-search, .resource-search, .permission-search, .ns-search-field):focus-within {
+  border-color: var(--ns-filter-focus, #2f67d8) !important;
+  box-shadow: 0 0 0 2px rgba(47, 103, 216, .12) !important;
+}
+
+:is(.ns-resource-search, .resource-search, .permission-search, .ns-search-field) input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Ajuste final de densidad sin comprometer legibilidad ni área de las acciones. */
+.ns-data-table th,
+.ns-data-table td {
+  padding-left: .4rem !important;
+  padding-right: .4rem !important;
+}
+
+.ns-filter-toolbar {
+  margin-bottom: 5px;
+}
+
+@media (max-width: 760px) {
+  .role-readonly-summary,
+  .certification-readonly-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .role-readonly-summary-wide,
+  .certification-readonly-wide {
+    grid-column: auto;
+  }
+
+  .catalog-usage-column {
+    min-width: 94px;
+  }
+}

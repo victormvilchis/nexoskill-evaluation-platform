@@ -170,16 +170,11 @@ export function AdminRolesPage() {
 
   return (
     <main className="content-page resource-page ns-list-page role-management-page">
-      <header className="role-list-header">
-        <div>
-          <span className="eyebrow">Administración</span>
-          <h1>Roles</h1>
-          <p>Configura módulos y acciones por rol. El Administrador conserva acceso completo y no es configurable.</p>
-        </div>
+      <div className="ns-list-action-bar" aria-label="Acciones de roles">
         <Link className="primary-button button-link ns-create-button" to="/admin/roles/new">
           <Icon name="plus" size={15} /> Crear rol
         </Link>
-      </header>
+      </div>
 
       <FilterToolbar hasActiveFilters={Boolean(query || status !== 'ACTIVE')} onClear={clearFilters}>
         <ResourceSearchField value={query} onChange={setQuery} placeholder="Buscar por nombre del rol" />
@@ -253,6 +248,7 @@ export function AdminRolesPage() {
                         <TableActionLink to={`/admin/roles/${role.code}`} icon="eye" label="Ver acceso" />
                       ) : (
                         <>
+                          <TableActionLink to={`/admin/roles/${role.code}`} icon="eye" label="Ver rol" />
                           <TableActionLink to={`/admin/roles/${role.code}/edit`} icon="edit" label="Configurar permisos" />
                           <TableActionButton icon="copy" label="Clonar" onClick={() => openClone(role)} />
                           <TableActionButton

@@ -36,6 +36,18 @@ function moduleViewPermission(module: PermissionModule) {
   return module.permissions.find((permission) => permission.viewPermission)?.code
 }
 
+function requiredViewPermission(code: string) {
+  if (code.startsWith('TALENT_')) return 'TALENT_VIEW'
+  if (code.startsWith('STUDENT_CERTIFICATION_')) return 'STUDENT_VIEW'
+  if (code.startsWith('STUDENT_')) return 'STUDENT_VIEW'
+  if (code.startsWith('FORM_')) return 'FORM_VIEW'
+  if (code.startsWith('COLLECTION_')) return 'COLLECTION_VIEW'
+  if (code.startsWith('QUESTION_') || code.startsWith('GLOBAL_CONTENT_')) return 'QUESTION_VIEW'
+  if (code.startsWith('CATALOG_')) return 'CATALOG_VIEW'
+  if (code.startsWith('PROFILE_')) return 'PROFILE_VIEW'
+  return undefined
+}
+
 function configurablePermissions(module: PermissionModule) {
   return module.permissions.filter((permission) => !permission.required)
 }
@@ -127,15 +139,21 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
     if (readOnly || role?.protectedRole) return
     const target = module.permissions.find((permission) => permission.code === code)
     if (!target || target.required) return
+    const allPermissions = catalog.modules.flatMap((entry) => entry.permissions)
+    const availableCodes = new Set(allPermissions.map((permission) => permission.code))
     setSelected((current) => {
       const next = new Set(current)
-      const viewCode = moduleViewPermission(module)
       if (checked) {
         next.add(code)
-        if (viewCode) next.add(viewCode)
+        const viewCode = requiredViewPermission(code) ?? moduleViewPermission(module)
+        if (viewCode && availableCodes.has(viewCode)) next.add(viewCode)
       } else {
         next.delete(code)
-        if (code === viewCode) configurablePermissions(module).forEach((permission) => next.delete(permission.code))
+        if (target.viewPermission) {
+          allPermissions
+            .filter((permission) => requiredViewPermission(permission.code) === code)
+            .forEach((permission) => next.delete(permission.code))
+        }
       }
       return next
     })
@@ -143,11 +161,23 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
 
   function toggleModule(module: PermissionModule, checked: boolean) {
     if (readOnly || role?.protectedRole) return
+    const allPermissions = catalog.modules.flatMap((entry) => entry.permissions)
+    const availableCodes = new Set(allPermissions.map((permission) => permission.code))
     setSelected((current) => {
       const next = new Set(current)
       configurablePermissions(module).forEach((permission) => {
-        if (checked) next.add(permission.code)
-        else next.delete(permission.code)
+        if (checked) {
+          next.add(permission.code)
+          const viewCode = requiredViewPermission(permission.code)
+          if (viewCode && availableCodes.has(viewCode)) next.add(viewCode)
+        } else {
+          next.delete(permission.code)
+          if (permission.viewPermission) {
+            allPermissions
+              .filter((candidate) => requiredViewPermission(candidate.code) === permission.code)
+              .forEach((candidate) => next.delete(candidate.code))
+          }
+        }
       })
       basicPermissions(module).forEach((permission) => next.add(permission.code))
       return next
@@ -199,13 +229,21 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
 
   const protectedRole = role?.protectedRole ?? false
   return <main className="content-page role-editor-page">
-    <div className="editor-page-heading"><BackButton fallback="/admin/roles" label="Regresar" /><div><span className="eyebrow">Administración · Roles</span><h1>{mode === 'create' ? 'Crear rol' : protectedRole ? 'Acceso del Administrador' : 'Configurar rol'}</h1><p>{protectedRole ? 'El Administrador es un rol protegido y siempre conserva acceso completo.' : 'Define los módulos y acciones que utilizarán todos los usuarios asignados a este rol.'}</p></div></div>
+    <div className="editor-page-navigation"><BackButton fallback="/admin/roles" label="Regresar" /></div>
 
     <section className="editor-card role-basic-card">
-      <div className="form-grid two-columns">
-        <label className="field-group"><span>Nombre del rol</span><input value={name} maxLength={100} disabled={readOnly || protectedRole} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(fieldError)} />{fieldError && <small className="field-error">{fieldError}</small>}</label>
-        <label className="field-group"><span>Descripción</span><input value={description} maxLength={500} disabled={readOnly || protectedRole} onChange={(event) => setDescription(event.target.value)} placeholder="Describe el propósito del rol" /></label>
-      </div>
+      {readOnly || protectedRole ? (
+        <dl className="role-readonly-summary">
+          <div><dt>Nombre del rol</dt><dd>{name}</dd></div>
+          <div><dt>Estado</dt><dd>{protectedRole ? 'Protegido' : role?.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</dd></div>
+          <div className="role-readonly-summary-wide"><dt>Descripción</dt><dd>{description || 'Sin descripción'}</dd></div>
+        </dl>
+      ) : (
+        <div className="form-grid two-columns">
+          <label className="field-group"><span>Nombre del rol</span><input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} aria-invalid={Boolean(fieldError)} />{fieldError && <small className="field-error">{fieldError}</small>}</label>
+          <label className="field-group"><span>Descripción</span><input value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} placeholder="Describe el propósito del rol" /></label>
+        </div>
+      )}
       {protectedRole && <div className="protected-role-banner"><Icon name="lock" /><div><strong>Rol protegido</strong><p>Acceso completo a todos los módulos, vistas, botones y acciones. Esta configuración es exclusivamente de consulta.</p></div></div>}
     </section>
 
@@ -224,7 +262,19 @@ export function RoleEditorPage({ mode }: RoleEditorPageProps) {
             <header><button className="permission-module-trigger" type="button" aria-expanded={open} onClick={() => setExpanded((current) => { const next = new Set(current); if (next.has(module.code)) next.delete(module.code); else next.add(module.code); return next })}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={17} /><span><strong>{module.name}</strong><small>{permissionCountLabel(module, selected, protectedRole)}</small></span></button>
               {!readOnly && !protectedRole && configurable.length > 0 && <label className="permission-select-all"><SelectAllCheckbox checked={allSelected} indeterminate={partiallySelected} onChange={(checked) => toggleModule(module, checked)} /> Todos</label>}
             </header>
-            {open && <div className="permission-options">{module.permissions.map((permission) => <label className={`permission-option permission-${permission.actionType.toLowerCase()}${permission.required ? ' permission-basic' : ''}`} key={permission.code}><input type="checkbox" checked={protectedRole || selected.has(permission.code)} disabled={readOnly || protectedRole || permission.required} onChange={(event) => togglePermission(module, permission.code, event.target.checked)} /><span><strong>{permission.name}</strong>{permission.description && <small>{permission.description}</small>}</span><em>{permission.required ? 'Básico' : permission.actionType === 'SPECIAL' ? 'Particular' : permission.actionType === 'VIEW' ? 'Ver' : permission.actionType === 'CREATE' ? 'Agregar' : permission.actionType === 'UPDATE' ? 'Editar' : permission.actionType === 'DELETE' ? 'Eliminar' : 'Inactivar'}</em></label>)}</div>}
+            {open && <div className="permission-options">{module.permissions.map((permission) => {
+              const granted = protectedRole || selected.has(permission.code)
+              const typeLabel = permission.required ? 'Básico' : permission.actionType === 'SPECIAL' ? 'Particular' : permission.actionType === 'VIEW' ? 'Ver' : permission.actionType === 'CREATE' ? 'Agregar' : permission.actionType === 'UPDATE' ? 'Editar' : permission.actionType === 'DELETE' ? 'Eliminar' : 'Inactivar'
+              return readOnly || protectedRole ? (
+                <div className={`permission-option permission-readonly permission-${permission.actionType.toLowerCase()}${permission.required ? ' permission-basic' : ''}${granted ? ' is-granted' : ' is-not-granted'}`} key={permission.code}>
+                  <span className="permission-readonly-state"><Icon name={granted ? 'check' : 'close'} size={16} /></span>
+                  <span><strong>{permission.name}</strong>{permission.description && <small>{permission.description}</small>}</span>
+                  <em>{permission.required ? 'Básico incluido' : granted ? `${typeLabel} autorizado` : `${typeLabel} no autorizado`}</em>
+                </div>
+              ) : (
+                <label className={`permission-option permission-${permission.actionType.toLowerCase()}${permission.required ? ' permission-basic' : ''}`} key={permission.code}><input type="checkbox" checked={selected.has(permission.code)} disabled={permission.required} onChange={(event) => togglePermission(module, permission.code, event.target.checked)} /><span><strong>{permission.name}</strong>{permission.description && <small>{permission.description}</small>}</span><em>{typeLabel}</em></label>
+              )
+            })}</div>}
           </article>
         })}
       </div>

@@ -7,6 +7,7 @@ import {
   getStudentCertifications,
   saveStudentCertifications
 } from '../features/certifications/api/certificationApi'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { DateField } from '../shared/components/DateField'
@@ -326,6 +327,9 @@ export function StudentCertificationsPage() {
   const { publicId = '' } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const canManage = Boolean(user?.roles.includes('ADMINISTRATOR')
+    || user?.permissions.includes('STUDENT_CERTIFICATION_MANAGE'))
   const [catalogs, setCatalogs] = useState<CertificationCatalogs>()
   const [detail, setDetail] = useState<StudentCertificationDetail>()
   const [applicability, setApplicability] = useState<CertificationApplicability>({
@@ -566,7 +570,7 @@ export function StudentCertificationsPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving || !validate()) return
+    if (!canManage || saving || !validate()) return
     setSaving(true)
     setError('')
     setFieldErrors({})
@@ -626,7 +630,7 @@ export function StudentCertificationsPage() {
       <BackButton fallback="/admin/collaborators" />
 
       {error && <div className="error-message" role="alert">{error}</div>}
-      {inactiveStudent && <div className="warning-message" role="status">{inactiveBecauseNoAdmissionDate
+      {inactiveStudent && canManage && <div className="warning-message" role="status">{inactiveBecauseNoAdmissionDate
         ? 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones. La información existente permanece disponible para consulta.'
         : 'El colaborador no se encuentra activo. No es posible gestionar sus certificaciones. La información existente permanece disponible para consulta.'}</div>}
 
@@ -719,15 +723,20 @@ export function StudentCertificationsPage() {
 
 
           {FLAG_OPTIONS.map((option) => activeTab === option.type && applicability[option.key] ? (
-            <CertificationSection key={option.type} type={option.type} cycles={cycles.filter((cycle) => cycle.type === option.type)}
-              catalogs={catalogs} attemptDrafts={attemptDrafts} fieldErrors={fieldErrors}
-              onAdd={addCycle} onUpdate={updateCycle} onRemove={removeUnsavedCycle}
-              onSetPrimary={setPrimary} onToggleAttempt={toggleAttemptDraft} onUpdateAttempt={updateAttemptDraft} />
+            canManage ? (
+              <CertificationSection key={option.type} type={option.type} cycles={cycles.filter((cycle) => cycle.type === option.type)}
+                catalogs={catalogs} attemptDrafts={attemptDrafts} fieldErrors={fieldErrors}
+                onAdd={addCycle} onUpdate={updateCycle} onRemove={removeUnsavedCycle}
+                onSetPrimary={setPrimary} onToggleAttempt={toggleAttemptDraft} onUpdateAttempt={updateAttemptDraft} />
+            ) : (
+              <CertificationReadOnlySection key={option.type} type={option.type}
+                cycles={cycles.filter((cycle) => cycle.type === option.type)} catalogs={catalogs} />
+            )
           ) : null)}
 
           {activeTab === 'ATTEMPTS' && (
             <section className="ns-card certification-panel">
-              <div className="ns-card-heading"><div><h2>Intentos</h2><p className="muted">Los intentos se consultan con paginación de servidor. Para editar uno, cárgalo en la sección de su certificación y guarda todos los cambios juntos.</p></div></div>
+              <div className="ns-card-heading"><div><h2>Intentos</h2>{canManage && <p className="muted">Los intentos se consultan con paginación de servidor. Para editar uno, cárgalo en la sección de su certificación y guarda todos los cambios juntos.</p>}</div></div>
               {attemptCycles.length === 0 ? <p className="muted">Todavía no existen ciclos que admitan intentos.</p> : (
                 <>
                   <label className="ns-field certification-attempt-cycle-select"><span>Ciclo</span>
@@ -741,7 +750,7 @@ export function StudentCertificationsPage() {
                     {!attemptsLoading && attempts.content.map((attempt) => <tr key={attempt.publicId}>
                       <td>{attempt.attemptNumber}</td><td>{formatDate(attempt.scheduledDate)}</td><td>{formatDate(attempt.applicationDate)}</td>
                       <td>{EXAM_LABELS[attempt.examStatus]}</td><td>{attempt.score ?? '—'}</td><td>{attempt.result ?? '—'}</td>
-                      <td><button className="secondary-button" type="button" onClick={() => editAttempt(attempt)}>Editar</button></td>
+                      <td>{canManage ? <button className="secondary-button" type="button" onClick={() => editAttempt(attempt)}>Editar</button> : 'Solo consulta'}</td>
                     </tr>)}
                   </tbody></table></div>
                   <TablePagination compact currentPage={attempts.page} pageSize={attempts.size}
@@ -782,14 +791,71 @@ export function StudentCertificationsPage() {
           )}
         </fieldset>
 
-        <footer className="certification-actions">
+        {canManage && <footer className="certification-actions">
           <button className="secondary-button" type="button" disabled={saving} onClick={() => navigate('/admin/collaborators')}>Cancelar</button>
           {!inactiveStudent && <button className="primary-button" type="submit" disabled={saving || !dirty}>
             {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>}
-        </footer>
+        </footer>}
       </form>
     </main>
+  )
+}
+
+function CertificationReadOnlySection({
+  type,
+  cycles,
+  catalogs
+}: {
+  type: CertificationType
+  cycles: EditableCycle[]
+  catalogs: CertificationCatalogs
+}) {
+  const trackingLabel = (value: CertificationTrackingStatus) =>
+    catalogs.trackingStatuses.find((option) => option.value === value)?.label ?? value
+  const levelLabel = (value?: CertificationLevel | null) =>
+    catalogs.levels.find((option) => option.value === value)?.label ?? value ?? 'Sin nivel'
+
+  return (
+    <section className="certification-panel certification-cycle-section certification-readonly-section">
+      <div className="ns-card certification-section-heading">
+        <div><p className="eyebrow">Consulta</p><h2>{TYPE_LABELS[type]}</h2></div>
+      </div>
+      {cycles.length === 0 && (
+        <div className="ns-card certification-empty-cycle">
+          <p>No existe un ciclo configurado para esta certificación.</p>
+        </div>
+      )}
+      <div className="certification-cycle-list">
+        {cycles.map((cycle, index) => (
+          <article className="ns-card certification-cycle-card" key={cycle.key}>
+            <header>
+              <div>
+                <p className="eyebrow">{type === 'TECHNOLOGICAL' ? cycle.primary ? 'Certificación principal' : `Certificación secundaria ${index + 1}` : `Ciclo ${index + 1}`}</p>
+                <h3>{cycle.processType === 'RECERTIFICATION' ? 'Recertificación' : cycle.processType === 'CERTIFICATION' ? 'Certificación' : 'Seguimiento'}</h3>
+              </div>
+            </header>
+            <dl className="certification-readonly-grid">
+              {type === 'TECHNOLOGICAL' && <div><dt>Tecnología</dt><dd>{cycle.technologyName ?? 'Sin tecnología'}</dd></div>}
+              {type === 'TECHNOLOGICAL' && <div><dt>Nivel</dt><dd>{levelLabel(cycle.certificationLevel)}</dd></div>}
+              <div><dt>Estado de seguimiento</dt><dd>{trackingLabel(cycle.trackingStatus)}</dd></div>
+              {hasExpiration(type) && <div><dt>Fecha límite inicial</dt><dd>{formatDate(cycle.deadlineDate)}</dd></div>}
+              {hasExpiration(type) && <div><dt>Fecha programada</dt><dd>{formatDate(cycle.scheduledDate)}</dd></div>}
+              {hasExpiration(type) && <div><dt>Última presentación</dt><dd>{formatDate(cycle.applicationDate)}</dd></div>}
+              {hasExpiration(type) && <div><dt>Última aprobación</dt><dd>{formatDate(cycle.lastApprovedApplicationDate)}</dd></div>}
+              {type !== 'ONE' && type !== 'AGILE' && type !== 'JIRA' && <div><dt>Aprobación</dt><dd>{cycle.approved === true ? 'Aprobada' : cycle.approved === false ? 'No aprobada' : 'Pendiente'}</dd></div>}
+              {hasExpiration(type) && <div><dt>Fecha de vencimiento</dt><dd>{formatDate(cycle.expirationDate)}</dd></div>}
+              {hasExpiration(type) && <div><dt>Estado de vigencia</dt><dd>{cycle.validityStatus ? VALIDITY_LABELS[cycle.validityStatus] : 'Aún no obtenida'}</dd></div>}
+              {hasExpiration(type) && <div><dt>Último resultado de examen</dt><dd>{cycle.latestExamStatus ? EXAM_LABELS[cycle.latestExamStatus] : 'Sin información'}</dd></div>}
+              {hasExpiration(type) && <div><dt>Promedio más reciente</dt><dd>{cycle.latestScore ?? 'Sin información'}</dd></div>}
+              {type === 'DEVELOPMENT_SECURITY' && <div className="certification-readonly-wide"><dt>Gestión Softtek</dt><dd>{cycle.softtekManagement || 'Sin información'}</dd></div>}
+              {type === 'NORMATIVE_TESTING' && <div className="certification-readonly-wide"><dt>Acciones a realizar</dt><dd>{cycle.actionsToTake || 'Sin información'}</dd></div>}
+              <div className="certification-readonly-wide"><dt>Observaciones</dt><dd>{cycle.observations || 'Sin observaciones'}</dd></div>
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 

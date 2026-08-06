@@ -69,6 +69,10 @@ export function CatalogItemsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const type = params.type?.toUpperCase() as CatalogType
   const validType = catalogTypes.has(type)
+  const showUsageCount = type === 'TECHNOLOGIES'
+    || type === 'PROFESSIONAL_PROFILES'
+    || type === 'TECHNOLOGICAL_PROFILES'
+  const tableColumnCount = showUsageCount ? 6 : 5
   const mode = getDialogMode(location.pathname, params.id)
   const listPath = validType ? `/admin/catalogs/${type}` : '/admin/catalogs/CATEGORIES'
 
@@ -276,11 +280,11 @@ export function CatalogItemsPage() {
       )
       toast.success(statusCandidate.action === 'activate'
         ? 'Registro activado correctamente.'
-        : 'El registro fue inactivado y ya no estará disponible para nuevas asignaciones.')
+        : 'El registro fue inactivado y ya no estará disponible para nuevas asignaciones. Las relaciones existentes se conservarán.')
       setStatusCandidate(undefined)
       reload()
     } catch (requestError) {
-      toast.error('No fue posible cambiar el estado', requestError instanceof ApiRequestError ? requestError.message : undefined)
+      toast.error('El registro no pudo cambiar de estado', requestError instanceof ApiRequestError ? requestError.message : 'La operación no se realizó. Intenta nuevamente.')
     } finally {
       setBusy(false)
     }
@@ -294,14 +298,14 @@ export function CatalogItemsPage() {
       const dependencyResult: CatalogDependencies = await getCatalogDependencies(type, item.id)
       if (!dependencyResult.deletable || dependencyResult.total > 0) {
         toast.error(
-          'No es posible eliminar este registro porque actualmente está siendo utilizado. Puedes inactivarlo para evitar que esté disponible en nuevos registros.',
+          `No es posible eliminar este registro porque actualmente está siendo utilizado por ${dependencyResult.total} ${dependencyResult.total === 1 ? 'registro' : 'registros'}. Puedes inactivarlo para evitar que esté disponible en nuevas asignaciones.`,
           dependencyResult.details.join(' ') || undefined
         )
         return
       }
       setDeleteCandidate(item)
     } catch (requestError) {
-      toast.error('No fue posible validar el uso del registro', requestError instanceof ApiRequestError ? requestError.message : undefined)
+      toast.error('No se pudo comprobar si el registro está en uso', requestError instanceof ApiRequestError ? requestError.message : 'La eliminación no se realizó. Intenta nuevamente.')
     } finally {
       setBusy(false)
     }
@@ -371,6 +375,7 @@ export function CatalogItemsPage() {
               <tr>
                 <th>Nombre</th>
                 <th>Organización</th>
+                {showUsageCount && <th className="catalog-usage-column">Cantidad de usos</th>}
                 <th>Actualización</th>
                 <th>Estado</th>
                 <th className="ns-actions-column">Acciones</th>
@@ -378,11 +383,11 @@ export function CatalogItemsPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td className="ns-table-empty" colSpan={5}>Cargando registros…</td></tr>
+                <tr><td className="ns-table-empty" colSpan={tableColumnCount}>Cargando registros…</td></tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td className="ns-table-empty" colSpan={5}>
+                  <td className="ns-table-empty" colSpan={tableColumnCount}>
                     <strong>No hay registros</strong>
                     <span>{canManage ? 'Ajusta los filtros o crea un valor nuevo.' : 'Ajusta los filtros para consultar los registros disponibles.'}</span>
                   </td>
@@ -392,6 +397,7 @@ export function CatalogItemsPage() {
                 <tr key={item.id}>
                   <td className="ns-primary-cell"><strong>{item.name}</strong></td>
                   <td>{item.organizationName ?? 'GLOBAL'}</td>
+                  {showUsageCount && <td className="catalog-usage-column"><strong>{item.dependencyCount}</strong></td>}
                   <td>{formatDate(item.updatedAt ?? item.createdAt)}</td>
                   <td><span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</span></td>
                   <td>
@@ -499,7 +505,7 @@ export function CatalogItemsPage() {
                   <div><span>Código</span><strong>{selected.code}</strong></div>
                   <div><span>Estado</span><strong>{selected.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</strong></div>
                   <div><span>Orden</span><strong>{selected.displayOrder}</strong></div>
-                  <div><span>Usos o dependencias</span><strong>{selected.dependencyCount}</strong></div>
+                  <div><span>Cantidad de usos</span><strong>{selected.dependencyCount}</strong></div>
                   <div><span>Creación</span><strong>{formatDate(selected.createdAt)}</strong></div>
                   {selected.organizationName && <div><span>Organización</span><strong>{selected.organizationName}</strong></div>}
                   <div className="catalog-readonly-wide"><span>Descripción</span><strong>{selected.description || 'Sin descripción'}</strong></div>
@@ -517,7 +523,9 @@ export function CatalogItemsPage() {
         title={statusCandidate?.action === 'activate' ? 'Activar registro' : 'Inactivar registro'}
         description={statusCandidate?.action === 'activate'
           ? 'Este registro volverá a estar disponible para nuevas asignaciones. ¿Deseas continuar?'
-          : 'Este registro dejará de estar disponible para nuevas asignaciones, pero se conservará en los registros donde ya está siendo utilizado. ¿Deseas continuar?'}
+          : statusCandidate?.item.dependencyCount
+            ? `Este registro está siendo utilizado por ${statusCandidate.item.dependencyCount} ${statusCandidate.item.dependencyCount === 1 ? 'registro' : 'registros'}. Al inactivarlo, se conservarán las relaciones existentes, pero dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?`
+            : 'Este registro dejará de estar disponible para nuevas asignaciones. ¿Deseas continuar?'}
         confirmLabel={statusCandidate?.action === 'activate' ? 'Confirmar activación' : 'Confirmar inactivación'}
         busy={busy}
         onCancel={() => setStatusCandidate(undefined)}
