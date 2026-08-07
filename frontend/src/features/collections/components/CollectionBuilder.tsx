@@ -320,15 +320,6 @@ export function CollectionBuilder({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
-                {query && (
-                  <button
-                    aria-label="Limpiar búsqueda"
-                    type="button"
-                    onClick={() => setQuery('')}
-                  >
-                    <Icon name="close" size={14} />
-                  </button>
-                )}
               </label>
 
               <label className="lc-select-field">

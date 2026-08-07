@@ -252,16 +252,6 @@ export function CollectionEditor({ initial, onSubmit, label }: CollectionEditorP
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filtrar por enunciado o categoría"
           />
-          {query && (
-            <button
-              aria-label="Limpiar búsqueda"
-              className="resource-search-clear"
-              type="button"
-              onClick={() => setQuery('')}
-            >
-              <Icon name="close" size={15} />
-            </button>
-          )}
         </label>
 
         {loadingResources ? (

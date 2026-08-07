@@ -8,15 +8,10 @@ type FilterToolbarProps = {
   resultLabel?: string
 }
 
-export function FilterToolbar({ children, onClear, hasActiveFilters }: FilterToolbarProps) {
+export function FilterToolbar({ children }: FilterToolbarProps) {
   return (
     <section className="ns-filter-toolbar" aria-label="Filtros">
       <div className="ns-filter-fields">{children}</div>
-      <div className="ns-filter-meta">
-        {hasActiveFilters && onClear && (
-          <button className="ns-clear-filters" type="button" onClick={onClear}>Limpiar filtros</button>
-        )}
-      </div>
     </section>
   )
 }

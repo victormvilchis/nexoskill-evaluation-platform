@@ -30,17 +30,6 @@ export function ResourceSearchField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      {value.length > 0 && (
-        <button
-          aria-label="Limpiar búsqueda"
-          className="ns-resource-search-clear"
-          disabled={disabled}
-          type="button"
-          onClick={() => onChange('')}
-        >
-          <Icon name="close" size={13} />
-        </button>
-      )}
     </label>
   )
 }
