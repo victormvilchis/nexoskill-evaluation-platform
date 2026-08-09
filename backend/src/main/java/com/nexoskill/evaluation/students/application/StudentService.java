@@ -122,7 +122,7 @@ public class StudentService {
 		}
 		String corporateUser = cleanOptional(command.corporateUser());
 		String normalizedCorporateUser = normalizeCorporateUser(corporateUser);
-		validateCorporateUser(null, command.admissionDate(), corporateUser, normalizedCorporateUser);
+		validateCorporateUser(organizationId, null, command.admissionDate(), corporateUser, normalizedCorporateUser);
 		String requestedCode = cleanStudentCode(command.studentCode());
 		if (organization.isManualStudentCode()) {
 			if (requestedCode == null) {
@@ -151,7 +151,7 @@ public class StudentService {
 			}
 		} catch (DataIntegrityViolationException exception) {
 			throw new BusinessException("STUDENT_CONFLICT",
-					"El correo, el Código a nivel organización o el Usuario corporativo ya está registrado.",
+					"El correo, el Código a nivel organización o el Usuario corporativo ya está registrado dentro de la organización.",
 					Map.of("student", "Verifica los identificadores del colaborador."));
 		}
 		if (recordCollaboratorAudit) {
@@ -206,8 +206,8 @@ public class StudentService {
 		}
 		String corporateUser = preserveExistingCorporateUser ? student.getCorporateUser() : requestedCorporateUser;
 		String normalizedCorporateUser = normalizeCorporateUser(corporateUser);
-		validateCorporateUser(student.getId(), command.admissionDate(), corporateUser, normalizedCorporateUser,
-				preserveExistingCorporateUser);
+		validateCorporateUser(student.getOrganizationId(), student.getId(), command.admissionDate(), corporateUser,
+				normalizedCorporateUser, preserveExistingCorporateUser);
 		Instant now = clock.instant();
 		LocalDate previousAdmissionDate = student.getAdmissionDate();
 		LocalDate previousValidFrom = student.getValidFrom();
@@ -222,7 +222,7 @@ public class StudentService {
 			student = studentRepository.saveAndFlush(student);
 		} catch (DataIntegrityViolationException exception) {
 			throw new BusinessException("STUDENT_CONFLICT",
-					"El correo, el Código a nivel organización o el Usuario corporativo ya está registrado.",
+					"El correo, el Código a nivel organización o el Usuario corporativo ya está registrado dentro de la organización.",
 					Map.of("student", "Verifica los identificadores del colaborador."));
 		}
 		StudentEffectiveStatus effectiveStatus = student.effectiveStatusOn(LocalDate.now(clock));
@@ -489,13 +489,13 @@ public class StudentService {
 		return value.toUpperCase(java.util.Locale.ROOT);
 	}
 
-	private void validateCorporateUser(Long currentStudentId, LocalDate admissionDate, String corporateUser,
-			String normalizedCorporateUser) {
-		validateCorporateUser(currentStudentId, admissionDate, corporateUser, normalizedCorporateUser, false);
+	private void validateCorporateUser(Long organizationId, Long currentStudentId, LocalDate admissionDate,
+			String corporateUser, String normalizedCorporateUser) {
+		validateCorporateUser(organizationId, currentStudentId, admissionDate, corporateUser, normalizedCorporateUser, false);
 	}
 
-	private void validateCorporateUser(Long currentStudentId, LocalDate admissionDate, String corporateUser,
-			String normalizedCorporateUser, boolean existingValuePreserved) {
+	private void validateCorporateUser(Long organizationId, Long currentStudentId, LocalDate admissionDate,
+			String corporateUser, String normalizedCorporateUser, boolean existingValuePreserved) {
 		if (admissionDate == null && corporateUser != null && !existingValuePreserved) {
 			throw fieldError("STUDENT_CORPORATE_USER_REQUIRES_ADMISSION_DATE",
 					"Captura una Fecha de alta para registrar el Usuario corporativo.", "corporateUser",
@@ -503,7 +503,7 @@ public class StudentService {
 		}
 		if (normalizedCorporateUser == null)
 			return;
-		studentRepository.findByNormalizedCorporateUser(normalizedCorporateUser)
+		studentRepository.findByOrganizationIdAndNormalizedCorporateUser(organizationId, normalizedCorporateUser)
 				.filter(existing -> currentStudentId == null || !existing.getId().equals(currentStudentId))
 				.ifPresent(existing -> {
 					throw fieldError("STUDENT_CORPORATE_USER_EXISTS",

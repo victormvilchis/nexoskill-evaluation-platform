@@ -139,6 +139,38 @@ class StudentServiceTest {
 	}
 
 	@Test
+	void shouldAllowCorporateUserUsedOnlyByAnotherOrganization() {
+		when(students.findByOrganizationIdAndNormalizedCorporateUser(20L, "XM06294"))
+				.thenReturn(Optional.empty());
+
+		StudentService.CreateResult result = service.create(TENANT,
+				new StudentService.CreateCommand("ana@example.com", "Ana", "López", "Ana López",
+						StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY, null, "XM06294"),
+				new StudentService.Actor(1L, "127.0.0.1", "browser"));
+
+		assertThat(result.student().corporateUser()).isEqualTo("XM06294");
+		verify(students).findByOrganizationIdAndNormalizedCorporateUser(20L, "XM06294");
+	}
+
+	@Test
+	void shouldRejectCorporateUserAlreadyUsedInsideTheSameOrganization() {
+		StudentJpaEntity existing = StudentJpaEntity.create("other-student", 20L, "AC9999",
+				"other@example.com", "other@example.com", "password-hash", "Otro", "Usuario",
+				"Otro Usuario", StudentStatus.ACTIVE, TODAY.minusDays(1), TODAY.plusDays(30), TODAY,
+				"XM06294", "XM06294", NOW.plusSeconds(7200), 1L, NOW.minusSeconds(3600));
+		setId(existing, 99L);
+		when(students.findByOrganizationIdAndNormalizedCorporateUser(20L, "XM06294"))
+				.thenReturn(Optional.of(existing));
+
+		assertThatThrownBy(() -> service.create(TENANT,
+				new StudentService.CreateCommand("ana@example.com", "Ana", "López", "Ana López",
+						StudentStatus.ACTIVE, TODAY, TODAY.plusDays(30), TODAY, null, "XM06294"),
+				new StudentService.Actor(1L, "127.0.0.1", "browser")))
+				.isInstanceOfSatisfying(BusinessException.class, exception -> assertThat(exception.getCode())
+						.isEqualTo("STUDENT_CORPORATE_USER_EXISTS"));
+	}
+
+	@Test
 	void shouldPreserveCorporateUserWhenAdmissionDateIsRemoved() {
 		StudentJpaEntity student = StudentJpaEntity.create("student-public", 20L, "AC1230", "ana@example.com",
 				"ana@example.com", "password-hash", "Ana", "López", "Ana López", StudentStatus.ACTIVE,

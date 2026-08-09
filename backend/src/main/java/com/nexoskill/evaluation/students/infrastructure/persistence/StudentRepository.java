@@ -32,7 +32,7 @@ public interface StudentRepository extends JpaRepository<StudentJpaEntity, Long>
 
 	Optional<StudentJpaEntity> findByOrganizationIdAndStudentCode(Long organizationId, String studentCode);
 
-	Optional<StudentJpaEntity> findByNormalizedCorporateUser(String normalizedCorporateUser);
+	Optional<StudentJpaEntity> findByOrganizationIdAndNormalizedCorporateUser(Long organizationId, String normalizedCorporateUser);
 
 	boolean existsByOrganizationIdAndRecordModule(Long organizationId, StudentRecordModule recordModule);
 

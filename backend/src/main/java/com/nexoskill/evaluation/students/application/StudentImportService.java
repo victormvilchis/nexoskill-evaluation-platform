@@ -619,7 +619,7 @@ public class StudentImportService {
         }
         if (!normalizedCorporateUsers.isEmpty()) {
             List<String> existing = queryExistingValues("NORMALIZED_CORPORATE_USER", "NORMALIZED_CORPORATE_USER", "values",
-                    List.copyOf(normalizedCorporateUsers), "1 = 1", null);
+                    List.copyOf(normalizedCorporateUsers), "ORGANIZATION_ID = :organizationId", organizationId);
             if (!existing.isEmpty()) {
                 throw new BusinessException("STUDENT_IMPORT_CORPORATE_USER_IN_USE",
                         "El Usuario corporativo " + existing.getFirst() + " ya está asignado a otro colaborador.");

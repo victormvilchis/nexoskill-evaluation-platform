@@ -242,7 +242,11 @@ export function DashboardPage() {
       const target = index + direction
       if (index < 0 || target < 0 || target >= current.length) return current
       const next = [...current]
-      ;[next[index], next[target]] = [next[target], next[index]]
+      const sourceItem = next[index]
+      const targetItem = next[target]
+      if (!sourceItem || !targetItem) return current
+      next[index] = targetItem
+      next[target] = sourceItem
       return normalizeOrder(next)
     })
   }
@@ -256,6 +260,7 @@ export function DashboardPage() {
       if (source < 0 || target < 0) return current
       const next = [...current]
       const [moved] = next.splice(source, 1)
+      if (!moved) return current
       next.splice(target, 0, moved)
       return normalizeOrder(next)
     })

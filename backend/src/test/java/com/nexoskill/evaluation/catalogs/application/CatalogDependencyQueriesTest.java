@@ -50,6 +50,17 @@ class CatalogDependencyQueriesTest {
     }
 
     @Test
+    void shouldScopeCodeBasedTechnologicalProfileDependenciesByOrganization() {
+        String sql = sqlFor(CatalogType.TECHNOLOGICAL_PROFILES);
+
+        assertThat(sql)
+                .contains("student_profile.ORGANIZATION_ID = tech_profile.OWNER_ORGANIZATION_ID")
+                .contains("professional_profile.OWNER_ORGANIZATION_ID = tech_profile.OWNER_ORGANIZATION_ID")
+                .contains("local_profile.OWNER_ORGANIZATION_ID = student_profile.ORGANIZATION_ID")
+                .contains("local_profile.OWNER_ORGANIZATION_ID = professional_profile.OWNER_ORGANIZATION_ID");
+    }
+
+    @Test
     void shouldCountEveryCategoryRelationshipThatBlocksDeletion() {
         String sql = sqlFor(CatalogType.CATEGORIES);
 

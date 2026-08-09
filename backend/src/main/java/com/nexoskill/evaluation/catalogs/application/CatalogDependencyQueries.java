@@ -50,13 +50,29 @@ final class CatalogDependencyQueries {
                 query("colaboradores con el perfil tecnológico",
                         "SELECT COUNT(*) FROM STUDENT WHERE TECHNOLOGICAL_PROFILE_ID = :key"),
                 query("configuraciones de certificación con el perfil tecnológico",
-                        "SELECT COUNT(*) FROM STUDENT_CERTIFICATION_PROFILE WHERE TECHNOLOGICAL_PROFILE = "
-                                + "(SELECT PROFILE_CODE FROM TECHNOLOGICAL_PROFILE_CATALOG "
-                                + "WHERE TECHNOLOGICAL_PROFILE_ID = :key)"),
+                        "SELECT COUNT(*) FROM STUDENT_CERTIFICATION_PROFILE student_profile "
+                                + "JOIN TECHNOLOGICAL_PROFILE_CATALOG tech_profile ON tech_profile.TECHNOLOGICAL_PROFILE_ID = :key "
+                                + "WHERE student_profile.TECHNOLOGICAL_PROFILE = tech_profile.PROFILE_CODE "
+                                + "AND ((tech_profile.CONTENT_SCOPE = 'ORGANIZATION' "
+                                + "AND student_profile.ORGANIZATION_ID = tech_profile.OWNER_ORGANIZATION_ID) "
+                                + "OR (tech_profile.CONTENT_SCOPE = 'GLOBAL' AND NOT EXISTS ("
+                                + "SELECT 1 FROM TECHNOLOGICAL_PROFILE_CATALOG local_profile "
+                                + "WHERE local_profile.CONTENT_SCOPE = 'ORGANIZATION' "
+                                + "AND local_profile.OWNER_ORGANIZATION_ID = student_profile.ORGANIZATION_ID "
+                                + "AND UPPER(local_profile.PROFILE_CODE) = UPPER(tech_profile.PROFILE_CODE))))"),
                 query("perfiles profesionales que lo sugieren",
-                        "SELECT COUNT(*) FROM CERTIFICATION_PROFILE_CATALOG WHERE SUGGESTED_TECH_PROFILE = "
-                                + "(SELECT PROFILE_CODE FROM TECHNOLOGICAL_PROFILE_CATALOG "
-                                + "WHERE TECHNOLOGICAL_PROFILE_ID = :key)"));
+                        "SELECT COUNT(*) FROM CERTIFICATION_PROFILE_CATALOG professional_profile "
+                                + "JOIN TECHNOLOGICAL_PROFILE_CATALOG tech_profile ON tech_profile.TECHNOLOGICAL_PROFILE_ID = :key "
+                                + "WHERE professional_profile.SUGGESTED_TECH_PROFILE = tech_profile.PROFILE_CODE "
+                                + "AND ((tech_profile.CONTENT_SCOPE = 'ORGANIZATION' "
+                                + "AND professional_profile.CONTENT_SCOPE = 'ORGANIZATION' "
+                                + "AND professional_profile.OWNER_ORGANIZATION_ID = tech_profile.OWNER_ORGANIZATION_ID) "
+                                + "OR (tech_profile.CONTENT_SCOPE = 'GLOBAL' "
+                                + "AND (professional_profile.CONTENT_SCOPE = 'GLOBAL' OR NOT EXISTS ("
+                                + "SELECT 1 FROM TECHNOLOGICAL_PROFILE_CATALOG local_profile "
+                                + "WHERE local_profile.CONTENT_SCOPE = 'ORGANIZATION' "
+                                + "AND local_profile.OWNER_ORGANIZATION_ID = professional_profile.OWNER_ORGANIZATION_ID "
+                                + "AND UPPER(local_profile.PROFILE_CODE) = UPPER(tech_profile.PROFILE_CODE)))))"));
         case QUESTION_TYPES -> List.of(
                 query("preguntas relacionadas",
                         "SELECT COUNT(*) FROM QUESTION WHERE TYPE_CODE = :key"));
