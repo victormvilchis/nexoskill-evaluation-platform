@@ -199,6 +199,7 @@
 
 .ns-resource-select-control .vt-select-trigger,
 .form-question-filters .vt-select-trigger,
+.form-question-bank-filters .vt-select-trigger,
 .lc-filter-row .vt-select-trigger,
 .lc-list-select .vt-select-trigger,
 .lc-select-field .vt-select-trigger,
@@ -217,7 +218,9 @@
 .ns-resource-select-control .vt-select-trigger:focus-visible,
 .ns-resource-select-control .vt-select-trigger[aria-expanded='true'],
 .form-question-filters .vt-select-trigger:focus-visible,
+.form-question-bank-filters .vt-select-trigger:focus-visible,
 .form-question-filters .vt-select-trigger[aria-expanded='true'],
+.form-question-bank-filters .vt-select-trigger[aria-expanded='true'],
 .lc-filter-row .vt-select-trigger:focus-visible,
 .lc-filter-row .vt-select-trigger[aria-expanded='true'] {
   box-shadow: 0 0 0 2px rgba(47, 103, 216, .12);
@@ -287,7 +290,8 @@
 }
 
 /* Filtros internos de Formularios y Colecciones. */
-.form-question-filters {
+.form-question-filters,
+.form-question-bank-filters {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) minmax(170px, .55fr);
   gap: var(--ns-filter-gap);
@@ -296,10 +300,16 @@
 }
 
 .form-question-filters .ns-resource-search,
-.form-question-filters .vt-select-field {
+.form-question-filters .vt-select-field,
+.form-question-bank-filters .ns-resource-search,
+.form-question-bank-filters .vt-select-field {
   width: 100%;
   min-width: 0;
   max-width: none;
+}
+
+.form-question-bank-filters {
+  grid-template-columns: minmax(240px, 1fr) minmax(150px, 180px);
 }
 
 .lc-filter-row {

@@ -15,14 +15,13 @@
   width: 100%;
   min-width: 600px;
   border-collapse: collapse;
-  table-layout: auto;
   line-height: 1.16;
 }
 
 .ns-data-table th,
 .responsive-table th {
   max-width: 300px;
-  padding: .34rem .44rem !important;
+  padding: .34rem .4rem !important;
   font-size: .63rem !important;
   line-height: 1.1;
   letter-spacing: .025em !important;
@@ -33,7 +32,7 @@
 .ns-data-table td,
 .responsive-table td {
   max-width: 300px;
-  padding: .36rem .44rem !important;
+  padding: .36rem .4rem !important;
   font-size: .75rem;
   line-height: 1.17;
   vertical-align: middle;
@@ -160,6 +159,51 @@
   min-height: 26px !important;
   height: 26px;
   font-size: .71rem !important;
+}
+
+/* Controles operativos dentro de tablas: compactos, sin heredar el ancho de formularios. */
+.ns-data-table td .vt-select-field,
+.responsive-table td .vt-select-field {
+  min-width: 120px;
+}
+
+.ns-data-table td .vt-select-trigger,
+.responsive-table td .vt-select-trigger {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 8px !important;
+  border-radius: 7px !important;
+  font-size: .72rem !important;
+}
+
+/*
+ * Red de seguridad para listados futuros: si una tabla se agrega dentro del
+ * panel/listado estándar, conserva la misma densidad aunque aún no declare
+ * ns-data-table. La clase canónica sigue siendo ns-data-table.
+ */
+:is(.ns-data-panel, .ns-list-page) table:not(.ns-data-table) {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  line-height: 1.16;
+}
+
+:is(.ns-data-panel, .ns-list-page) table:not(.ns-data-table) th {
+  max-width: 300px;
+  padding: .34rem .4rem !important;
+  font-size: .63rem !important;
+  line-height: 1.1;
+  letter-spacing: .025em !important;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+:is(.ns-data-panel, .ns-list-page) table:not(.ns-data-table) td {
+  max-width: 300px;
+  padding: .36rem .4rem !important;
+  font-size: .75rem;
+  line-height: 1.17;
+  vertical-align: middle;
 }
 
 /* Colaboradores: la columna principal absorbe el ancho libre; Estado y Acciones quedan juntas. */
