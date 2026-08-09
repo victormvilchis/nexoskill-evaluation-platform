@@ -69,6 +69,7 @@ export interface StudentImportConflict {
   actions: StudentImportConflictAction[]
   resolvedAction: StudentImportConflictActionValue | null
   reusedDecision: boolean
+  applyResolution: boolean
 }
 
 export interface StudentImportPreview {

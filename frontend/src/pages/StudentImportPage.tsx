@@ -94,7 +94,6 @@ export function StudentImportPage() {
   const [changeTab, setChangeTab] = useState<ChangeTab>('PENDING')
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [error, setError] = useState<string>()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [result, setResult] = useState<StudentImportApplyResult>()
 
@@ -175,9 +174,16 @@ export function StudentImportPage() {
     () => pendingConflicts.filter((conflict) => !conflictDecisions[conflict.id]).length,
     [pendingConflicts, conflictDecisions]
   )
-  const resolvedConflicts = reusedConflicts.length
-
-
+  const selectedNewCount = useMemo(
+    () => selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length,
+    [selectedNew, omittedRows]
+  )
+  const selectedChangeCount = useMemo(
+    () => selectedChanges.filter((row) => !omittedRows.has(row.rowKey)).length,
+    [selectedChanges, omittedRows]
+  )
+  const selectedForApplyCount = selectedNewCount + selectedChangeCount + selectedLows
+  const pendingToResolve = pendingChangeCount + unresolvedConflicts
   const newRowError = useMemo(() => {
     const normalizedEmails = new Map<string, number>()
     const normalizedCodes = new Map<string, number>()
@@ -224,6 +230,10 @@ export function StudentImportPage() {
     () => preview?.errors.filter((issue) => issue.row <= 0 || rowSelectionByNumber.get(issue.row) !== false) ?? [],
     [preview, rowSelectionByNumber]
   )
+  const errorRowCount = useMemo(
+    () => new Set(visibleErrors.filter((issue) => issue.row > 0).map((issue) => issue.row)).size,
+    [visibleErrors]
+  )
 
   const blockingMessage = newRowError
     ?? (unresolvedConflicts > 0
@@ -239,17 +249,15 @@ export function StudentImportPage() {
     setConflictTab('PENDING')
     setChangeTab('PENDING')
     setResult(undefined)
-    setError(undefined)
   }
 
   async function analyze() {
     if (!file || loading || applying) return
     setLoading(true)
-    setError(undefined)
     setResult(undefined)
     try {
       if (administrator && !selectedOrganization) {
-        setError('Selecciona la organización que recibirá la carga antes de analizar el archivo.')
+        toast.warning('Organización requerida', 'Selecciona la organización que recibirá la carga antes de analizar el archivo.')
         return
       }
       const previousToken = preview?.token
@@ -281,9 +289,12 @@ export function StudentImportPage() {
       setConflictTab('PENDING')
       setChangeTab('PENDING')
     } catch (requestError) {
-      setError(requestError instanceof ApiRequestError
-        ? requestError.message
-        : 'No fue posible analizar el archivo.')
+      if (!(requestError instanceof ApiRequestError && (requestError.status === 0 || requestError.status >= 500))) {
+        const message = requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible analizar el archivo.'
+        toast.error('No fue posible analizar el archivo', message)
+      }
     } finally {
       setLoading(false)
     }
@@ -298,7 +309,7 @@ export function StudentImportPage() {
   async function changeFile(next?: File) {
     if (loading || applying) return
     if (next && !next.name.toLowerCase().endsWith('.xlsx')) {
-      setError('Selecciona un archivo con formato .xlsx.')
+      toast.warning('Archivo no compatible', 'Selecciona un archivo con formato .xlsx.')
       return
     }
     if (preview?.token && !result) await discardStudentImport(preview.token).catch(() => undefined)
@@ -362,6 +373,16 @@ export function StudentImportPage() {
     })
   }
 
+  function setChangeDecision(rowKey: string, fieldKey: string, action: 'KEEP_PLATFORM' | 'APPLY_EXCEL') {
+    setChangedRows((current) => current.map((row) => {
+      if (row.rowKey !== rowKey) return row
+      const selectedFields = new Set(row.selectedFields)
+      if (action === 'APPLY_EXCEL') selectedFields.add(fieldKey)
+      else selectedFields.delete(fieldKey)
+      return { ...row, selectedFields }
+    }))
+  }
+
   async function copyValue(value: string, description: string, key: string) {
     try {
       await copyText(value)
@@ -379,7 +400,6 @@ export function StudentImportPage() {
   async function applyChanges() {
     if (!preview || applying || blockingMessage) return
     setApplying(true)
-    setError(undefined)
     try {
       const response = await applyStudentImport({
         token: preview.token,
@@ -414,9 +434,12 @@ export function StudentImportPage() {
       }
     } catch (requestError) {
       setConfirmOpen(false)
-      setError(requestError instanceof ApiRequestError
-        ? requestError.message
-        : 'No fue posible aplicar la importación.')
+      if (!(requestError instanceof ApiRequestError && (requestError.status === 0 || requestError.status >= 500))) {
+        const message = requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible aplicar la importación.'
+        toast.error('No fue posible aplicar la importación', message)
+      }
     } finally {
       setApplying(false)
     }
@@ -488,7 +511,6 @@ export function StudentImportPage() {
         <div><p className="eyebrow">Colaboradores</p><h1>Importar colaboradores</h1><p>Valida, completa y resuelve cada registro antes de aplicar la carga.</p></div>
       </header>
 
-      {error && <div className="error-message" role="alert">{error}</div>}
 
       <section className="editor-card ns-import-source-card">
         {administrator && <label className="field"><span>Organización destino</span><SelectField value={selectedOrganization}
@@ -527,42 +549,40 @@ export function StudentImportPage() {
 
       {preview && <>
         <section className="editor-card ns-import-context"><div><strong>Archivo</strong><span>{preview.fileName}</span></div><div><strong>Hoja</strong><span>{preview.sheetName}</span></div><div><strong>Organización</strong><span>{preview.organizationName} · {preview.organizationCode}</span></div></section>
-        <section className="ns-import-summary-grid">
-          <article><strong>{preview.totalRows}</strong><span>Filas analizadas</span></article>
-          <article><strong>{selectedRowKeys.size}</strong><span>Colaboradores seleccionados</span></article>
-          <article><strong>{excludedRows}</strong><span>Colaboradores excluidos</span></article>
-          <article><strong>{selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length}</strong><span>Nuevos por crear</span></article>
-          <article><strong>{selectedChanges.length}</strong><span>Colaboradores por actualizar</span></article>
-          <article><strong>{pendingChangeCount}</strong><span>Actualizaciones pendientes</span></article>
-          <article><strong>{reusedChangeCount}</strong><span>Actualizadas previamente</span></article>
-          <article><strong>{preview.possibleLows.length}</strong><span>Posibles bajas</span></article>
-          <article><strong>{unresolvedConflicts}</strong><span>Conflictos pendientes</span></article>
-          <article><strong>{resolvedConflicts}</strong><span>Conflictos resueltos</span></article>
-          <article><strong>{visibleWarnings.length}</strong><span>Advertencias</span></article>
-          <article><strong>{visibleErrors.length}</strong><span>Filas con error</span></article>
-          <article><strong>{omittedRows.size + excludedRows}</strong><span>Filas omitidas</span></article>
+        <section className="ns-import-summary-panel" aria-label="Resumen de la vista previa">
+          <div className="ns-import-summary-grid">
+            <article><strong>{preview.totalRows}</strong><span>Filas analizadas</span></article>
+            <article><strong>{selectedForApplyCount}</strong><span>Seleccionados para aplicar</span></article>
+            <article><strong>{excludedRows}</strong><span>Excluidos</span></article>
+            <article><strong>{pendingToResolve}</strong><span>Pendientes por resolver</span></article>
+            <article><strong>{errorRowCount}</strong><span>Filas con error</span></article>
+          </div>
+          <div className="ns-import-change-breakdown" aria-label="Desglose de cambios seleccionados">
+            <span><strong>{selectedNewCount}</strong> Nuevos por crear</span>
+            <span><strong>{selectedChangeCount}</strong> Colaboradores por actualizar</span>
+            <span><strong>{selectedLows}</strong> Posibles bajas</span>
+          </div>
         </section>
 
         {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div></div>
           <p className="muted">El correo es obligatorio. El Usuario corporativo es opcional y solo se habilita cuando existe Fecha de alta. {preview.manualStudentCode ? 'Captura también el Código a nivel organización.' : 'El Código a nivel organización se generará automáticamente al confirmar.'}</p>
-          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Correo</th>{preview.manualStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th>{!preview.manualStudentCode && <th>Código a nivel organización</th>}</tr></thead><tbody>
+          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Código a nivel organización</th><th>Usuario corporativo</th><th>Correo</th></tr></thead><tbody>
             {newRows.map((row) => <tr key={row.rowKey} className={!row.selected || omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
               <td><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /></td>
               <td><strong>{formatPersonName(row.collaborator)}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
               <td>{row.profile || 'N/A'}</td><td>{row.primaryTechnology || 'N/A'}</td><td>{row.admissionDate || 'N/A'}</td>
-              <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
-                className={`ns-import-email-input${row.selected && !omittedRows.has(row.rowKey) && row.email && !validEmail(row.email) ? ' is-invalid' : ''}`}
-                type="email" value={row.email} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="nombre@dominio.com" autoComplete="off"
-                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, email: event.target.value } : item))} /></label></td>
-              {preview.manualStudentCode && <td><label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
+              <td>{preview.manualStudentCode ? <label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
                 value={row.studentCode} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="Código obligatorio" autoComplete="off" maxLength={80}
-                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label></td>}
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label> : <span className="muted">Se generará automáticamente</span>}</td>
               <td><label className="ns-import-email-field"><span className="sr-only">Usuario corporativo de la fila {row.row}</span><input
                 value={row.corporateUser} disabled={!row.selected || omittedRows.has(row.rowKey) || !row.admissionDate}
                 placeholder={row.admissionDate ? 'Opcional' : 'Requiere Fecha de alta'} autoComplete="off" maxLength={100}
                 onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, corporateUser: event.target.value.toUpperCase() } : item))} /></label></td>
-              {!preview.manualStudentCode && <td><span className="muted">Se generará automáticamente</span></td>}
+              <td><label className="ns-import-email-field"><span className="sr-only">Correo de la fila {row.row}</span><input
+                className={`ns-import-email-input${row.selected && !omittedRows.has(row.rowKey) && row.email && !validEmail(row.email) ? ' is-invalid' : ''}`}
+                type="email" value={row.email} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="nombre@dominio.com" autoComplete="off"
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, email: event.target.value } : item))} /></label></td>
             </tr>)}
           </tbody></table></div>{newRowError && <div className="error-message" role="alert">{newRowError}</div>}
         </section>}
@@ -582,10 +602,10 @@ export function StudentImportPage() {
             if (changeTab === 'REUSED' && (!row.selected || omittedRows.has(row.rowKey))) return null
             return <article className={`ns-import-change-card${!row.selected || omittedRows.has(row.rowKey) ? ' is-muted' : ''}`} key={`${changeTab}-${row.rowKey}`}>
               <div className="ns-import-change-selection">{changeTab === 'PENDING' && <label><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /><span>Incluir colaborador</span></label>}<h3>{formatPersonName(row.collaborator)}</h3></div>
-              {row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr>{changeTab === 'PENDING' && <th>Aplicar Excel</th>}<th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th><th>Decisión</th></tr></thead><tbody>
-              {visibleChanges.map((change) => <tr key={change.key}>{changeTab === 'PENDING' && <td><input type="checkbox" disabled={!row.selected || omittedRows.has(row.rowKey)} checked={row.selected && !omittedRows.has(row.rowKey) && row.selectedFields.has(change.key)} onChange={(event) => setChangedRows((current) => current.map((item) => { if (item.rowKey !== row.rowKey) return item; const selectedFields = new Set(item.selectedFields); if (event.target.checked) selectedFields.add(change.key); else selectedFields.delete(change.key); return { ...item, selectedFields } }))} /></td>}<td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td><td>{change.reusedDecision
-                ? <div className="ns-import-reused-decision compact"><strong>Decisión aplicada previamente</strong><span>{change.resolvedAction === 'APPLY_EXCEL' ? 'Aplicar información del Excel' : 'Mantener información de la plataforma'}</span></div>
-                : <span className={`status-badge ${row.selectedFields.has(change.key) ? 'active' : 'neutral'}`}>{row.selectedFields.has(change.key) ? 'Aplicar Excel' : 'Mantener plataforma'}</span>}</td></tr>)}
+              {row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th><th>Decisión</th></tr></thead><tbody>
+              {visibleChanges.map((change) => <tr key={change.key}><td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td><td>{change.reusedDecision
+                ? <div className="ns-import-reused-decision compact"><strong>Decisión aplicada previamente</strong><span>{change.resolvedAction === 'APPLY_EXCEL' ? 'Aplicar información del Excel' : 'Mantener información de la plataforma'}</span><small>{change.selected ? 'Se reutilizará el resultado confirmado.' : 'Se conserva la modificación manual actual.'}</small></div>
+                : <SelectField value={row.selectedFields.has(change.key) ? 'APPLY_EXCEL' : 'KEEP_PLATFORM'} disabled={!row.selected || omittedRows.has(row.rowKey)} onChange={(nextValue) => setChangeDecision(row.rowKey, change.key, nextValue as 'KEEP_PLATFORM' | 'APPLY_EXCEL')} ariaLabel={`Decisión para ${change.field}`} options={[{ value: 'KEEP_PLATFORM', label: 'Mantener información de la plataforma' }, { value: 'APPLY_EXCEL', label: 'Aplicar información del Excel' }]} />}</td></tr>)}
             </tbody></table></div></article>
           })}
         </section>}
@@ -607,12 +627,12 @@ export function StudentImportPage() {
               <div className="ns-import-conflict-values"><div><strong>Excel</strong><span>{conflict.excelValue}</span></div><div><strong>Plataforma actual</strong><span>{conflict.currentValue}</span></div><div><strong>Cálculo de la plataforma</strong><span>{conflict.calculatedValue}</span></div></div>
               <p className="ns-import-conflict-reason">{conflict.reason}</p>
               {conflict.reusedDecision
-                ? <div className="ns-import-reused-decision"><strong>Decisión aplicada automáticamente</strong><span>{selectedAction?.label || 'Decisión anterior aplicada'}</span>{selectedAction?.description && <small>{selectedAction.description}</small>}</div>
+                ? <div className="ns-import-reused-decision"><strong>{conflict.applyResolution ? 'Decisión aplicada automáticamente' : 'Decisión atendida previamente'}</strong><span>{selectedAction?.label || 'Decisión anterior aplicada'}</span><small>{conflict.applyResolution ? selectedAction?.description : 'Se conserva la modificación manual actual y no se reaplica el resultado anterior.'}</small></div>
                 : <label className="field"><span>Selecciona cómo proceder</span><SelectField value={decision}
                   onChange={(nextValue) => setConflictDecision(conflict.id, nextValue as StudentImportConflictActionValue)}
                   ariaLabel="Selecciona cómo proceder"
                   options={[{ value: '', label: 'Selecciona una decisión' }, ...conflict.actions.map((action) => ({ value: action.value, label: action.label }))]} /></label>}
-              {!conflict.reusedDecision && decision && <p className="muted">{selectedAction?.description}</p>}
+              {!conflict.reusedDecision && decision && <p className="muted">{selectedAction?.description} Puedes cambiar esta decisión antes de confirmar la importación.</p>}
               {!conflict.reusedDecision && decision && activeConflicts.filter((item) => item.groupKey === conflict.groupKey && !item.reusedDecision).length > 1 && <button type="button" className="secondary-button compact-button" onClick={() => applyEquivalentDecision(conflict.id)}>Aplicar esta decisión a casos equivalentes</button>}
             </article>
           })}</div>
@@ -648,12 +668,12 @@ export function StudentImportPage() {
         {preview && (
           <div className="ns-import-confirm-summary">
             <p>
-              Se crearán <strong>{selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> colaboradores,
-              se actualizarán <strong>{selectedChanges.filter((row) => !omittedRows.has(row.rowKey)).length}</strong> y
+              Se crearán <strong>{selectedNewCount}</strong> colaboradores,
+              se actualizarán <strong>{selectedChangeCount}</strong> y
               se desactivarán <strong>{selectedLows}</strong> posibles bajas.
             </p>
             <p className="muted">
-              Se omitirán {omittedRows.size + excludedRows} filas.
+              Se excluirán {excludedRows} colaboradores.
               Las advertencias no bloquean el proceso.
             </p>
           </div>

@@ -1,0 +1,7 @@
+/* Los fallos de carga bloqueantes se presentan mediante el diálogo integrado. */
+body.platform-connection-blocked main > .error-message,
+body.platform-connection-blocked main > .inline-error-panel,
+body.platform-connection-blocked .table-shell > .error-message,
+body.platform-connection-blocked .table-shell > .inline-error-panel {
+  display: none !important;
+}

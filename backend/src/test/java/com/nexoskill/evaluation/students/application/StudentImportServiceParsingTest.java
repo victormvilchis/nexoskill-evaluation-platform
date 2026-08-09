@@ -121,10 +121,17 @@ class StudentImportServiceParsingTest {
 				StudentImportService.conflictDecisionFingerprint("STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
 						"DEVELOPMENT_SECURITY", "Vigente — Próxima a vencer", LocalDate.of(2025, 7, 11),
 						LocalDate.of(2026, 7, 11), "Vencida"));
-		assertNotEquals(original,
+		assertEquals(original,
 				StudentImportService.conflictDecisionFingerprint("STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
 						"DEVELOPMENT_SECURITY", "Vigente — Regular", LocalDate.of(2025, 7, 11),
 						LocalDate.of(2026, 7, 11), "Vigente — Regular"));
+		assertNotEquals(
+				StudentImportService.conflictExactFingerprint("STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+						"DEVELOPMENT_SECURITY", "Vigente — Regular", LocalDate.of(2025, 7, 11),
+						LocalDate.of(2026, 7, 11), "Vigente", "Vencida"),
+				StudentImportService.conflictExactFingerprint("STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
+						"DEVELOPMENT_SECURITY", "Vigente — Regular", LocalDate.of(2025, 7, 11),
+						LocalDate.of(2026, 7, 11), "Vencida", "Vencida"));
 		assertNotEquals(original,
 				StudentImportService.conflictDecisionFingerprint("STUDENT_IMPORT_CERTIFICATION_VALIDITY_CONFLICT",
 						"TECHNOLOGICAL", "Vigente — Regular", LocalDate.of(2025, 7, 11), LocalDate.of(2027, 7, 11),
@@ -226,11 +233,11 @@ class StudentImportServiceParsingTest {
 		StudentImportService.ConflictPreview selected = new StudentImportService.ConflictPreview(
 				"conflict-selected", "row-selected", 2, "Persona seleccionada", "CODE", "GROUP",
 				"Conflicto", "Campo", null, null, "Excel", "Actual", "Calculado", "Motivo",
-				List.of(action), null, false);
+				List.of(action), null, false, true);
 		StudentImportService.ConflictPreview excluded = new StudentImportService.ConflictPreview(
 				"conflict-excluded", "row-excluded", 3, "Persona excluida", "CODE", "GROUP",
 				"Conflicto", "Campo", null, null, "Excel", "Actual", "Calculado", "Motivo",
-				List.of(action), null, false);
+				List.of(action), null, false, true);
 
 		assertEquals(List.of(selected), StudentImportService.selectedConflicts(
 				List.of(selected, excluded), Set.of("row-selected")));
@@ -247,18 +254,24 @@ class StudentImportServiceParsingTest {
 		assertFalse(StudentImportService.importsAttempt("JIRA"));
 	}
 	@Test
-	void reusesFieldUpdateDecisionOnlyForTheExactSameScenario() {
+	void reusesFieldUpdateDecisionForTheSameExcelWithoutOverwritingLaterManualChanges() {
 		StudentImportService.FieldChange original = new StudentImportService.FieldChange(
 				"profile", "Perfil", "ANALISTA", "DESARROLLADOR", true);
 		StudentImportService.FieldChange sameScenario = new StudentImportService.FieldChange(
 				"profile", "Perfil", " analista ", "desarrollador", false);
+		StudentImportService.FieldChange manuallyChangedPlatform = new StudentImportService.FieldChange(
+				"profile", "Perfil", "ARQUITECTO", "DESARROLLADOR", false);
 		StudentImportService.FieldChange changedExcel = new StudentImportService.FieldChange(
 				"profile", "Perfil", "ANALISTA", "ARQUITECTO", true);
 
 		assertEquals(StudentImportService.changeFingerprint(original),
 				StudentImportService.changeFingerprint(sameScenario));
 		assertNotEquals(StudentImportService.changeFingerprint(original),
-				StudentImportService.changeFingerprint(changedExcel));
+				StudentImportService.changeFingerprint(manuallyChangedPlatform));
+		assertEquals(StudentImportService.changeSourceFingerprint(original),
+				StudentImportService.changeSourceFingerprint(manuallyChangedPlatform));
+		assertNotEquals(StudentImportService.changeSourceFingerprint(original),
+				StudentImportService.changeSourceFingerprint(changedExcel));
 	}
 
 

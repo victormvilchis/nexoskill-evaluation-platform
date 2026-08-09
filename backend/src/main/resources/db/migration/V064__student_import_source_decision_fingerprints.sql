@@ -1,0 +1,110 @@
+-- Mantiene la decisión histórica de una actualización por la información recibida del Excel.
+-- El valor actual de la plataforma no forma parte de esta huella para no cuestionar ni revertir
+-- modificaciones manuales posteriores cuando se carga nuevamente el mismo archivo.
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM USER_TABLES
+     WHERE TABLE_NAME = 'STUDENT_IMPORT_CHANGE_DECISION';
+
+    IF v_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-20064,
+            'STUDENT_IMPORT_CHANGE_DECISION no existe. Aplica primero V063.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+      FROM USER_TAB_COLUMNS
+     WHERE TABLE_NAME = 'STUDENT_IMPORT_CHANGE_DECISION'
+       AND COLUMN_NAME = 'SOURCE_FINGERPRINT';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE q'[
+            ALTER TABLE STUDENT_IMPORT_CHANGE_DECISION
+            ADD SOURCE_FINGERPRINT VARCHAR2(64 CHAR)
+        ]';
+    END IF;
+END;
+/
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM (
+          SELECT i.INDEX_NAME,
+                 LISTAGG(c.COLUMN_NAME, ',') WITHIN GROUP (ORDER BY c.COLUMN_POSITION) COLUMN_LIST,
+                 MAX(i.UNIQUENESS) UNIQUENESS
+            FROM USER_INDEXES i
+            JOIN USER_IND_COLUMNS c ON c.INDEX_NAME = i.INDEX_NAME
+           WHERE i.TABLE_NAME = 'STUDENT_IMPORT_CHANGE_DECISION'
+           GROUP BY i.INDEX_NAME
+      )
+     WHERE COLUMN_LIST = 'ORGANIZATION_ID,STUDENT_ID,FIELD_KEY,SOURCE_FINGERPRINT'
+       AND UNIQUENESS = 'UNIQUE';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE q'[
+            CREATE UNIQUE INDEX UK_STU_IMP_CH_SOURCE
+                ON STUDENT_IMPORT_CHANGE_DECISION (
+                    ORGANIZATION_ID, STUDENT_ID, FIELD_KEY, SOURCE_FINGERPRINT
+                )
+        ]';
+    END IF;
+END;
+/
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM USER_TABLES
+     WHERE TABLE_NAME = 'STUDENT_IMPORT_CONFLICT_DECISION';
+
+    IF v_count = 0 THEN
+        RAISE_APPLICATION_ERROR(-20065,
+            'STUDENT_IMPORT_CONFLICT_DECISION no existe. Aplica primero V050.');
+    END IF;
+
+    SELECT COUNT(*) INTO v_count
+      FROM USER_TAB_COLUMNS
+     WHERE TABLE_NAME = 'STUDENT_IMPORT_CONFLICT_DECISION'
+       AND COLUMN_NAME = 'SOURCE_FINGERPRINT';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE q'[
+            ALTER TABLE STUDENT_IMPORT_CONFLICT_DECISION
+            ADD SOURCE_FINGERPRINT VARCHAR2(64 CHAR)
+        ]';
+    END IF;
+END;
+/
+
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+      FROM (
+          SELECT i.INDEX_NAME,
+                 LISTAGG(c.COLUMN_NAME, ',') WITHIN GROUP (ORDER BY c.COLUMN_POSITION) COLUMN_LIST,
+                 MAX(i.UNIQUENESS) UNIQUENESS
+            FROM USER_INDEXES i
+            JOIN USER_IND_COLUMNS c ON c.INDEX_NAME = i.INDEX_NAME
+           WHERE i.TABLE_NAME = 'STUDENT_IMPORT_CONFLICT_DECISION'
+           GROUP BY i.INDEX_NAME
+      )
+     WHERE COLUMN_LIST = 'ORGANIZATION_ID,STUDENT_ID,CERTIFICATION_TYPE,CONFLICT_CODE,SOURCE_FINGERPRINT'
+       AND UNIQUENESS = 'UNIQUE';
+
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE q'[
+            CREATE UNIQUE INDEX UK_STU_IMP_CF_SOURCE
+                ON STUDENT_IMPORT_CONFLICT_DECISION (
+                    ORGANIZATION_ID, STUDENT_ID, CERTIFICATION_TYPE,
+                    CONFLICT_CODE, SOURCE_FINGERPRINT
+                )
+        ]';
+    END IF;
+END;
+/

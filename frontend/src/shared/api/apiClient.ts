@@ -4,6 +4,7 @@ const API_ROOT = '/api/v1'
 export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
 export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
 export const STUDENT_AUTH_INVALID_EVENT = 'nexoskill:student-auth-invalid'
+export const PLATFORM_REQUEST_FAILURE_EVENT = 'nexoskill:platform-request-failure'
 
 const COLLABORATOR_TERMINOLOGY: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bPersonas estudiantes\b/g, 'Colaboradores'],
@@ -32,6 +33,11 @@ function normalizeFieldErrors(fieldErrors?: Record<string, string>): Record<stri
 
 export interface AuthInvalidEventDetail {
   code: string
+  message: string
+}
+
+export interface PlatformRequestFailureDetail {
+  blocking: boolean
   message: string
 }
 
@@ -96,20 +102,43 @@ function publishAuthenticationFailure(code: string, message: string) {
   }
 }
 
+
+function publishPlatformRequestFailure(method: string, message: string) {
+  window.dispatchEvent(
+    new CustomEvent<PlatformRequestFailureDetail>(PLATFORM_REQUEST_FAILURE_EVENT, {
+      detail: {
+        blocking: method === 'GET' || method === 'HEAD',
+        message
+      }
+    })
+  )
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  const response = await fetch(`${API_ROOT}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-      ...options.headers
-    }
-  })
+  const method = (options.method ?? 'GET').toUpperCase()
+  let response: Response
+  try {
+    response = await fetch(`${API_ROOT}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...options.headers
+      }
+    })
+  } catch (requestError) {
+    if (requestError instanceof DOMException && requestError.name === 'AbortError') throw requestError
+    const message = method === 'GET' || method === 'HEAD'
+      ? 'La información del módulo no pudo cargarse. Verifica tu conexión e intenta nuevamente.'
+      : 'No fue posible completar la operación. Intenta nuevamente.'
+    publishPlatformRequestFailure(method, message)
+    throw new ApiRequestError(message, 'PLATFORM_UNAVAILABLE', 0)
+  }
 
   if (response.status === 204) {
     return undefined as T
@@ -125,6 +154,12 @@ export async function apiRequest<T>(
     const code = error?.code ?? 'REQUEST_FAILED'
     const message = applyCollaboratorTerminology(error?.message ?? 'No fue posible completar la solicitud.')
     publishAuthenticationFailure(code, message)
+    if (response.status >= 500) {
+      const platformMessage = method === 'GET' || method === 'HEAD'
+        ? 'La información del módulo no pudo cargarse. Verifica tu conexión e intenta nuevamente.'
+        : 'No fue posible completar la operación. Intenta nuevamente.'
+      publishPlatformRequestFailure(method, platformMessage)
+    }
     throw new ApiRequestError(
       message,
       code,

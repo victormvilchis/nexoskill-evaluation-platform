@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './features/authentication/context/AuthContext'
 import { StudentAuthProvider } from './features/students/context/StudentAuthContext'
+import { PlatformErrorProvider } from './shared/components/PlatformErrorProvider'
 import { ToastProvider } from './shared/components/ToastProvider'
 import './styles/global.css'
 import './styles/r3-logical-deletion.css'
@@ -33,16 +34,19 @@ import './styles/table-density-r1.css'
 import './styles/filter-density-r2.css'
 import './styles/role-management-r1.css'
 import './styles/authorization-integrity-r3.css'
+import './styles/platform-errors-r1.css'
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename={basename}>
       <ToastProvider>
-        <AuthProvider>
-          <StudentAuthProvider>
-            <App />
-          </StudentAuthProvider>
-        </AuthProvider>
+        <PlatformErrorProvider>
+          <AuthProvider>
+            <StudentAuthProvider>
+              <App />
+            </StudentAuthProvider>
+          </AuthProvider>
+        </PlatformErrorProvider>
       </ToastProvider>
     </BrowserRouter>
   </StrictMode>

@@ -952,3 +952,80 @@
 .ns-import-reused-decision.compact span {
   font-size: .78rem;
 }
+
+/* Resumen ejecutivo de la vista previa. */
+.ns-import-summary-panel {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.ns-import-summary-panel .ns-import-summary-grid {
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  margin: 0;
+}
+
+.ns-import-change-breakdown {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #526171;
+  font-size: .82rem;
+}
+
+.ns-import-change-breakdown span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 10px;
+  border-right: 1px solid #d8e1ea;
+}
+
+.ns-import-change-breakdown span:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.ns-import-change-breakdown strong {
+  color: #163326;
+  font-size: .95rem;
+}
+
+.ns-import-change-card td .select-field,
+.ns-import-change-card td select {
+  width: min(100%, 310px);
+  min-width: 230px;
+}
+
+@media (max-width: 1000px) {
+  .ns-import-summary-panel .ns-import-summary-grid {
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ns-import-summary-panel .ns-import-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ns-import-change-breakdown {
+    display: grid;
+  }
+
+  .ns-import-change-breakdown span {
+    justify-content: space-between;
+    padding: 0 0 7px;
+    border-right: 0;
+    border-bottom: 1px solid #d8e1ea;
+  }
+
+  .ns-import-change-breakdown span:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+}
