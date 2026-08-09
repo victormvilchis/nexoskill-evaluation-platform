@@ -1,6 +1,7 @@
 package com.nexoskill.evaluation.certifications.application;
 
 import com.nexoskill.evaluation.certifications.application.CertificationModels.Applicability;
+import com.nexoskill.evaluation.certifications.application.CertificationModels.AreaSummary;
 import com.nexoskill.evaluation.certifications.application.CertificationModels.CycleView;
 import com.nexoskill.evaluation.certifications.application.CertificationModels.Metrics;
 import com.nexoskill.evaluation.certifications.domain.CertificationExamStatus;
@@ -16,12 +17,12 @@ import java.util.List;
  * ciclos históricos inflen o contradigan los indicadores ejecutivos del
  * colaborador.
  */
-final class CertificationSummaryCalculator {
+public final class CertificationSummaryCalculator {
 	private CertificationSummaryCalculator() {
 	}
 
-	static Metrics calculate(Applicability applicability, List<CycleView> cycles) {
-		List<CycleView> safeCycles = cycles == null ? List.of() : cycles;
+	public static Metrics calculate(Applicability applicability, List<CycleView> cycles) {
+		List<AreaSummary> summaries = summarize(applicability, cycles);
 		int applicableAreas = 0;
 		int pending = 0;
 		int scheduled = 0;
@@ -32,14 +33,8 @@ final class CertificationSummaryCalculator {
 		int expired = 0;
 		int pendingRecertifications = 0;
 
-		for (CertificationType type : CertificationType.values()) {
-			if (!applies(applicability, type))
-				continue;
+		for (AreaSummary state : summaries) {
 			applicableAreas++;
-
-			List<CycleView> areaCycles = safeCycles.stream().filter(CycleView::active)
-					.filter(cycle -> cycle.type() == type).toList();
-			AreaState state = evaluate(type, areaCycles);
 
 			if (state.pendingInitial())
 				pending++;
@@ -61,6 +56,24 @@ final class CertificationSummaryCalculator {
 
 		return new Metrics(applicableAreas, pending, scheduled, approved, notApproved, valid, expiringSoon, expired,
 				pendingRecertifications);
+	}
+
+	public static List<AreaSummary> summarize(Applicability applicability, List<CycleView> cycles) {
+		List<CycleView> safeCycles = cycles == null ? List.of() : cycles;
+		return java.util.Arrays.stream(CertificationType.values())
+				.filter(type -> applies(applicability, type))
+				.map(type -> {
+					List<CycleView> areaCycles = safeCycles.stream().filter(CycleView::active)
+							.filter(cycle -> cycle.type() == type).toList();
+					AreaState state = evaluate(type, areaCycles);
+					List<LocalDate> expirationDates = nonExpiring(type) ? List.of()
+							: areaCycles.stream().filter(CertificationSummaryCalculator::hasApprovedHistory)
+									.map(CycleView::expirationDate).filter(java.util.Objects::nonNull).distinct()
+									.sorted().toList();
+					return new AreaSummary(type, state.pendingInitial(), state.scheduled(), state.approved(),
+							state.notApproved(), state.valid(), state.expiringSoon(), state.expired(),
+							state.pendingRecertification(), expirationDates);
+				}).toList();
 	}
 
 	private static AreaState evaluate(CertificationType type, List<CycleView> cycles) {

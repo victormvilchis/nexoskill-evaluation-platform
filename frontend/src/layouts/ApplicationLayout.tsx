@@ -4,6 +4,7 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import { BrandLogo } from '../shared/components/BrandLogo'
 import { Breadcrumbs } from '../shared/components/Breadcrumbs'
 import { Icon, type IconName } from '../shared/components/Icon'
+import { authorizedHome } from '../shared/utils/authorizedHome'
 
 interface NavItem {
   id: string
@@ -92,6 +93,8 @@ export function ApplicationLayout() {
   const accountRef = useRef<HTMLDivElement>(null)
 
   const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
+  const canDashboard = administrator || (user?.permissions.includes('DASHBOARD_VIEW') ?? false)
+  const homeRoute = authorizedHome(user)
   const canShow = (item: NavItem) => {
     if (item.roles && !item.roles.some((role) => user?.roles.includes(role))) return false
     return administrator || !item.permission || user?.permissions.includes(item.permission)
@@ -208,7 +211,7 @@ export function ApplicationLayout() {
       )}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <NavLink className="sidebar-brand" to="/dashboard" aria-label="Ir al inicio de Valtieris Talent Platform">
+          <NavLink className="sidebar-brand" to={homeRoute} aria-label="Ir al inicio de Valtieris Talent Platform">
             <BrandLogo variant="horizontal" className="sidebar-brand-logo sidebar-brand-logo-expanded" decorative />
             <BrandLogo variant="isotype" className="sidebar-brand-logo sidebar-brand-logo-collapsed" decorative />
           </NavLink>
@@ -222,14 +225,16 @@ export function ApplicationLayout() {
           </button>
         </div>
         <nav className="sidebar-navigation" aria-label="Navegación principal">
-          <NavLink
-            className={({ isActive }) => `nav-item nav-item-root${isActive ? ' active' : ''}`}
-            to="/dashboard"
-            title="Inicio"
-          >
-            <Icon name="home" />
-            <span>Inicio</span>
-          </NavLink>
+          {canDashboard && (
+            <NavLink
+              className={({ isActive }) => `nav-item nav-item-root${isActive ? ' active' : ''}`}
+              to="/dashboard"
+              title="Dashboard"
+            >
+              <Icon name="results" />
+              <span>Dashboard</span>
+            </NavLink>
+          )}
           {sections.map((section) => {
             const expanded = openSections.has(section.id)
             const active = section.items.some((item) => itemIsActive(item))

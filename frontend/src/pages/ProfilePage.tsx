@@ -10,6 +10,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { FormActions } from '../shared/components/FormActions'
 import { useToast } from '../shared/components/ToastProvider'
+import { authorizedHome } from '../shared/utils/authorizedHome'
 
 export function ProfilePage() {
   const { user, refresh } = useAuth()
@@ -89,7 +90,7 @@ export function ProfilePage() {
   return (
     <main className="content-page profile-page">
       <div className="editor-page-navigation">
-        <BackButton fallback="/dashboard" label="Regresar" />
+        <BackButton fallback={authorizedHome(user) === '/profile' ? '/access-denied' : authorizedHome(user)} label="Regresar" />
       </div>
 
       {error && <div className="error-message" role="alert">{error}</div>}

@@ -37,6 +37,7 @@ function moduleViewPermission(module: PermissionModule) {
 }
 
 function requiredViewPermission(code: string) {
+  if (code.startsWith('DASHBOARD_')) return 'DASHBOARD_VIEW'
   if (code.startsWith('TALENT_')) return 'TALENT_VIEW'
   if (code === 'STUDENT_CERTIFICATION_MANAGE') return 'STUDENT_CERTIFICATION_VIEW'
   if (code === 'STUDENT_CERTIFICATION_VIEW') return 'STUDENT_VIEW'

@@ -92,6 +92,28 @@ class CertificationSummaryCalculatorTest {
 		assertThat(metrics.pending()).isZero();
 	}
 
+	@Test
+	void shouldExposeTheSameAreaStateForExecutiveConsumers() {
+		Applicability applicability = new Applicability(false, false, true, true, false, false);
+		CycleView expiring = approved(CertificationType.NORMATIVE_TESTING,
+				CertificationValidityStatus.EXPIRING_SOON);
+		CycleView one = approved(CertificationType.ONE, CertificationValidityStatus.NOT_OBTAINED);
+
+		var summaries = CertificationSummaryCalculator.summarize(applicability, List.of(expiring, one));
+
+		assertThat(summaries).hasSize(2);
+		assertThat(summaries).anySatisfy(summary -> {
+			assertThat(summary.type()).isEqualTo(CertificationType.NORMATIVE_TESTING);
+			assertThat(summary.executiveState()).isEqualTo("EXPIRING_SOON");
+			assertThat(summary.expirationDates()).containsExactly(LocalDate.of(2026, 7, 11));
+		});
+		assertThat(summaries).anySatisfy(summary -> {
+			assertThat(summary.type()).isEqualTo(CertificationType.ONE);
+			assertThat(summary.executiveState()).isEqualTo("VALID");
+			assertThat(summary.expirationDates()).isEmpty();
+		});
+	}
+
 	private static CycleView approved(CertificationType type, CertificationValidityStatus validity) {
 		LocalDate approvedDate = LocalDate.of(2025, 7, 11);
 		boolean nonExpiring = type == CertificationType.ONE || type == CertificationType.AGILE

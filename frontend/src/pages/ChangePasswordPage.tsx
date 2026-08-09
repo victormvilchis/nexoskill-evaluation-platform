@@ -6,6 +6,7 @@ import { ApiRequestError } from '../shared/api/apiClient'
 import { BrandLogo } from '../shared/components/BrandLogo'
 import { FormActions } from '../shared/components/FormActions'
 import { useToast } from '../shared/components/ToastProvider'
+import { authorizedHome } from '../shared/utils/authorizedHome'
 
 export function ChangePasswordPage() {
   const navigate = useNavigate()
@@ -20,7 +21,7 @@ export function ChangePasswordPage() {
   const routeState = location.state as { from?: unknown } | null
   const returnTo = typeof routeState?.from === 'string' && routeState.from.startsWith('/')
     ? routeState.from
-    : '/dashboard'
+    : authorizedHome(user)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

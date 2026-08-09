@@ -40,6 +40,10 @@ import { PermissionRoute } from './shared/components/PermissionRoute'
 import { ProtectedRoute } from './shared/components/ProtectedRoute'
 import { AdminRolesPage } from './pages/AdminRolesPage'
 import { RoleEditorPage } from './pages/RoleEditorPage'
+import { AccessDeniedPage } from './pages/AccessDeniedPage'
+import { useAuth } from './features/authentication/context/AuthContext'
+import { LoadingScreen } from './shared/components/LoadingScreen'
+import { authorizedHome } from './shared/utils/authorizedHome'
 
 function resolveDocumentSection(pathname: string) {
   if (pathname === '/login') return 'Acceso'
@@ -55,10 +59,17 @@ function resolveDocumentSection(pathname: string) {
   if (pathname.startsWith('/admin/forms')) return 'Formularios'
   if (pathname.startsWith('/admin/collections')) return 'Colecciones'
   if (pathname.startsWith('/admin/catalogs')) return 'Catálogos'
-  if (pathname === '/dashboard') return 'Inicio'
+  if (pathname === '/dashboard') return 'Dashboard'
+  if (pathname === '/access-denied') return 'Acceso no disponible'
   if (pathname === '/profile') return 'Perfil'
   if (pathname === '/change-password') return 'Cambiar contraseña'
   return undefined
+}
+
+function InternalHomeRedirect() {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  return <Navigate to={authorizedHome(user)} replace />
 }
 
 export default function App() {
@@ -85,7 +96,10 @@ export default function App() {
         </Route>
 
         <Route element={<ApplicationLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<PermissionRoute permission="DASHBOARD_VIEW" />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+          </Route>
+          <Route path="/access-denied" element={<AccessDeniedPage />} />
           <Route element={<PermissionRoute permission="PROFILE_VIEW" />}>
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
@@ -204,8 +218,8 @@ export default function App() {
           <Route path="/admin/question-technologies" element={<Navigate to="/admin/catalogs/TECHNOLOGIES" replace />} />
         </Route>
       </Route>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<InternalHomeRedirect />} />
+      <Route path="*" element={<InternalHomeRedirect />} />
     </Routes>
   )
 }

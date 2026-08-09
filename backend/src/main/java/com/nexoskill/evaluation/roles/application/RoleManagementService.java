@@ -30,8 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RoleManagementService {
 
     private static final String STUDENT_PORTAL_ROLE = "USER";
-    private static final Set<String> BASE_PERMISSIONS = Set.of(
-            "DASHBOARD_VIEW", "USER_PANEL_VIEW");
+    private static final Set<String> BASE_PERMISSIONS = Set.of("USER_PANEL_VIEW");
     private static final Set<String> NON_APPLICABLE_PERMISSIONS = Set.of(
             "QUESTION_REVIEW", "QUESTION_PUBLISH", "QUESTION_VERSION_VIEW",
             "STUDENT_CERTIFICATION_CATALOG_VIEW", "CATALOG_MANAGE");
@@ -45,7 +44,7 @@ public class RoleManagementService {
             "GLOBAL_CONTENT_REVIEW", "GLOBAL_CONTENT_SYNCHRONIZE", "GLOBAL_CONTENT_VERSION_MANAGE");
 
     private static final Map<String, String> MODULE_NAMES = Map.ofEntries(
-            Map.entry("DASHBOARD", "Inicio"),
+            Map.entry("DASHBOARD", "Dashboard"),
             Map.entry("PROFILE", "Perfil"),
             Map.entry("USER_MANAGEMENT", "Usuarios"),
             Map.entry("ORGANIZATIONS", "Organizaciones"),
@@ -273,6 +272,7 @@ public class RoleManagementService {
     }
 
     private String viewPermissionFor(String code) {
+        if (code.startsWith("DASHBOARD_")) return "DASHBOARD_VIEW";
         if (code.startsWith("TALENT_")) return "TALENT_VIEW";
         if (code.startsWith("PROFILE_")) return "PROFILE_VIEW";
         if ("STUDENT_CERTIFICATION_MANAGE".equals(code)) return "STUDENT_CERTIFICATION_VIEW";

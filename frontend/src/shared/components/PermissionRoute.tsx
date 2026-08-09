@@ -21,7 +21,7 @@ export function PermissionRoute({ permission, anyOf = [], roles = [] }: Permissi
     || roles.some((role) => user?.roles.includes(role))
 
   if (!hasPermission || !hasRole) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/access-denied" replace />
   }
 
   return <Outlet />

@@ -35,6 +35,7 @@ import './styles/authorization-integrity-r3.css'
 import './styles/platform-errors-r1.css'
 import './styles/table-density-r1.css'
 import './styles/filter-density-r2.css'
+import './styles/dashboard-executive-r1.css'
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

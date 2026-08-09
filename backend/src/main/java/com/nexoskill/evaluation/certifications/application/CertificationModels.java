@@ -43,6 +43,26 @@ public final class CertificationModels {
 			int expiringSoon, int expired, int pendingRecertifications) {
 	}
 
+	/**
+	 * Consolidado por área de certificación. Es la misma evaluación que alimenta
+	 * Metrics, expuesta para consumidores ejecutivos como Dashboard sin duplicar
+	 * reglas de vigencia, aprobación o recertificación.
+	 */
+	public record AreaSummary(CertificationType type, boolean pendingInitial, boolean scheduled, boolean approved,
+			boolean notApproved, boolean valid, boolean expiringSoon, boolean expired,
+			boolean pendingRecertification, List<LocalDate> expirationDates) {
+		public AreaSummary {
+			expirationDates = expirationDates == null ? List.of() : List.copyOf(expirationDates);
+		}
+
+		public String executiveState() {
+			if (expired) return "EXPIRED";
+			if (expiringSoon) return "EXPIRING_SOON";
+			if (valid) return "VALID";
+			return "PENDING";
+		}
+	}
+
 	public record CycleView(String publicId, CertificationType type, String technologyPublicId, String technologyName,
 			CertificationLevel certificationLevel, boolean primary, CertificationProcessType processType,
 			CertificationTrackingStatus trackingStatus, LocalDate deadlineDate, LocalDate scheduledDate,

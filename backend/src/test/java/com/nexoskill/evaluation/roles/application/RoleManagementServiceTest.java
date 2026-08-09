@@ -61,7 +61,7 @@ class RoleManagementServiceTest {
                 actor());
 
         assertThat(created.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .contains("USER_PANEL_VIEW")
                 .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "ORGANIZATION_VIEW", "USER_VIEW",
                         "ROLE_MANAGE", "STUDENT_VIEW", "STUDENT_IMPORT");
     }
@@ -83,7 +83,7 @@ class RoleManagementServiceTest {
                 new RoleManagementService.UpsertCommand("Gestor", null, Set.of("TALENT_CONVERT")), actor());
 
         assertThat(updated.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .contains("USER_PANEL_VIEW")
                 .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "TALENT_VIEW", "TALENT_CONVERT",
                         "ORGANIZATION_VIEW", "ROLE_MANAGE", "STUDENT_VIEW");
     }
@@ -103,7 +103,7 @@ class RoleManagementServiceTest {
                 new RoleManagementService.CloneCommand("Supervisor copia", null), actor());
 
         assertThat(cloned.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .contains("USER_PANEL_VIEW")
                 .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "QUESTION_VIEW", "QUESTION_UPDATE",
                         "ORGANIZATION_VIEW");
     }
@@ -121,7 +121,7 @@ class RoleManagementServiceTest {
                 actor());
 
         assertThat(created.permissionCodes())
-                .contains("TALENT_VIEW", "TALENT_CONVERT", "DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .contains("TALENT_VIEW", "TALENT_CONVERT", "USER_PANEL_VIEW")
                 .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE");
     }
 
@@ -141,7 +141,7 @@ class RoleManagementServiceTest {
                 new RoleManagementService.UpsertCommand("Supervisor", null, Set.of("STUDENT_IMPORT")), actor());
 
         assertThat(updated.permissionCodes())
-                .contains("DASHBOARD_VIEW", "USER_PANEL_VIEW")
+                .contains("USER_PANEL_VIEW")
                 .doesNotContain("PROFILE_VIEW", "PASSWORD_CHANGE", "STUDENT_VIEW", "STUDENT_IMPORT");
         assertThat(role.getPermissions()).extracting(PermissionJpaEntity::getCode)
                 .doesNotContain("STUDENT_VIEW", "STUDENT_IMPORT");
@@ -175,6 +175,25 @@ class RoleManagementServiceTest {
 
         assertThat(coherent.permissionCodes())
                 .contains("STUDENT_VIEW", "STUDENT_CERTIFICATION_VIEW", "STUDENT_CERTIFICATION_MANAGE");
+    }
+
+
+    @Test
+    void shouldKeepDashboardPersonalizationOnlyWithDashboardView() {
+        Fixture fixture = fixture();
+        when(fixture.roles.countByNormalizedName("Dashboard personalizado", null)).thenReturn(0L);
+        when(fixture.roles.saveAndFlush(any(RoleJpaEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RoleManagementService.RoleDetail withoutView = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Dashboard personalizado", null,
+                        Set.of("DASHBOARD_PERSONALIZE")), actor());
+        assertThat(withoutView.permissionCodes()).doesNotContain("DASHBOARD_VIEW", "DASHBOARD_PERSONALIZE");
+
+        when(fixture.roles.countByNormalizedName("Dashboard completo", null)).thenReturn(0L);
+        RoleManagementService.RoleDetail complete = fixture.service.create(
+                new RoleManagementService.UpsertCommand("Dashboard completo", null,
+                        Set.of("DASHBOARD_VIEW", "DASHBOARD_PERSONALIZE")), actor());
+        assertThat(complete.permissionCodes()).contains("DASHBOARD_VIEW", "DASHBOARD_PERSONALIZE");
     }
 
     @Test
@@ -223,7 +242,8 @@ class RoleManagementServiceTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         AuditLogPort audit = mock(AuditLogPort.class);
         List<PermissionJpaEntity> all = List.of(
-                permission("DASHBOARD_VIEW", "Ver inicio", "DASHBOARD"),
+                permission("DASHBOARD_VIEW", "Consultar Dashboard", "DASHBOARD"),
+                permission("DASHBOARD_PERSONALIZE", "Personalizar Dashboard", "DASHBOARD"),
                 permission("USER_PANEL_VIEW", "Ver panel", "USER"),
                 permission("PROFILE_VIEW", "Consultar perfil", "PROFILE"),
                 permission("PASSWORD_CHANGE", "Cambiar contraseña", "PROFILE"),

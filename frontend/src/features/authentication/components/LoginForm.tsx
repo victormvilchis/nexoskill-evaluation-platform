@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { useAuth } from '../context/AuthContext'
+import { authorizedHome } from '../../../shared/utils/authorizedHome'
 
 export function LoginForm() {
   const navigate = useNavigate()
@@ -21,7 +22,7 @@ export function LoginForm() {
       navigate(
         authenticatedUser.passwordChangeRequired
           ? '/change-password'
-          : '/dashboard',
+          : authorizedHome(authenticatedUser),
         { replace: true }
       )
     } catch (requestError) {

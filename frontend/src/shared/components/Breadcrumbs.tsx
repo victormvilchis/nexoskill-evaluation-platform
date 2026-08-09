@@ -14,7 +14,8 @@ const catalogLabels: Record<string, string> = {
 }
 
 function resolveCrumbs(pathname: string): Crumb[] {
-  if (pathname === '/dashboard') return [{ label: 'Inicio' }]
+  if (pathname === '/dashboard') return [{ label: 'Dashboard' }]
+  if (pathname === '/access-denied') return [{ label: 'Acceso no disponible' }]
   if (pathname === '/profile') return [{ label: 'Cuenta' }, { label: 'Perfil' }]
   if (pathname === '/change-password') return [{ label: 'Cuenta' }, { label: 'Contraseña' }]
   if (pathname.startsWith('/admin/roles')) {

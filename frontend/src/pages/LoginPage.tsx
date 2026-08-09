@@ -3,6 +3,7 @@ import { LoginForm } from '../features/authentication/components/LoginForm'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import { BrandLogo } from '../shared/components/BrandLogo'
 import { LoadingScreen } from '../shared/components/LoadingScreen'
+import { authorizedHome } from '../shared/utils/authorizedHome'
 
 export function LoginPage() {
   const { user, loading } = useAuth()
@@ -16,7 +17,7 @@ export function LoginPage() {
   if (user) {
     return (
       <Navigate
-        to={user.passwordChangeRequired ? '/change-password' : '/dashboard'}
+        to={user.passwordChangeRequired ? '/change-password' : authorizedHome(user)}
         replace
       />
     )
