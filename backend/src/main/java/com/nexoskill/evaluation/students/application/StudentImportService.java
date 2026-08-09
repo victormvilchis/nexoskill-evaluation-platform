@@ -199,8 +199,9 @@ public class StudentImportService {
                             new ConflictDecisionKey(current.id(), conflict.certificationType(),
                                     conflict.code(), fingerprint));
                     if (isReusableConflictAction(previousAction, conflict)) {
-                        automaticConflictResolutions.put(conflict.id(), previousAction);
-                        effectiveConflict = conflict.withResolution(previousAction, true, true);
+                        // Una decisión previamente confirmada es histórica. El mismo escenario
+                        // no debe volver a generar una operación al cargar nuevamente el Excel.
+                        effectiveConflict = conflict.withResolution(previousAction, true, false);
                     } else {
                         previousAction = current == null ? null : storedConflictDecisions.source().get(
                                 new ConflictDecisionKey(current.id(), conflict.certificationType(),
@@ -217,8 +218,9 @@ public class StudentImportService {
                             previousAction = inferPreviousConflictAction(effectiveImported, conflict,
                                     previousImportFingerprint, effectiveTenant.organizationId());
                             if (isReusableConflictAction(previousAction, conflict)) {
-                                automaticConflictResolutions.put(conflict.id(), previousAction);
-                                effectiveConflict = conflict.withResolution(previousAction, true, true);
+                                // El resultado ya fue atendido en una importación anterior. Se
+                                // conserva como referencia y no se vuelve a ejecutar.
+                                effectiveConflict = conflict.withResolution(previousAction, true, false);
                             }
                         }
                     }
@@ -259,7 +261,9 @@ public class StudentImportService {
                 String previousAction = storedChangeDecisions.exact().get(
                         new ChangeDecisionKey(current.id(), change.key(), fingerprint));
                 if (isReusableChangeAction(previousAction)) {
-                    changes.add(change.withResolution(previousAction, true));
+                    // El cambio ya fue atendido. Debe permanecer visible como antecedente,
+                    // pero nunca seleccionado para aplicarse otra vez.
+                    changes.add(change.withResolution(previousAction, true, false));
                     continue;
                 }
                 previousAction = storedChangeDecisions.source().get(
@@ -292,8 +296,7 @@ public class StudentImportService {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         Map<String, Set<String>> previewChangeFields = changedStudents.stream().collect(
                 java.util.stream.Collectors.toUnmodifiableMap(ChangedStudentPreview::studentPublicId,
-                        value -> value.changes().stream().map(FieldChange::key)
-                                .collect(java.util.stream.Collectors.toUnmodifiableSet())));
+                        value -> actionableChangeFields(value.changes())));
         Set<String> previewPossibleLows = possibleLows.stream().map(PossibleLowPreview::studentPublicId)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         List<ImportedStudent> effectiveImported = parsed.stream()
@@ -869,6 +872,7 @@ public class StudentImportService {
             ChangeSelection selection) {
         if (studentId == null || selection == null || !selection.selected()) return;
         for (FieldChange change : state.changePreviews().getOrDefault(rowKey, List.of())) {
+            if (change.reusedDecision()) continue;
             ChangeDecisionRef decisionRef = new ChangeDecisionRef(selection.studentPublicId(), change.key());
             String fingerprint = state.changeFingerprints().get(decisionRef);
             String sourceFingerprint = state.changeSourceFingerprints().get(decisionRef);
@@ -1605,6 +1609,16 @@ public class StudentImportService {
         return "KEEP_PLATFORM".equals(action) || "APPLY_EXCEL".equals(action);
     }
 
+    static Set<String> actionableChangeFields(Collection<FieldChange> changes) {
+        if (changes == null || changes.isEmpty()) return Set.of();
+        return changes.stream()
+                .filter(Objects::nonNull)
+                .filter(change -> !change.reusedDecision())
+                .map(FieldChange::key)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
     static String changeFingerprint(FieldChange change) {
         if (change == null || change.key() == null) return null;
         return sha256(String.join("|", change.key(),
@@ -2032,6 +2046,7 @@ public class StudentImportService {
         // Los conflictos de filas que no exponen un selector propio conservan el
         // comportamiento anterior y requieren una decisión explícita.
         state.conflicts().values().stream()
+                .filter(conflict -> !conflict.reusedDecision() && conflict.applyResolution())
                 .map(ConflictPreview::rowKey)
                 .filter(rowKey -> !selectableRows.contains(rowKey))
                 .forEach(selected::add);
@@ -2059,7 +2074,10 @@ public class StudentImportService {
             }
         });
         state.automaticConflictResolutions().forEach((conflictId, action) -> {
-            if (activeConflictIds.contains(conflictId)) result.put(conflictId, action);
+            ConflictPreview conflict = state.conflicts().get(conflictId);
+            if (activeConflictIds.contains(conflictId) && conflict != null && conflict.applyResolution()) {
+                result.put(conflictId, action);
+            }
         });
         return Map.copyOf(result);
     }
@@ -2885,7 +2903,7 @@ public class StudentImportService {
             this(key, field, currentValue, excelValue, selected, null, false);
         }
         FieldChange withResolution(String action, boolean reused) {
-            return withResolution(action, reused, "APPLY_EXCEL".equals(action));
+            return withResolution(action, reused, !reused && "APPLY_EXCEL".equals(action));
         }
         FieldChange withResolution(String action, boolean reused, boolean selectedValue) {
             return new FieldChange(key, field, currentValue, excelValue,
@@ -2906,7 +2924,7 @@ public class StudentImportService {
         ConflictPreview withResolution(String action, boolean reused, boolean shouldApply) {
             return new ConflictPreview(id, rowKey, row, collaborator, code, groupKey, title, field,
                     certificationType, certification, excelValue, currentValue, calculatedValue,
-                    reason, actions, action, reused, shouldApply);
+                    reason, actions, action, reused, shouldApply && !reused);
         }
     }
     public record Preview(String token, String fileName, String sheetName, String organizationName,

@@ -117,6 +117,7 @@ export function StudentImportPage() {
     : '/admin/collaborators'
 
   const selectedNew = useMemo(() => newRows.filter((row) => row.selected), [newRows])
+  const newRowKeys = useMemo(() => new Set(newRows.map((row) => row.rowKey)), [newRows])
   const selectableRowKeys = useMemo(() => new Set([
     ...newRows.map((row) => row.rowKey),
     ...changedRows.map((row) => row.rowKey)
@@ -130,14 +131,14 @@ export function StudentImportPage() {
       || selectedRowKeys.has(conflict.rowKey)) ?? [],
     [preview, selectableRowKeys, selectedRowKeys]
   )
-  const activeConflictRowKeys = useMemo(
-    () => new Set(activeConflicts.map((conflict) => conflict.rowKey)),
-    [activeConflicts]
-  )
-  const selectedChanges = useMemo(
-    () => changedRows.filter((row) => row.selected
-      && (row.selectedFields.size > 0 || activeConflictRowKeys.has(row.rowKey))),
-    [changedRows, activeConflictRowKeys]
+  const actionableConflictRowKeys = useMemo(
+    () => new Set(activeConflicts
+      .filter((conflict) => !conflict.reusedDecision
+        && conflict.applyResolution
+        && Boolean(conflictDecisions[conflict.id])
+        && conflictDecisions[conflict.id] !== 'OMIT_ROW')
+      .map((conflict) => conflict.rowKey)),
+    [activeConflicts, conflictDecisions]
   )
   const pendingChangeCount = useMemo(
     () => changedRows.filter((row) => row.selected).reduce((total, row) =>
@@ -174,49 +175,81 @@ export function StudentImportPage() {
     () => pendingConflicts.filter((conflict) => !conflictDecisions[conflict.id]).length,
     [pendingConflicts, conflictDecisions]
   )
-  const selectedNewCount = useMemo(
-    () => selectedNew.filter((row) => !omittedRows.has(row.rowKey)).length,
-    [selectedNew, omittedRows]
-  )
-  const selectedChangeCount = useMemo(
-    () => selectedChanges.filter((row) => !omittedRows.has(row.rowKey)).length,
-    [selectedChanges, omittedRows]
-  )
-  const selectedForApplyCount = selectedNewCount + selectedChangeCount + selectedLows
-  const pendingToResolve = pendingChangeCount + unresolvedConflicts
-  const newRowError = useMemo(() => {
-    const normalizedEmails = new Map<string, number>()
-    const normalizedCodes = new Map<string, number>()
-    const normalizedCorporateUsers = new Map<string, number>()
+  const newRowValidationErrors = useMemo(() => {
+    const errors = new Map<string, string>()
+    const emails = new Map<string, NewState[]>()
+    const codes = new Map<string, NewState[]>()
+    const corporateUsers = new Map<string, NewState[]>()
+
+    const addGroup = (groups: Map<string, NewState[]>, value: string, row: NewState) => {
+      groups.set(value, [...(groups.get(value) ?? []), row])
+    }
+
     for (const row of selectedNew) {
       if (omittedRows.has(row.rowKey)) continue
       const email = row.email.trim().toLowerCase()
-      if (!validEmail(email)) return `Captura un correo válido para ${row.collaborator || `la fila ${row.row}`}.`
-      normalizedEmails.set(email, (normalizedEmails.get(email) ?? 0) + 1)
+      if (!validEmail(email)) {
+        errors.set(row.rowKey, `Captura un correo válido para ${row.collaborator || `la fila ${row.row}`}.`)
+      } else {
+        addGroup(emails, email, row)
+      }
+
       if (preview?.manualStudentCode) {
         const code = row.studentCode.trim().toUpperCase()
-        if (!code) return `Captura el Código a nivel organización para ${row.collaborator || `la fila ${row.row}`}.`
-        if (!/^[A-Z0-9_-]+$/.test(code) || code.length > 80) {
-          return `El Código a nivel organización de ${row.collaborator || `la fila ${row.row}`} no es válido.`
+        if (!code) {
+          errors.set(row.rowKey, `Captura el Código a nivel organización para ${row.collaborator || `la fila ${row.row}`}.`)
+        } else if (!/^[A-Z0-9_-]+$/.test(code) || code.length > 80) {
+          errors.set(row.rowKey, `El Código a nivel organización de ${row.collaborator || `la fila ${row.row}`} no es válido.`)
+        } else {
+          addGroup(codes, code, row)
         }
-        normalizedCodes.set(code, (normalizedCodes.get(code) ?? 0) + 1)
       }
+
       const corporateUser = row.corporateUser.trim().toUpperCase()
       if (corporateUser) {
-        if (!row.admissionDate) return `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} requiere una Fecha de alta.`
-        if (corporateUser.length > 100) return `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} no puede superar 100 caracteres.`
-        normalizedCorporateUsers.set(corporateUser, (normalizedCorporateUsers.get(corporateUser) ?? 0) + 1)
+        if (!row.admissionDate) {
+          errors.set(row.rowKey, `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} requiere una Fecha de alta.`)
+        } else if (corporateUser.length > 100) {
+          errors.set(row.rowKey, `El Usuario corporativo de ${row.collaborator || `la fila ${row.row}`} no puede superar 100 caracteres.`)
+        } else {
+          addGroup(corporateUsers, corporateUser, row)
+        }
       }
     }
-    const duplicateEmail = [...normalizedEmails.entries()].find(([, count]) => count > 1)
-    if (duplicateEmail) return `El correo ${duplicateEmail[0]} está repetido entre los colaboradores nuevos.`
-    const duplicateCode = [...normalizedCodes.entries()].find(([, count]) => count > 1)
-    if (duplicateCode) return `El Código a nivel organización ${duplicateCode[0]} está repetido entre los colaboradores nuevos.`
-    const duplicateCorporateUser = [...normalizedCorporateUsers.entries()].find(([, count]) => count > 1)
-    return duplicateCorporateUser
-      ? `El Usuario corporativo ${duplicateCorporateUser[0]} está repetido entre los colaboradores nuevos.`
-      : undefined
+
+    const markDuplicates = (groups: Map<string, NewState[]>, label: string) => {
+      groups.forEach((rows, value) => {
+        if (rows.length < 2) return
+        rows.forEach((row) => errors.set(row.rowKey, `${label} ${value} está repetido entre los colaboradores nuevos.`))
+      })
+    }
+    markDuplicates(emails, 'El correo')
+    markDuplicates(codes, 'El Código a nivel organización')
+    markDuplicates(corporateUsers, 'El Usuario corporativo')
+    return errors
   }, [selectedNew, omittedRows, preview?.manualStudentCode])
+
+  const selectedNewCount = useMemo(
+    () => selectedNew.filter((row) => !omittedRows.has(row.rowKey) && !newRowValidationErrors.has(row.rowKey)).length,
+    [selectedNew, omittedRows, newRowValidationErrors]
+  )
+  const selectedChangeRowKeys = useMemo(() => {
+    const rowKeys = new Set(changedRows
+      .filter((row) => row.selected
+        && !omittedRows.has(row.rowKey)
+        && row.changes.some((change) => !change.reusedDecision && row.selectedFields.has(change.key)))
+      .map((row) => row.rowKey))
+    actionableConflictRowKeys.forEach((rowKey) => {
+      if (!newRowKeys.has(rowKey) && !omittedRows.has(rowKey)) rowKeys.add(rowKey)
+    })
+    return rowKeys
+  }, [changedRows, actionableConflictRowKeys, newRowKeys, omittedRows])
+  const selectedChangeCount = selectedChangeRowKeys.size
+  const selectedForApplyCount = selectedNewCount + selectedChangeCount + selectedLows
+  const newRowError = useMemo(
+    () => newRowValidationErrors.values().next().value as string | undefined,
+    [newRowValidationErrors]
+  )
 
   const rowSelectionByNumber = useMemo(() => new Map<number, boolean>([
     ...newRows.map((row) => [row.row, row.selected] as const),
@@ -230,11 +263,17 @@ export function StudentImportPage() {
     () => preview?.errors.filter((issue) => issue.row <= 0 || rowSelectionByNumber.get(issue.row) !== false) ?? [],
     [preview, rowSelectionByNumber]
   )
-  const errorRowCount = useMemo(
-    () => new Set(visibleErrors.filter((issue) => issue.row > 0).map((issue) => issue.row)).size,
-    [visibleErrors]
-  )
+  const errorRowCount = useMemo(() => {
+    const rows = new Set(visibleErrors.filter((issue) => issue.row > 0).map((issue) => issue.row))
+    selectedNew.forEach((row) => {
+      if (newRowValidationErrors.has(row.rowKey)) rows.add(row.row)
+    })
+    return rows.size
+  }, [visibleErrors, selectedNew, newRowValidationErrors])
 
+  const pendingToResolve = pendingChangeCount + unresolvedConflicts
+  const hasNewDecisionWork = pendingChangeCount > 0 || pendingConflicts.length > 0
+  const hasAnythingToConfirm = selectedForApplyCount > 0 || hasNewDecisionWork
   const blockingMessage = newRowError
     ?? (unresolvedConflicts > 0
       ? 'Resuelve los conflictos de los colaboradores seleccionados antes de confirmar la importación.'
@@ -279,7 +318,9 @@ export function StudentImportPage() {
       setChangedRows(response.changedStudents.map((row) => ({
         ...row,
         selected: !previouslyOmittedRows.has(row.rowKey),
-        selectedFields: new Set(row.changes.filter((change) => change.selected).map((change) => change.key))
+        selectedFields: new Set(row.changes
+          .filter((change) => !change.reusedDecision && change.selected)
+          .map((change) => change.key))
       })))
       setLowActions(Object.fromEntries(response.possibleLows.map((row) => [row.studentPublicId, 'KEEP'])))
       setConflictDecisions(Object.fromEntries(response.conflicts.map((conflict) => [
@@ -399,6 +440,11 @@ export function StudentImportPage() {
 
   async function applyChanges() {
     if (!preview || applying || blockingMessage) return
+    if (!hasAnythingToConfirm) {
+      setConfirmOpen(false)
+      toast.info('Sin cambios nuevos', 'El archivo no contiene cambios nuevos para aplicar.')
+      return
+    }
     setApplying(true)
     try {
       const response = await applyStudentImport({
@@ -414,7 +460,8 @@ export function StudentImportPage() {
           studentPublicId: row.studentPublicId,
           rowKey: row.rowKey,
           fields: [...row.selectedFields],
-          selected: row.selected
+          selected: row.selected && (row.changes.some((change) => !change.reusedDecision)
+            || activeConflicts.some((conflict) => conflict.rowKey === row.rowKey && !conflict.reusedDecision))
         })),
         possibleLows: preview.possibleLows.map((row) => ({
           studentPublicId: row.studentPublicId,
@@ -604,7 +651,7 @@ export function StudentImportPage() {
               <div className="ns-import-change-selection">{changeTab === 'PENDING' && <label><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /><span>Incluir colaborador</span></label>}<h3>{formatPersonName(row.collaborator)}</h3></div>
               {row.warnings.map((warning) => <p className="warning-text" key={warning}>{warning}</p>)}<div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Campo</th><th>Valor actual</th><th>Valor del Excel o calculado</th><th>Decisión</th></tr></thead><tbody>
               {visibleChanges.map((change) => <tr key={change.key}><td>{change.field}</td><td>{change.currentValue}</td><td>{change.excelValue}</td><td>{change.reusedDecision
-                ? <div className="ns-import-reused-decision compact"><strong>Decisión aplicada previamente</strong><span>{change.resolvedAction === 'APPLY_EXCEL' ? 'Aplicar información del Excel' : 'Mantener información de la plataforma'}</span><small>{change.selected ? 'Se reutilizará el resultado confirmado.' : 'Se conserva la modificación manual actual.'}</small></div>
+                ? <div className="ns-import-reused-decision compact"><strong>Decisión aplicada previamente</strong><span>{change.resolvedAction === 'APPLY_EXCEL' ? 'Aplicar información del Excel' : 'Mantener información de la plataforma'}</span><small>No se procesará nuevamente; se conserva el estado actual de la plataforma.</small></div>
                 : <SelectField value={row.selectedFields.has(change.key) ? 'APPLY_EXCEL' : 'KEEP_PLATFORM'} disabled={!row.selected || omittedRows.has(row.rowKey)} onChange={(nextValue) => setChangeDecision(row.rowKey, change.key, nextValue as 'KEEP_PLATFORM' | 'APPLY_EXCEL')} ariaLabel={`Decisión para ${change.field}`} options={[{ value: 'KEEP_PLATFORM', label: 'Mantener información de la plataforma' }, { value: 'APPLY_EXCEL', label: 'Aplicar información del Excel' }]} />}</td></tr>)}
             </tbody></table></div></article>
           })}
@@ -648,7 +695,13 @@ export function StudentImportPage() {
           <button type="button" className="secondary-button" disabled={applying} onClick={() => void changeFile(undefined)}>
             Descartar
           </button>
-          <button type="button" className="primary-button" disabled={Boolean(blockingMessage) || applying} onClick={() => setConfirmOpen(true)}>
+          <button type="button" className="primary-button" disabled={Boolean(blockingMessage) || applying} onClick={() => {
+            if (!hasAnythingToConfirm) {
+              toast.info('Sin cambios nuevos', 'El archivo no contiene cambios nuevos para aplicar.')
+              return
+            }
+            setConfirmOpen(true)
+          }}>
             Aplicar cambios seleccionados
           </button>
         </FormActions>

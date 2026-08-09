@@ -275,4 +275,33 @@ class StudentImportServiceParsingTest {
 	}
 
 
+	@Test
+	void previouslyAttendedFieldChangesRemainInformationalAndCannotBeSubmittedAgain() {
+		StudentImportService.FieldChange historical = new StudentImportService.FieldChange(
+				"profile", "Perfil", "ANALISTA", "DESARROLLADOR", true)
+				.withResolution("APPLY_EXCEL", true);
+		StudentImportService.FieldChange pending = new StudentImportService.FieldChange(
+				"primaryTechnology", "Tecnología principal", "JAVA", "SPRING", true);
+
+		assertTrue(historical.reusedDecision());
+		assertFalse(historical.selected());
+		assertEquals(Set.of("primaryTechnology"),
+				StudentImportService.actionableChangeFields(List.of(historical, pending)));
+	}
+
+	@Test
+	void reusedConflictResolutionIsAlwaysHistoricalAndNeverAppliedAgain() {
+		StudentImportService.ConflictAction action = new StudentImportService.ConflictAction(
+				"USE_PLATFORM", "Aplicar cálculo de la plataforma", "Usa el cálculo vigente.");
+		StudentImportService.ConflictPreview historical = new StudentImportService.ConflictPreview(
+				"conflict", "row", 2, "Persona", "CODE", "GROUP", "Conflicto", "Campo",
+				"TECHNOLOGICAL", "Tecnológica", "Excel", "Actual", "Calculado", "Motivo",
+				List.of(action), null, false, true)
+				.withResolution("USE_PLATFORM", true, true);
+
+		assertTrue(historical.reusedDecision());
+		assertFalse(historical.applyResolution());
+	}
+
+
 }
