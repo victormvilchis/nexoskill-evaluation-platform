@@ -15,11 +15,13 @@
   width: 100%;
   min-width: 600px;
   border-collapse: collapse;
+  table-layout: auto !important;
   line-height: 1.16;
 }
 
 .ns-data-table th,
 .responsive-table th {
+  min-width: 0 !important;
   max-width: 300px;
   padding: .34rem .4rem !important;
   font-size: .63rem !important;
@@ -31,6 +33,7 @@
 
 .ns-data-table td,
 .responsive-table td {
+  min-width: 0 !important;
   max-width: 300px;
   padding: .36rem .4rem !important;
   font-size: .75rem;
@@ -52,9 +55,15 @@
   padding-right: .56rem !important;
 }
 
-.ns-primary-cell {
-  min-width: 168px;
-  max-width: 330px;
+.ns-data-table .ns-primary-cell,
+.responsive-table .ns-primary-cell {
+  min-width: 168px !important;
+  max-width: 300px !important;
+}
+
+.ns-data-table col,
+.responsive-table col {
+  width: auto !important;
 }
 
 .ns-primary-cell > strong,
@@ -74,16 +83,28 @@
   line-height: 1.12;
 }
 
+.ns-data-table .ns-primary-cell > small,
+.responsive-table .ns-primary-cell > small {
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.ns-data-table .ns-primary-cell > small + small,
+.responsive-table .ns-primary-cell > small + small {
+  margin-left: .28rem;
+}
+
 .ns-data-table tr:has(> .ns-actions-column) > :nth-last-child(2),
 .responsive-table tr:has(> .ns-actions-column) > :nth-last-child(2) {
   width: 1%;
-  min-width: 78px;
+  min-width: 78px !important;
   white-space: nowrap;
 }
 
-.ns-actions-column {
+.ns-data-table .ns-actions-column,
+.responsive-table .ns-actions-column {
   width: 1%;
-  min-width: 88px;
+  min-width: 88px !important;
   white-space: nowrap;
 }
 
@@ -164,16 +185,180 @@
 /* Controles operativos dentro de tablas: compactos, sin heredar el ancho de formularios. */
 .ns-data-table td .vt-select-field,
 .responsive-table td .vt-select-field {
-  min-width: 120px;
+  width: auto;
+  min-width: 108px !important;
+  max-width: 190px;
 }
 
 .ns-data-table td .vt-select-trigger,
 .responsive-table td .vt-select-trigger {
-  min-height: 30px !important;
-  height: 30px !important;
-  padding: 0 8px !important;
-  border-radius: 7px !important;
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
   font-size: .72rem !important;
+}
+
+
+/*
+ * Contrato compacto transversal.
+ * Neutraliza anchos/altos historicos de modulos concretos para que cualquier
+ * ns-data-table conserve la misma densidad visual que Colaboradores/Talent Bank.
+ */
+.ns-data-table th,
+.ns-data-table td,
+.responsive-table th,
+.responsive-table td {
+  box-sizing: border-box;
+}
+
+.ns-data-table td:not(.ns-actions-column),
+.responsive-table td:not(.ns-actions-column) {
+  overflow-wrap: anywhere;
+}
+
+.ns-data-table td input:not([type='checkbox']):not([type='radio']),
+.responsive-table td input:not([type='checkbox']):not([type='radio']) {
+  box-sizing: border-box;
+  min-width: 0 !important;
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 0 7px !important;
+  border-radius: 6px !important;
+  font-size: .72rem !important;
+  line-height: 1 !important;
+}
+
+.ns-data-table td input[type='checkbox'],
+.ns-data-table td input[type='radio'],
+.responsive-table td input[type='checkbox'],
+.responsive-table td input[type='radio'] {
+  width: 14px;
+  min-width: 14px !important;
+  height: 14px;
+  min-height: 14px !important;
+  margin: 0;
+}
+
+.ns-data-table td .ns-import-email-field,
+.responsive-table td .ns-import-email-field,
+.ns-data-table td .ns-usage-cell,
+.responsive-table td .ns-usage-cell,
+.ns-data-table td .ns-chip-list,
+.responsive-table td .ns-chip-list,
+.ns-data-table td .ns-import-reused-decision.compact,
+.responsive-table td .ns-import-reused-decision.compact {
+  min-width: 0 !important;
+}
+
+.ns-data-table td .ns-import-email-field,
+.responsive-table td .ns-import-email-field {
+  width: min(180px, 100%);
+}
+
+.ns-data-table td .ns-chip-list,
+.responsive-table td .ns-chip-list {
+  gap: .18rem;
+}
+
+.ns-data-table td .ns-chip,
+.ns-data-table td .scope-badge,
+.ns-data-table td .usage-badge,
+.responsive-table td .ns-chip,
+.responsive-table td .scope-badge,
+.responsive-table td .usage-badge {
+  min-height: 19px !important;
+  padding: .1rem .34rem !important;
+  font-size: .63rem !important;
+  line-height: 1 !important;
+}
+
+.ns-data-table td .ns-code-label,
+.responsive-table td .ns-code-label {
+  padding: .08rem .28rem;
+  border-radius: 5px;
+  font-size: .65rem;
+}
+
+.ns-data-table .question-statement-cell > strong,
+.responsive-table .question-statement-cell > strong {
+  -webkit-line-clamp: 2;
+}
+
+.ns-data-table td .question-tag-summary,
+.responsive-table td .question-tag-summary {
+  flex-wrap: nowrap;
+  gap: .16rem;
+  overflow: hidden;
+  max-width: 100%;
+  margin-top: .1rem;
+}
+
+.ns-data-table td .question-tag-chip,
+.ns-data-table td .question-tag-summary-chip,
+.ns-data-table td .question-tag-more,
+.responsive-table td .question-tag-chip,
+.responsive-table td .question-tag-summary-chip,
+.responsive-table td .question-tag-more {
+  flex: 0 1 auto;
+  max-width: 92px;
+  padding: .13rem .3rem;
+  font-size: .61rem;
+  line-height: 1;
+}
+
+.ns-data-table td .ns-credential-cell,
+.responsive-table td .ns-credential-cell {
+  gap: .18rem;
+}
+
+.ns-data-table td .ns-credential-once code,
+.responsive-table td .ns-credential-once code {
+  min-height: 24px;
+  padding: 0 .34rem;
+  border-radius: 6px;
+  font-size: .68rem;
+}
+
+.ns-data-table td .ns-copy-inline-button,
+.responsive-table td .ns-copy-inline-button {
+  min-height: 26px;
+  padding: .18rem .38rem;
+  border-radius: 6px;
+  font-size: .68rem;
+}
+
+.ns-data-table td .ns-import-reused-decision.compact,
+.responsive-table td .ns-import-reused-decision.compact {
+  gap: 1px;
+  padding: .2rem .3rem;
+}
+
+.ns-data-table td .ns-import-reused-decision.compact strong,
+.ns-data-table td .ns-import-reused-decision.compact span,
+.ns-data-table td .ns-import-reused-decision.compact small,
+.responsive-table td .ns-import-reused-decision.compact strong,
+.responsive-table td .ns-import-reused-decision.compact span,
+.responsive-table td .ns-import-reused-decision.compact small {
+  font-size: .64rem;
+  line-height: 1.08;
+}
+
+.ns-data-table .ns-table-empty,
+.responsive-table .ns-table-empty {
+  height: 72px !important;
+  padding: .75rem .6rem !important;
+}
+
+.ns-data-table .ns-table-empty strong,
+.responsive-table .ns-table-empty strong {
+  margin-bottom: .16rem;
+  font-size: .8rem;
+}
+
+.ns-data-table .ns-table-empty span,
+.responsive-table .ns-table-empty span {
+  font-size: .7rem;
 }
 
 /*
@@ -185,10 +370,12 @@
   width: 100%;
   min-width: 600px;
   border-collapse: collapse;
+  table-layout: auto !important;
   line-height: 1.16;
 }
 
 :is(.ns-data-panel, .ns-list-page) table:not(.ns-data-table) th {
+  min-width: 0 !important;
   max-width: 300px;
   padding: .34rem .4rem !important;
   font-size: .63rem !important;
@@ -199,6 +386,7 @@
 }
 
 :is(.ns-data-panel, .ns-list-page) table:not(.ns-data-table) td {
+  min-width: 0 !important;
   max-width: 300px;
   padding: .36rem .4rem !important;
   font-size: .75rem;
@@ -214,19 +402,19 @@
 .student-global-page .ns-data-table th:first-child,
 .student-global-page .ns-data-table td:first-child {
   width: 34%;
-  min-width: 190px;
+  min-width: 190px !important;
 }
 
 .student-global-page .ns-data-table th:nth-last-child(3),
 .student-global-page .ns-data-table td:nth-last-child(3) {
   width: 1%;
-  min-width: 92px;
+  min-width: 92px !important;
   white-space: nowrap;
 }
 
 .student-global-page .ns-data-table th:nth-last-child(2),
 .student-global-page .ns-data-table td:nth-last-child(2) {
-  min-width: 74px;
+  min-width: 74px !important;
 }
 
 .student-page .ns-filter-toolbar {
