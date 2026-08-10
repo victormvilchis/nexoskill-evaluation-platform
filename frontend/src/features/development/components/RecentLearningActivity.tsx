@@ -1,0 +1,5 @@
+import type { ActivityItem } from '../types/development'
+function dateLabel(value: string) { const date = new Date(value); const today = new Date(); const diff = Math.floor((today.setHours(0,0,0,0) - new Date(date).setHours(0,0,0,0)) / 86400000); if (diff === 0) return 'Hoy'; if (diff === 1) return 'Ayer'; return new Intl.DateTimeFormat('es-MX', { day: '2-digit', month: 'short' }).format(date) }
+export function RecentLearningActivity({ items }: { items: ActivityItem[] }) {
+  return <section className="development-card development-activity"><h2>Mi actividad</h2>{items.length === 0 ? <p className="development-empty-inline">Aún no tienes actividad de aprendizaje. Comienza una práctica para construir tu historial.</p> : <div className="activity-timeline">{items.map((item, index) => <div className="activity-row" key={`${item.occurredAt}-${index}`}><time>{dateLabel(item.occurredAt)}</time><span className="activity-dot" aria-hidden="true"/><div><strong>{item.title}</strong><p>{item.description}</p></div></div>)}</div>}</section>
+}

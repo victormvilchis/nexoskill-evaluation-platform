@@ -7,6 +7,8 @@ import type {
   StudentDeletionResult,
   StudentDetail,
   StudentEffectiveStatus,
+  StudentEvaluationAssignment,
+  StudentEvaluationOption,
   StudentIdentity,
   StudentPage,
   StudentFilterOptions,
@@ -142,5 +144,16 @@ export function changeStudentPassword(currentPassword: string, newPassword: stri
   return apiRequest<void>('/student-auth/change-password', {
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword, confirmPassword })
+  })
+}
+
+export function getAssignableStudentEvaluations(publicId: string) {
+  return apiRequest<StudentEvaluationOption[]>(`/admin/students/${publicId}/development/evaluation-options`)
+}
+
+export function assignStudentEvaluation(publicId: string, formPublicId: string, dueAt?: string) {
+  return apiRequest<StudentEvaluationAssignment>(`/admin/students/${publicId}/development/evaluations`, {
+    method: 'POST',
+    body: JSON.stringify({ formPublicId, dueAt: dueAt ? new Date(dueAt).toISOString() : null })
   })
 }

@@ -3,8 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
 import {
   activateStudent,
+  assignStudentEvaluation,
   deactivateStudent,
   getStudentAdministration,
+  getAssignableStudentEvaluations,
   getStudentAdministrativeHistory,
   resetStudentPassword,
   revokeAllStudentSessions,
@@ -22,6 +24,7 @@ import type {
   AdministrativeHistoryPage,
   StudentAdministrationView,
   StudentSession,
+  StudentEvaluationOption,
   StudentTemporaryCredentials
 } from '../shared/types/students'
 
@@ -78,6 +81,57 @@ export function StudentManagementPage() {
   const [error, setError] = useState<string>()
   const [pendingAction, setPendingAction] = useState<PendingAction>()
   const [temporaryCredentials, setTemporaryCredentials] = useState<StudentTemporaryCredentials>()
+  const [evaluationOptions, setEvaluationOptions] = useState<StudentEvaluationOption[]>([])
+  const [evaluationFormPublicId, setEvaluationFormPublicId] = useState('')
+  const [evaluationDueAt, setEvaluationDueAt] = useState('')
+  const [evaluationLoading, setEvaluationLoading] = useState(false)
+  const [evaluationAssigning, setEvaluationAssigning] = useState(false)
+
+  const canAssignEvaluations = permissions.has('STUDENT_UPDATE') && permissions.has('FORM_VIEW')
+
+  useEffect(() => {
+    if (!canAssignEvaluations || !publicId) return
+    let active = true
+    setEvaluationLoading(true)
+    getAssignableStudentEvaluations(publicId)
+      .then((items) => {
+        if (!active) return
+        setEvaluationOptions(Array.isArray(items) ? items : [])
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar las evaluaciones disponibles.')
+      })
+      .finally(() => { if (active) setEvaluationLoading(false) })
+    return () => { active = false }
+  }, [canAssignEvaluations, publicId])
+
+  async function loadEvaluationOptions() {
+    if (!canAssignEvaluations) return
+    setEvaluationLoading(true)
+    try {
+      const items = await getAssignableStudentEvaluations(publicId)
+      setEvaluationOptions(Array.isArray(items) ? items : [])
+    } finally {
+      setEvaluationLoading(false)
+    }
+  }
+
+  async function assignEvaluation() {
+    if (!evaluationFormPublicId) return
+    setEvaluationAssigning(true)
+    setError(undefined)
+    try {
+      const assigned = await assignStudentEvaluation(publicId, evaluationFormPublicId, evaluationDueAt || undefined)
+      toast.success('Evaluación asignada', `${assigned.title} ya está disponible en Mi Desarrollo del colaborador.`)
+      setEvaluationFormPublicId('')
+      setEvaluationDueAt('')
+      await loadEvaluationOptions()
+    } catch (requestError) {
+      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible asignar la evaluación.')
+    } finally {
+      setEvaluationAssigning(false)
+    }
+  }
 
   async function loadAdministration() {
     const response = await getStudentAdministration(publicId)
@@ -265,8 +319,28 @@ export function StudentManagementPage() {
         </section>
       )}
 
+      {canAssignEvaluations && (
+        <section className="ns-card student-administration-section">
+          <div className="ns-card-heading"><div><span className="ns-step">4</span><h2>Evaluaciones de Mi Desarrollo</h2></div></div>
+          <p className="muted">Asigna un formulario de evaluación activo al colaborador. La práctica de preparación permanece separada y no consume intentos oficiales.</p>
+          <div className="foundation-form-grid">
+            <label className="form-field ns-field-span-6"><span>Evaluación</span>
+              <select value={evaluationFormPublicId} disabled={evaluationLoading || evaluationAssigning} onChange={(event) => setEvaluationFormPublicId(event.target.value)}>
+                <option value="">{evaluationLoading ? 'Cargando evaluaciones…' : 'Seleccionar evaluación'}</option>
+                {evaluationOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.title}</option>)}
+              </select>
+              {!evaluationLoading && evaluationOptions.length === 0 && <small>No hay evaluaciones activas disponibles para asignar dentro del alcance del colaborador.</small>}
+            </label>
+            <label className="form-field ns-field-span-6"><span>Fecha límite <small>(opcional)</small></span>
+              <input type="datetime-local" value={evaluationDueAt} disabled={evaluationAssigning} onChange={(event) => setEvaluationDueAt(event.target.value)} />
+            </label>
+          </div>
+          <div className="student-management-actions"><button className="primary-button" type="button" disabled={!evaluationFormPublicId || evaluationLoading || evaluationAssigning} onClick={() => void assignEvaluation()}>{evaluationAssigning ? 'Asignando…' : 'Asignar evaluación'}</button></div>
+        </section>
+      )}
+
       <section className="ns-card student-administration-section">
-        <div className="ns-card-heading"><div><span className="ns-step">4</span><h2>Historial administrativo</h2></div></div>
+        <div className="ns-card-heading"><div><span className="ns-step">{canAssignEvaluations ? 5 : 4}</span><h2>Historial administrativo</h2></div></div>
         <div className="ns-data-table-wrap">
           <table className="ns-data-table">
             <thead><tr><th>Evento</th><th>Descripción</th><th>Fecha</th></tr></thead>

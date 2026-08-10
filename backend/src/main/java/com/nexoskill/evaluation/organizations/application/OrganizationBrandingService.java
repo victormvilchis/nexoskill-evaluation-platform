@@ -81,6 +81,33 @@ public class OrganizationBrandingService {
         return new LogoContent(value.getLogoContent(), value.getLogoContentType(), value.getLogoFileName());
     }
 
+
+    @Transactional(readOnly = true)
+    public BrandView studentBrand(Long organizationId) {
+        if (organizationId == null) {
+            throw new BusinessException("STUDENT_ORGANIZATION_NOT_FOUND", "No fue posible determinar tu organización.");
+        }
+        OrganizationJpaEntity organization = organizations.findById(organizationId)
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_NOT_FOUND", "La organización no existe."));
+        return branding.findById(organization.getId())
+                .filter(item -> item.getLogoContent() != null)
+                .map(item -> new BrandView(false, organization.getPublicId(), organization.getName(), true,
+                        "/api/v1/student/development/branding/logo?v="
+                                + (item.getLogoUpdatedAt() == null ? "0" : item.getLogoUpdatedAt().toEpochMilli())))
+                .orElseGet(() -> new BrandView(false, organization.getPublicId(), organization.getName(), false, null));
+    }
+
+    @Transactional(readOnly = true)
+    public LogoContent studentLogo(Long organizationId) {
+        if (organizationId == null) {
+            throw new BusinessException("STUDENT_ORGANIZATION_NOT_FOUND", "No fue posible determinar tu organización.");
+        }
+        OrganizationBrandingJpaEntity value = branding.findById(organizationId)
+                .filter(item -> item.getLogoContent() != null)
+                .orElseThrow(() -> new BusinessException("ORGANIZATION_LOGO_NOT_FOUND", "La organización no tiene una imagen configurada."));
+        return new LogoContent(value.getLogoContent(), value.getLogoContentType(), value.getLogoFileName());
+    }
+
     private BrandView view(OrganizationJpaEntity organization) {
         return branding.findById(organization.getId())
                 .filter(item -> item.getLogoContent() != null)

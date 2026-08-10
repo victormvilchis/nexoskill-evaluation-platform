@@ -221,3 +221,18 @@ export interface StudentIdentity {
   lastLoginAt: string | null
   passwordChangeRequired: boolean
 }
+
+export interface StudentEvaluationOption {
+  publicId: string
+  title: string
+  description: string | null
+}
+
+export interface StudentEvaluationAssignment {
+  assignmentPublicId: string
+  formPublicId: string
+  title: string
+  description: string | null
+  status: string
+  dueAt: string | null
+}

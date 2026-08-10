@@ -29,6 +29,14 @@ import { StudentManagementPage } from './pages/StudentManagementPage'
 import { StudentCertificationsPage } from './pages/StudentCertificationsPage'
 import { StudentLoginPage } from './pages/StudentLoginPage'
 import { StudentPortalPage } from './pages/StudentPortalPage'
+import { StudentStudyPage } from './pages/StudentStudyPage'
+import { StudentPracticePage } from './pages/StudentPracticePage'
+import { StudentEvaluationsPage } from './pages/StudentEvaluationsPage'
+import { StudentEvaluationAttemptPage } from './pages/StudentEvaluationAttemptPage'
+import { StudentCertificationsSelfPage } from './pages/StudentCertificationsSelfPage'
+import { StudentPathsPage } from './pages/StudentPathsPage'
+import { StudentProgressPage } from './pages/StudentProgressPage'
+import { StudentDevelopmentLayout } from './layouts/StudentDevelopmentLayout'
 import { TalentBankPage } from './pages/TalentBankPage'
 import { TalentTypeSelectionPage } from './pages/TalentTypeSelectionPage'
 import { AcademyTalentEditorPage } from './pages/AcademyTalentEditorPage'
@@ -49,7 +57,12 @@ function resolveDocumentSection(pathname: string) {
   if (pathname === '/login') return 'Acceso'
   if (pathname === '/student-login') return 'Acceso de colaboradores'
   if (pathname.startsWith('/student/change-password')) return 'Cambiar contraseña'
-  if (pathname.startsWith('/student')) return 'Portal de colaboradores'
+  if (pathname.startsWith('/student/study')) return 'Estudiar'
+  if (pathname.startsWith('/student/evaluations')) return 'Mis evaluaciones'
+  if (pathname.startsWith('/student/paths')) return 'Mis Paths'
+  if (pathname.startsWith('/student/certifications')) return 'Mis certificaciones'
+  if (pathname.startsWith('/student/progress')) return 'Mi progreso'
+  if (pathname.startsWith('/student')) return 'Mi Desarrollo'
   if (pathname.startsWith('/admin/organizations')) return 'Organizaciones'
   if (pathname.startsWith('/admin/talent-bank')) return 'Talent Bank'
   if (pathname.startsWith('/admin/collaborators')) return 'Colaboradores'
@@ -78,7 +91,6 @@ export default function App() {
   useEffect(() => {
     const publicRoute = location.pathname === '/login'
       || location.pathname === '/student-login'
-      || location.pathname.startsWith('/student')
     if (!publicRoute) return
     const section = resolveDocumentSection(location.pathname)
     document.title = section
@@ -91,8 +103,17 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/student-login" element={<StudentLoginPage />} />
       <Route element={<StudentProtectedRoute />}>
-        <Route path="/student" element={<StudentPortalPage />} />
-        <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
+        <Route element={<StudentDevelopmentLayout />}>
+          <Route path="/student" element={<StudentPortalPage />} />
+          <Route path="/student/study" element={<StudentStudyPage />} />
+          <Route path="/student/study/practice/:publicId" element={<StudentPracticePage />} />
+          <Route path="/student/evaluations" element={<StudentEvaluationsPage />} />
+          <Route path="/student/evaluations/attempt/:attemptPublicId" element={<StudentEvaluationAttemptPage />} />
+          <Route path="/student/paths" element={<StudentPathsPage />} />
+          <Route path="/student/certifications" element={<StudentCertificationsSelfPage />} />
+          <Route path="/student/progress" element={<StudentProgressPage />} />
+          <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
+        </Route>
       </Route>
       <Route element={<ProtectedRoute />}>
         <Route element={<PermissionRoute permission="PASSWORD_CHANGE" />}>
