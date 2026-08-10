@@ -14,6 +14,7 @@ export interface DashboardScope {
   global: boolean
   organizationPublicId: string | null
   organizationName: string | null
+  certificationsEnabled: boolean
 }
 export interface DashboardKpis {
   activeCollaborators: number
@@ -37,6 +38,11 @@ export interface DashboardOrganizationPoint {
 export interface DashboardAttentionItem {
   key: string; label: string; value: number; severity: 'CRITICAL' | 'WARNING' | 'ATTENTION'; description: string
 }
+export interface DashboardCertificationFocusDetail {
+  studentPublicId: string; collaborator: string; role: string; technology: string; status: string
+  certificationType: string | null; certificationLabel: string | null; expirationDate: string | null
+  secondAttemptFailed: boolean
+}
 export interface DashboardFilterOptions {
   organizations: DashboardOption[]; roles: DashboardOption[]; technologies: DashboardOption[]
   collaboratorStatuses: DashboardOption[]; certificationTypes: DashboardOption[]; certificationStates: DashboardOption[]
@@ -55,6 +61,8 @@ export interface ExecutiveDashboard {
   roles: DashboardChartPoint[]
   talentBank: DashboardChartPoint[]
   organizations: DashboardOrganizationPoint[]
+  certificationFocus: DashboardChartPoint[]
+  certificationFocusDetails: DashboardCertificationFocusDetail[]
   attention: DashboardAttentionItem[]
 }
 export interface DashboardComponentDefinition {

@@ -492,3 +492,37 @@
     padding: .34rem .42rem;
   }
 }
+
+/* Status Certificación: severidad ejecutiva compartida en Colaboradores. */
+.status-badge.certification-focus {
+  min-height: 22px;
+  padding: 0.18rem 0.48rem;
+  white-space: nowrap;
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.certification-focus-in-rule {
+  border-color: #a6f4c5;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.certification-focus-expiring-soon {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.certification-focus-expired {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.certification-focus-pending-deactivation {
+  border-color: #fda29b;
+  background: #fee4e2;
+  color: #912018;
+  font-weight: 800;
+}

@@ -61,14 +61,18 @@ public class DashboardController {
 
     @GetMapping("/configuration")
     @PreAuthorize("hasRole('ADMINISTRATOR') or hasAuthority('DASHBOARD_VIEW')")
-    public ResponseEntity<Configuration> configuration(@AuthenticationPrincipal AuthenticatedUser principal) {
-        return ResponseEntity.ok(executiveService.configuration(principal));
+    public ResponseEntity<Configuration> configuration(@AuthenticationPrincipal AuthenticatedUser principal,
+            HttpServletRequest request, @RequestParam(required = false) String organizationPublicId) {
+        return ResponseEntity.ok(executiveService.configuration(tenantContextResolver.resolve(request), principal,
+                organizationPublicId));
     }
 
     @PutMapping("/configuration")
     @PreAuthorize("hasRole('ADMINISTRATOR') or (hasAuthority('DASHBOARD_VIEW') and hasAuthority('DASHBOARD_PERSONALIZE'))")
     public ResponseEntity<Configuration> saveConfiguration(@AuthenticationPrincipal AuthenticatedUser principal,
+            HttpServletRequest request, @RequestParam(required = false) String organizationPublicId,
             @RequestBody SaveConfigurationCommand command) {
-        return ResponseEntity.ok(executiveService.saveConfiguration(principal, command));
+        return ResponseEntity.ok(executiveService.saveConfiguration(tenantContextResolver.resolve(request), principal,
+                organizationPublicId, command));
     }
 }

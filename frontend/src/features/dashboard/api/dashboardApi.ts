@@ -23,12 +23,14 @@ export function getExecutiveDashboard(query: DashboardQuery) {
   return apiRequest<ExecutiveDashboard>(`/dashboard/overview${suffix ? `?${suffix}` : ''}`)
 }
 
-export function getDashboardConfiguration() {
-  return apiRequest<DashboardConfiguration>('/dashboard/configuration')
+export function getDashboardConfiguration(organizationPublicId?: string) {
+  const query = organizationPublicId ? `?organizationPublicId=${encodeURIComponent(organizationPublicId)}` : ''
+  return apiRequest<DashboardConfiguration>(`/dashboard/configuration${query}`)
 }
 
-export function saveDashboardConfiguration(components: DashboardComponentPreference[]) {
-  return apiRequest<DashboardConfiguration>('/dashboard/configuration', {
+export function saveDashboardConfiguration(components: DashboardComponentPreference[], organizationPublicId?: string) {
+  const query = organizationPublicId ? `?organizationPublicId=${encodeURIComponent(organizationPublicId)}` : ''
+  return apiRequest<DashboardConfiguration>(`/dashboard/configuration${query}`, {
     method: 'PUT',
     body: JSON.stringify({ components })
   })

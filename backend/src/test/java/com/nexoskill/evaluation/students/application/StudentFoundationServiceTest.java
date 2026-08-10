@@ -3,6 +3,8 @@ package com.nexoskill.evaluation.students.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +23,7 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class StudentFoundationServiceTest {
@@ -29,6 +32,7 @@ class StudentFoundationServiceTest {
 
 	private StudentService studentService;
 	private OrganizationRepository organizations;
+	private NamedParameterJdbcTemplate jdbc;
 	private StudentFoundationService service;
 	private OrganizationJpaEntity organization;
 	private TenantContext tenant;
@@ -37,7 +41,8 @@ class StudentFoundationServiceTest {
 	void setUp() {
 		studentService = mock(StudentService.class);
 		organizations = mock(OrganizationRepository.class);
-		service = new StudentFoundationService(studentService, organizations, mock(NamedParameterJdbcTemplate.class),
+		jdbc = mock(NamedParameterJdbcTemplate.class);
+		service = new StudentFoundationService(studentService, organizations, jdbc,
 				mock(AuditLogPort.class), CLOCK);
 		organization = mock(OrganizationJpaEntity.class);
 		tenant = TenantContext.organization(21L, "00000000-0000-0000-0000-000000000021", "ORG_21", false);
@@ -52,13 +57,18 @@ class StudentFoundationServiceTest {
 	}
 
 	@Test
-	void catalogsAreEmptyWhenOrganizationDoesNotApplyCertifications() {
+	void professionalCatalogsRemainAvailableWhenOrganizationDoesNotApplyCertifications() {
 		when(organization.isAppliesCertifications()).thenReturn(false);
+		when(jdbc.query(anyString(), anyMap(), org.mockito.ArgumentMatchers.<RowMapper<StudentFoundationService.CatalogRef>>any()))
+				.thenReturn(java.util.List.of(new StudentFoundationService.CatalogRef(
+						"00000000-0000-0000-0000-000000000041", "PROFILE", "Perfil")));
+
 		StudentFoundationService.CatalogBundle result = service.catalogs(tenant, null);
+
 		assertThat(result.appliesCertifications()).isFalse();
 		assertThat(result.organization().publicId()).isEqualTo(tenant.organizationPublicId());
-		assertThat(result.profiles()).isEmpty();
-		assertThat(result.technologicalProfiles()).isEmpty();
+		assertThat(result.profiles()).hasSize(1);
+		assertThat(result.technologicalProfiles()).hasSize(1);
 	}
 
 	@Test

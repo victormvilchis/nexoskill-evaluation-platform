@@ -1029,3 +1029,16 @@
     border-bottom: 0;
   }
 }
+
+.ns-import-bulk-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ns-import-bulk-actions .compact-button {
+  min-height: 31px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.74rem;
+}

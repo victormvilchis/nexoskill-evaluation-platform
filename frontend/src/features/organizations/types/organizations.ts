@@ -66,3 +66,11 @@ export interface OrganizationPage {
   totalElements: number
   totalPages: number
 }
+
+export interface OrganizationBranding {
+  global: boolean
+  organizationPublicId: string | null
+  name: string
+  hasLogo: boolean
+  logoUrl: string | null
+}

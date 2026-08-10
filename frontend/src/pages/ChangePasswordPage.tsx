@@ -58,7 +58,7 @@ export function ChangePasswordPage() {
     <main className="password-page">
       <section className="password-card" aria-labelledby="password-title">
         <BrandLogo variant="isotype" className="password-brand-logo" />
-        <p className="eyebrow">Valtieris Talent Platform · Seguridad de la cuenta</p>
+        <p className="eyebrow">Seguridad de la cuenta</p>
         <h1 id="password-title">
           {user?.passwordChangeRequired
             ? 'Crea una nueva contraseña'

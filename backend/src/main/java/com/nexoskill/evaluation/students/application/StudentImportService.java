@@ -1065,31 +1065,32 @@ public class StudentImportService {
         }
 
         Map<String, CertificationData> certifications = new LinkedHashMap<>();
-        certifications.put("DEVELOPMENT_SECURITY", certification(row, "DEVELOPMENT_SECURITY", "¿APLICA DS?",
-                "ESTATUS CERTIFICACIÓN DS", "ESTATUS DEL EXAMEN DS", "FECHA DE APLICACIÓN DS",
-                "PROMEDIO DS", "INTENTO DS", null, admission, catalogs.policy("DEVELOPMENT_SECURITY"),
-                row.rowNumber(), parseIssues, rowWarnings));
-        certifications.put("TECHNOLOGICAL", certification(row, "TECHNOLOGICAL", "¿APLICA TECNOLOGICA?",
-                "ESTATUS CERTIFICACIÓN", "ESTATUS DEL EXAMEN", "FECHA DE APLICACIÓN TEC",
-                "PROMEDIO", "INTENTO", null, admission, catalogs.policy("TECHNOLOGICAL"),
-                row.rowNumber(), parseIssues, rowWarnings));
-        certifications.put("NORMATIVE_TESTING", certification(row, "NORMATIVE_TESTING", "¿APLICA NORMATIVA?",
-                "ESTATUS CERTIFICACIÓN NORMATIVA", "ESTATUS DEL EXAMEN NORMATIVA", "FECHA DE APLICACIÓN NORMATIVA",
-                "PROMEDIO NORMATIVA", null, "LIMITE PARA NORMATIVA", admission, catalogs.policy("NORMATIVE_TESTING"),
-                row.rowNumber(), parseIssues, rowWarnings));
-        certifications.put("ONE", certification(row, "ONE", "¿APLICA ONE?", "ESTATUS CERTIFICACIÓN ONE",
-                null, null, null, null, null, admission, catalogs.policy("ONE"),
-                row.rowNumber(), parseIssues, rowWarnings));
-        certifications.put("AGILE", certification(row, "AGILE", "¿APLICA AGILE?", "ESTATUS CERTIFICACIÓN AGILE",
-                null, null, null, null, null, admission, catalogs.policy("AGILE"),
-                row.rowNumber(), parseIssues, rowWarnings));
-        certifications.put("JIRA", certification(row, "JIRA", "APLICA JIRA", "ESTATUS DE VALORACIÓN JIRA",
-                null, null, null, null, null, admission, catalogs.policy("JIRA"),
-                row.rowNumber(), parseIssues, rowWarnings));
-
-        if (!organization.appliesCertifications() && certifications.values().stream().anyMatch(CertificationData::applies)) {
-            rowWarnings.add("La organización no tiene habilitada la gestión de certificaciones; la información de certificaciones de esta fila no se aplicará.");
-            certifications.replaceAll((type, value) -> emptyCertification(type));
+        if (organization.appliesCertifications()) {
+            certifications.put("DEVELOPMENT_SECURITY", certification(row, "DEVELOPMENT_SECURITY", "¿APLICA DS?",
+                    "ESTATUS CERTIFICACIÓN DS", "ESTATUS DEL EXAMEN DS", "FECHA DE APLICACIÓN DS",
+                    "PROMEDIO DS", "INTENTO DS", null, admission, catalogs.policy("DEVELOPMENT_SECURITY"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+            certifications.put("TECHNOLOGICAL", certification(row, "TECHNOLOGICAL", "¿APLICA TECNOLOGICA?",
+                    "ESTATUS CERTIFICACIÓN", "ESTATUS DEL EXAMEN", "FECHA DE APLICACIÓN TEC",
+                    "PROMEDIO", "INTENTO", null, admission, catalogs.policy("TECHNOLOGICAL"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+            certifications.put("NORMATIVE_TESTING", certification(row, "NORMATIVE_TESTING", "¿APLICA NORMATIVA?",
+                    "ESTATUS CERTIFICACIÓN NORMATIVA", "ESTATUS DEL EXAMEN NORMATIVA", "FECHA DE APLICACIÓN NORMATIVA",
+                    "PROMEDIO NORMATIVA", null, "LIMITE PARA NORMATIVA", admission, catalogs.policy("NORMATIVE_TESTING"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+            certifications.put("ONE", certification(row, "ONE", "¿APLICA ONE?", "ESTATUS CERTIFICACIÓN ONE",
+                    null, null, null, null, null, admission, catalogs.policy("ONE"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+            certifications.put("AGILE", certification(row, "AGILE", "¿APLICA AGILE?", "ESTATUS CERTIFICACIÓN AGILE",
+                    null, null, null, null, null, admission, catalogs.policy("AGILE"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+            certifications.put("JIRA", certification(row, "JIRA", "APLICA JIRA", "ESTATUS DE VALORACIÓN JIRA",
+                    null, null, null, null, null, admission, catalogs.policy("JIRA"),
+                    row.rowNumber(), parseIssues, rowWarnings));
+        } else {
+            for (String type : List.of("DEVELOPMENT_SECURITY", "TECHNOLOGICAL", "NORMATIVE_TESTING", "ONE", "AGILE", "JIRA")) {
+                certifications.put(type, emptyCertification(type));
+            }
         }
         if (technology != null && resolveQuestionTechnologyPublicId(organization.id(), technology) == null) {
             rowWarnings.add("La tecnología principal '" + technology

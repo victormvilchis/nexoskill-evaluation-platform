@@ -229,6 +229,15 @@ export function StudentImportPage() {
     return errors
   }, [selectedNew, omittedRows, preview?.manualStudentCode])
 
+  const newRowsWithBlockingPreviewErrors = useMemo(
+    () => new Set((preview?.errors ?? []).filter((issue) => issue.row > 0).map((issue) => issue.row)),
+    [preview]
+  )
+  const selectableNewCount = useMemo(
+    () => newRows.filter((row) => !omittedRows.has(row.rowKey) && !newRowsWithBlockingPreviewErrors.has(row.row)).length,
+    [newRows, omittedRows, newRowsWithBlockingPreviewErrors]
+  )
+
   const selectedNewCount = useMemo(
     () => selectedNew.filter((row) => !omittedRows.has(row.rowKey) && !newRowValidationErrors.has(row.rowKey)).length,
     [selectedNew, omittedRows, newRowValidationErrors]
@@ -308,9 +317,10 @@ export function StudentImportPage() {
       const previouslyOmittedRows = new Set(response.conflicts
         .filter((conflict) => conflict.resolvedAction === 'OMIT_ROW')
         .map((conflict) => conflict.rowKey))
+      const blockingRows = new Set(response.errors.filter((issue) => issue.row > 0).map((issue) => issue.row))
       setNewRows(response.newStudents.map((row) => ({
         ...row,
-        selected: !previouslyOmittedRows.has(row.rowKey),
+        selected: !previouslyOmittedRows.has(row.rowKey) && !blockingRows.has(row.row),
         email: row.suggestedEmail ?? '',
         studentCode: '',
         corporateUser: ''
@@ -412,6 +422,13 @@ export function StudentImportPage() {
       equivalents.forEach((conflict) => { next[conflict.id] = action })
       return next
     })
+  }
+
+  function setAllNewRowsSelected(selected: boolean) {
+    setNewRows((current) => current.map((row) => ({
+      ...row,
+      selected: selected && !omittedRows.has(row.rowKey) && !newRowsWithBlockingPreviewErrors.has(row.row)
+    })))
   }
 
   function setChangeDecision(rowKey: string, fieldKey: string, action: 'KEEP_PLATFORM' | 'APPLY_EXCEL') {
@@ -611,17 +628,19 @@ export function StudentImportPage() {
           </div>
         </section>
 
-        {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div></div>
-          <p className="muted">El correo es obligatorio. El Usuario corporativo es opcional y solo se habilita cuando existe Fecha de alta. {preview.manualStudentCode ? 'Captura también el Código a nivel organización.' : 'El Código a nivel organización se generará automáticamente al confirmar.'}</p>
-          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th><th>Código a nivel organización</th><th>Usuario corporativo</th><th>Correo</th></tr></thead><tbody>
+        {preview.newStudents.length > 0 && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Altas</p><h2>Nuevos colaboradores pendientes de completar</h2></div><div className="ns-import-bulk-actions"><button type="button" className="secondary-button compact-button" onClick={() => setAllNewRowsSelected(true)} disabled={selectableNewCount === 0 || selectedNewCount === selectableNewCount}>Seleccionar todos</button><button type="button" className="secondary-button compact-button" onClick={() => setAllNewRowsSelected(false)} disabled={selectedNew.length === 0}>Deseleccionar todos</button></div></div>
+          <p className="muted">El correo es obligatorio. El Usuario corporativo es opcional y solo se habilita cuando existe Fecha de alta.{preview.manualStudentCode ? ' Captura también el Código a nivel organización.' : ''}</p>
+          <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Crear</th><th>Nombre completo</th><th>Perfil</th><th>Tecnología principal</th><th>Fecha de alta</th>{preview.manualStudentCode && <th>Código a nivel organización</th>}<th>Usuario corporativo</th><th>Correo</th></tr></thead><tbody>
             {newRows.map((row) => <tr key={row.rowKey} className={!row.selected || omittedRows.has(row.rowKey) ? 'is-muted' : undefined}>
-              <td><input type="checkbox" checked={row.selected} onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /></td>
+              <td><input type="checkbox" checked={row.selected}
+                disabled={omittedRows.has(row.rowKey) || newRowsWithBlockingPreviewErrors.has(row.row)}
+                onChange={(event) => setImportRowSelected(row.rowKey, event.target.checked)} /></td>
               <td><strong>{formatPersonName(row.collaborator)}</strong>
                 {row.warnings.map((warning) => <small key={warning} className="warning-text">{warning}</small>)}</td>
               <td>{row.profile || 'N/A'}</td><td>{row.primaryTechnology || 'N/A'}</td><td>{row.admissionDate || 'N/A'}</td>
-              <td>{preview.manualStudentCode ? <label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
+              {preview.manualStudentCode && <td><label className="ns-import-email-field"><span className="sr-only">Código a nivel organización de la fila {row.row}</span><input
                 value={row.studentCode} disabled={!row.selected || omittedRows.has(row.rowKey)} placeholder="Código obligatorio" autoComplete="off" maxLength={80}
-                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label> : <span className="muted">Se generará automáticamente</span>}</td>
+                onChange={(event) => setNewRows((current) => current.map((item) => item.rowKey === row.rowKey ? { ...item, studentCode: event.target.value.toUpperCase() } : item))} /></label></td>}
               <td><label className="ns-import-email-field"><span className="sr-only">Usuario corporativo de la fila {row.row}</span><input
                 value={row.corporateUser} disabled={!row.selected || omittedRows.has(row.rowKey) || !row.admissionDate}
                 placeholder={row.admissionDate ? 'Opcional' : 'Requiere Fecha de alta'} autoComplete="off" maxLength={100}

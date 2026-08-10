@@ -1,6 +1,7 @@
 export type StudentStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'DELETED'
 export type StudentEffectiveStatus = StudentStatus
 export type StudentSessionStatus = 'ACTIVE' | 'REVOKED' | 'EXPIRED'
+export type StudentCertificationFocusStatus = 'IN_RULE' | 'EXPIRING_SOON' | 'EXPIRED' | 'PENDING_DEACTIVATION'
 
 export interface StudentCatalogRef {
   publicId: string
@@ -37,6 +38,10 @@ export interface StudentSummary {
   technologicalProfile?: StudentCatalogRef | null
   currentTechnology?: string | null
   expertise?: string | null
+  certificationFocusStatus?: StudentCertificationFocusStatus | null
+  certificationFocusType?: string | null
+  certificationFocusExpirationDate?: string | null
+  secondAttemptFailed: boolean
   certificationsEnabled: boolean
   appliesTechnologicalCertification: boolean
   appliesDevelopmentSecurity: boolean
@@ -80,8 +85,10 @@ export interface StudentFilterOption {
 }
 
 export interface StudentFilterOptions {
+  organizations: StudentFilterOption[]
   roles: StudentFilterOption[]
   technologies: StudentFilterOption[]
+  certificationStatusAvailable: boolean
 }
 
 export interface StudentCatalogs {

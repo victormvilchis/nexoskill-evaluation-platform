@@ -331,3 +331,70 @@
   .org-management-wide { grid-column: auto; }
   .org-history-list article > div { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
+
+.organization-branding-editor {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.organization-logo-preview {
+  display: flex;
+  width: 92px;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.organization-logo-preview img {
+  max-width: 82px;
+  max-height: 62px;
+  object-fit: contain;
+}
+
+.organization-logo-preview span {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.65rem;
+  background: #e9eef6;
+  color: #344054;
+  font-weight: 800;
+}
+
+.organization-branding-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.organization-branding-copy > small {
+  color: var(--muted);
+}
+
+.organization-logo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.organization-logo-actions input[type='file'] {
+  max-width: min(100%, 360px);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 640px) {
+  .organization-branding-editor {
+    grid-template-columns: 1fr;
+  }
+}

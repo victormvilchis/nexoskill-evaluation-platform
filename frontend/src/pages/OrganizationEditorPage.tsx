@@ -3,13 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   createOrganization,
   getOrganization,
-  updateOrganization
+  getOrganizationBranding,
+  updateOrganization,
+  uploadOrganizationLogo
 } from '../features/organizations/api/organizationApi'
 import type {
   ContentMode,
   OrganizationDetail,
   OrganizationPayload,
-  OrganizationType
+  OrganizationType,
+  OrganizationBranding
 } from '../features/organizations/types/organizations'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
@@ -118,6 +121,11 @@ function validate(model: OrganizationPayload, editing: boolean) {
   return errors
 }
 
+function initialsForOrganization(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean)
+  return parts.slice(0, 2).map((item) => item[0]?.toUpperCase() ?? '').join('') || 'OR'
+}
+
 function FieldError({ message }: { message?: string }) {
   return message ? <small className="org-field-error">{message}</small> : null
 }
@@ -138,6 +146,9 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<OrganizationDetail['status']>()
+  const [branding, setBranding] = useState<OrganizationBranding | null>(null)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const global = organizationType === 'GLOBAL'
   const formLocked = readOnly || global
 
@@ -165,6 +176,30 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
       })
     return () => controller.abort()
   }, [publicId])
+
+  useEffect(() => {
+    if (!editing || !publicId) return
+    const controller = new AbortController()
+    getOrganizationBranding(publicId, controller.signal)
+      .then(setBranding)
+      .catch(() => { if (!controller.signal.aborted) setBranding(null) })
+    return () => controller.abort()
+  }, [editing, publicId])
+
+  async function updateLogo() {
+    if (!publicId || !logoFile || readOnly || global || uploadingLogo) return
+    setUploadingLogo(true)
+    setError('')
+    try {
+      const updated = await uploadOrganizationLogo(publicId, logoFile)
+      setBranding(updated)
+      setLogoFile(null)
+    } catch (requestError: unknown) {
+      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible actualizar la imagen de la organización.')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
 
   function set<K extends keyof OrganizationPayload>(key: K, value: OrganizationPayload[K]) {
     setModel((current) => ({ ...current, [key]: value }))
@@ -235,7 +270,6 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
             <section className="ns-card">
               <div className="ns-card-heading">
                 <div><span className="ns-step">1</span><h2>Información general</h2></div>
-                <p>La fecha de inicio se genera automáticamente al crear la organización.</p>
               </div>
               <div className="org-form-grid org-general-grid">
                 <label className="ns-field org-field-wide-tablet">
@@ -329,6 +363,38 @@ export function OrganizationEditorPage({ mode }: { mode: OrganizationEditorMode 
                     </span>
                     <small>Al habilitarlo, el Código a nivel organización deberá capturarse para cada colaborador.</small>
                   </label>
+                </div>
+              </section>
+            )}
+
+
+            {!global && editing && (
+              <section className="ns-card organization-branding-card">
+                <div className="ns-card-heading">
+                  <div><span className="ns-step">4</span><h2>Identidad de la organización</h2></div>
+                  <p>Esta identidad se mostrará a los usuarios cuando trabajen dentro del contexto de la organización.</p>
+                </div>
+                <div className="organization-branding-editor">
+                  <div className="organization-logo-preview">
+                    {branding?.hasLogo && branding.logoUrl
+                      ? <img alt={`Logotipo de ${branding.name}`} src={branding.logoUrl} />
+                      : <span aria-label="Sin imagen configurada">{initialsForOrganization(model.name)}</span>}
+                  </div>
+                  <div className="organization-branding-copy">
+                    <strong>{model.name || 'Organización'}</strong>
+                    <small>{branding?.hasLogo ? 'Imagen actual configurada.' : 'Sin imagen configurada. Se utilizará una presentación neutra.'}</small>
+                    {!readOnly && (
+                      <div className="organization-logo-actions">
+                        <input aria-label="Seleccionar imagen de la organización" accept="image/png,image/jpeg,image/webp" type="file"
+                          onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} />
+                        <button className="secondary-button" type="button" disabled={!logoFile || uploadingLogo || saving}
+                          onClick={() => void updateLogo()}>
+                          {uploadingLogo ? 'Actualizando…' : branding?.hasLogo ? 'Actualizar imagen' : 'Cargar imagen'}
+                        </button>
+                      </div>
+                    )}
+                    {!readOnly && <small>PNG, JPG o WEBP. Máximo 2 MB.</small>}
+                  </div>
                 </div>
               </section>
             )}

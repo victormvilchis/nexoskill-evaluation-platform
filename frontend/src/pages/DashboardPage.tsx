@@ -83,10 +83,11 @@ function BarChart({ points, selected, onSelect, limit = 10 }: {
   )
 }
 
-function DonutChart({ points, selected, onSelect }: {
+function DonutChart({ points, selected, onSelect, centerLabel = 'aplicables' }: {
   points: DashboardChartPoint[]
   selected?: string
   onSelect?: (key: string) => void
+  centerLabel?: string
 }) {
   const total = points.reduce((sum, point) => sum + point.value, 0)
   if (!total) return <EmptyState />
@@ -99,7 +100,7 @@ function DonutChart({ points, selected, onSelect }: {
   return (
     <div className="executive-donut-layout">
       <div className="executive-donut" style={{ background: `conic-gradient(${segments.join(',')})` }}>
-        <div className="executive-donut-center"><strong>{total}</strong><span>aplicables</span></div>
+        <div className="executive-donut-center"><strong>{total}</strong><span>{centerLabel}</span></div>
       </div>
       <div className="executive-legend">
         {points.map((point, index) => (
@@ -165,8 +166,14 @@ export function DashboardPage() {
   const [customizing, setCustomizing] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [draggedCode, setDraggedCode] = useState<string | null>(null)
+  const [focusDetailStatus, setFocusDetailStatus] = useState<string | null>(null)
 
   const queryKey = searchParams.toString()
+  const organizationFilter = filterValue(searchParams, 'organization')
+  const canViewCollaborators = Boolean(user?.roles.includes('ADMINISTRATOR') || user?.permissions.includes('STUDENT_VIEW'))
+  const canViewCertificationDetail = Boolean(user?.roles.includes('ADMINISTRATOR')
+    || user?.permissions.includes('STUDENT_CERTIFICATION_VIEW')
+    || user?.permissions.includes('STUDENT_CERTIFICATION_MANAGE'))
 
   useEffect(() => {
     let active = true
@@ -179,11 +186,13 @@ export function DashboardPage() {
       })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [queryKey, toast])
+  }, [organizationFilter, queryKey, toast])
+
+  useEffect(() => { setFocusDetailStatus(null) }, [organizationFilter])
 
   useEffect(() => {
     let active = true
-    getDashboardConfiguration()
+    getDashboardConfiguration(organizationFilter || undefined)
       .then((response) => {
         if (!active) return
         setConfiguration(response)
@@ -194,7 +203,7 @@ export function DashboardPage() {
         toast.error('No fue posible cargar la configuración del Dashboard', requestError instanceof ApiRequestError ? requestError.message : 'Intenta nuevamente.')
       })
     return () => { active = false }
-  }, [toast])
+  }, [organizationFilter, toast])
 
   const components = customizing ? draft : configuration?.components ?? []
   const definitions = useMemo(() => new Map(configuration?.catalog.map((item) => [item.code, item]) ?? []), [configuration])
@@ -270,7 +279,7 @@ export function DashboardPage() {
   async function saveConfiguration() {
     setSaving(true)
     try {
-      const response = await saveDashboardConfiguration(normalizeOrder(draft))
+      const response = await saveDashboardConfiguration(normalizeOrder(draft), organizationFilter || undefined)
       setConfiguration(response)
       setDraft(response.components)
       setCustomizing(false)
@@ -305,6 +314,26 @@ export function DashboardPage() {
       )
     }
     switch (component.code) {
+      case 'CHART_CERTIFICATION_FOCUS': {
+        const selectedFocus = focusDetailStatus
+        const details = selectedFocus
+          ? dashboard.certificationFocusDetails.filter((item) => item.status === selectedFocus)
+          : []
+        return (
+          <Panel title="Foco de certificaciones" eyebrow="Situación por colaborador">
+            <DonutChart
+              points={dashboard.certificationFocus}
+              selected={selectedFocus ?? undefined}
+              centerLabel="colaboradores"
+              onSelect={canViewCertificationDetail ? (key) => setFocusDetailStatus((current) => current === key ? null : key) : undefined}
+            />
+            {selectedFocus && <div className="dashboard-focus-detail">
+              <div className="dashboard-focus-detail-heading"><strong>Detalle</strong><span>{details.length} colaboradores</span></div>
+              {details.length ? <div className="ns-data-table-wrap"><table className="ns-data-table"><thead><tr><th>Colaborador</th><th>Rol</th><th>Tecnología</th><th>Certificación</th><th>Vencimiento</th><th>Condición</th></tr></thead><tbody>{details.map((item) => <tr key={item.studentPublicId}><td>{canViewCollaborators ? <Link to={`/admin/collaborators/${item.studentPublicId}`}>{item.collaborator}</Link> : item.collaborator}</td><td>{item.role}</td><td>{item.technology}</td><td>{item.certificationLabel ?? 'N/A'}</td><td>{item.expirationDate ?? 'N/A'}</td><td>{item.secondAttemptFailed ? 'Segundo intento no aprobado' : item.status === 'EXPIRED' ? 'Vencida' : item.status === 'EXPIRING_SOON' ? 'Próxima a vencer' : 'En regla'}</td></tr>)}</tbody></table></div> : <EmptyState />}
+            </div>}
+          </Panel>
+        )
+      }
       case 'CHART_CERTIFICATION_STATUS':
         return <Panel title="Estado general de certificaciones" eyebrow="Cobertura"><DonutChart points={dashboard.certificationStatus} selected={dashboard.appliedFilters.certificationState ?? undefined} onSelect={(key) => setFilter('certificationState', dashboard.appliedFilters.certificationState === key ? '' : key)} /></Panel>
       case 'CHART_EXPIRATIONS':
@@ -346,7 +375,7 @@ export function DashboardPage() {
         return (
           <Panel title="Atención requerida" eyebrow="Prioridades ejecutivas">
             <div className="attention-list">{dashboard.attention.map((item) => (
-              <button key={item.key} className={`severity-${item.severity.toLowerCase()}`} type="button" onClick={() => item.key !== 'RECERTIFICATION' && setFilter('certificationState', item.key)}>
+              <button key={item.key} className={`severity-${item.severity.toLowerCase()}`} type="button" disabled={!canViewCertificationDetail || item.key === 'RECERTIFICATION'} onClick={() => canViewCertificationDetail && item.key !== 'RECERTIFICATION' && setFocusDetailStatus(item.key)}>
                 <span><Icon name={item.severity === 'CRITICAL' ? 'error' : 'warning'} size={18} /></span>
                 <div><strong>{item.label}</strong><p>{item.description}</p></div><b>{item.value}</b>
               </button>
@@ -374,7 +403,7 @@ export function DashboardPage() {
           <ResourceSelectField label="Rol" value={filterValue(searchParams, 'role')} width="wide" onChange={(value) => setFilter('role', value)}><option value="">Todos</option>{dashboard.filterOptions.roles.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
           <ResourceSelectField label="Tecnología" value={filterValue(searchParams, 'technology')} width="medium" onChange={(value) => setFilter('technology', value)}><option value="">Todas</option>{dashboard.filterOptions.technologies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
           <ResourceSelectField label="Estado" value={filterValue(searchParams, 'status', 'ACTIVE')} width="compact" onChange={(value) => setFilter('collaboratorStatus', value)}>{dashboard.filterOptions.collaboratorStatuses.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
-          <ResourceSelectField label="Certificación" value={filterValue(searchParams, 'certification')} width="medium" onChange={(value) => setFilter('certificationType', value)}><option value="">Todas</option>{dashboard.filterOptions.certificationTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>
+          {dashboard.scope.certificationsEnabled && <ResourceSelectField label="Certificación" value={filterValue(searchParams, 'certification')} width="medium" onChange={(value) => setFilter('certificationType', value)}><option value="">Todas</option>{dashboard.filterOptions.certificationTypes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</ResourceSelectField>}
           {hasFilters && <button className="dashboard-clear-filters" type="button" onClick={clearFilters}><Icon name="close" size={14} /> Limpiar</button>}
         </FilterToolbar>
       )}

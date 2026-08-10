@@ -12,6 +12,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   AUTH_INVALID_EVENT,
   PASSWORD_CHANGE_REQUIRED_EVENT,
+  ORGANIZATION_CONTEXT_KEY,
+  ORGANIZATION_CONTEXT_CHANGED_EVENT,
   type AuthInvalidEventDetail
 } from '../../../shared/api/apiClient'
 import type { CurrentUser } from '../../../shared/types/auth'
@@ -39,21 +41,35 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true)
   const expirationTimer = useRef<number | null>(null)
 
+  const clearOrganizationContext = useCallback(() => {
+    if (!window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)) return
+    window.localStorage.removeItem(ORGANIZATION_CONTEXT_KEY)
+    window.dispatchEvent(new Event(ORGANIZATION_CONTEXT_CHANGED_EVENT))
+  }, [])
+
+  const normalizeOrganizationContext = useCallback((current: CurrentUser | null) => {
+    if (current?.roles.includes('ADMINISTRATOR')) return
+    clearOrganizationContext()
+  }, [clearOrganizationContext])
+
   const redirectToLogin = useCallback((reason: string) => {
+    clearOrganizationContext()
     setUser(null)
     navigate(`/login?reason=${encodeURIComponent(reason)}`, { replace: true })
-  }, [navigate])
+  }, [clearOrganizationContext, navigate])
 
   const refresh = useCallback(async () => {
     try {
       const response = await getCurrentUser()
+      normalizeOrganizationContext(response.user)
       setUser(response.user)
     } catch {
+      clearOrganizationContext()
       setUser(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [clearOrganizationContext, normalizeOrganizationContext])
 
   useEffect(() => {
     function handleInvalidAuthentication(event: Event) {
@@ -144,7 +160,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const verifySession = () => {
       void getCurrentUser()
-        .then((response) => setUser(response.user))
+        .then((response) => { normalizeOrganizationContext(response.user); setUser(response.user) })
         .catch(() => undefined)
     }
 
@@ -158,21 +174,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [user?.publicId])
+  }, [normalizeOrganizationContext, user?.publicId])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password)
+    normalizeOrganizationContext(response.user)
     setUser(response.user)
     return response.user
-  }, [])
+  }, [normalizeOrganizationContext])
 
   const logout = useCallback(async () => {
     try {
       await logoutRequest()
     } finally {
+      clearOrganizationContext()
       setUser(null)
     }
-  }, [])
+  }, [clearOrganizationContext])
 
   const value = useMemo(
     () => ({ user, loading, login, logout, refresh }),

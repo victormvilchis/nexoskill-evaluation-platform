@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../features/authentication/context/AuthContext'
+import { getAllOrganizations, getCurrentOrganizationBranding } from '../features/organizations/api/organizationApi'
+import type { OrganizationBranding, OrganizationSummary } from '../features/organizations/types/organizations'
 import { BrandLogo } from '../shared/components/BrandLogo'
 import { Breadcrumbs } from '../shared/components/Breadcrumbs'
 import { Icon, type IconName } from '../shared/components/Icon'
 import { authorizedHome } from '../shared/utils/authorizedHome'
+import { ORGANIZATION_CONTEXT_CHANGED_EVENT, ORGANIZATION_CONTEXT_KEY } from '../shared/api/apiClient'
 
 interface NavItem {
   id: string
@@ -90,9 +93,24 @@ export function ApplicationLayout() {
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(['catalogs'])
   )
+  const [branding, setBranding] = useState<OrganizationBranding>({
+    global: true, organizationPublicId: null, name: 'Valtieris', hasLogo: true, logoUrl: null
+  })
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
+  const [contextOrganization, setContextOrganization] = useState(
+    () => window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY) ?? ''
+  )
   const accountRef = useRef<HTMLDivElement>(null)
 
   const administrator = user?.roles.includes('ADMINISTRATOR') ?? false
+  const globalAdministrationRoute = administrator && (
+    location.pathname.startsWith('/admin/organizations')
+    || location.pathname.startsWith('/admin/users')
+    || location.pathname.startsWith('/admin/roles')
+  )
+  const displayBranding: OrganizationBranding = globalAdministrationRoute
+    ? { global: true, organizationPublicId: null, name: 'Valtieris', hasLogo: true, logoUrl: null }
+    : branding
   const canDashboard = administrator || (user?.permissions.includes('DASHBOARD_VIEW') ?? false)
   const homeRoute = authorizedHome(user)
   const canShow = (item: NavItem) => {
@@ -139,6 +157,59 @@ export function ApplicationLayout() {
       return next
     })
   }, [location.pathname, sections])
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    const controller = new AbortController()
+
+    const loadBranding = async () => {
+      try {
+        const value = await getCurrentOrganizationBranding(controller.signal)
+        if (active) setBranding(value)
+      } catch {
+        if (active) {
+          setBranding({ global: true, organizationPublicId: null, name: 'Valtieris', hasLogo: true, logoUrl: null })
+        }
+      }
+    }
+
+    void loadBranding()
+    if (administrator) {
+      void getAllOrganizations({ status: 'ACTIVE', sort: 'name', direction: 'ASC', signal: controller.signal })
+        .then((values) => { if (active) setOrganizations(values.filter((item) => item.organizationType === 'CUSTOMER')) })
+        .catch(() => { if (active) setOrganizations([]) })
+    } else {
+      setOrganizations([])
+      setContextOrganization('')
+    }
+
+    const handleContextChanged = () => {
+      setContextOrganization(window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY) ?? '')
+      void loadBranding()
+    }
+    window.addEventListener(ORGANIZATION_CONTEXT_CHANGED_EVENT, handleContextChanged)
+    return () => {
+      active = false
+      controller.abort()
+      window.removeEventListener(ORGANIZATION_CONTEXT_CHANGED_EVENT, handleContextChanged)
+    }
+  }, [administrator, user])
+
+  useEffect(() => {
+    if (!user) return
+    document.title = displayBranding.name || 'Valtieris'
+  }, [displayBranding.name, user])
+
+  useEffect(() => () => { document.title = 'Valtieris' }, [])
+
+  function changeOrganizationContext(publicId: string) {
+    if (!administrator) return
+    if (publicId) window.localStorage.setItem(ORGANIZATION_CONTEXT_KEY, publicId)
+    else window.localStorage.removeItem(ORGANIZATION_CONTEXT_KEY)
+    window.dispatchEvent(new Event(ORGANIZATION_CONTEXT_CHANGED_EVENT))
+    window.location.reload()
+  }
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -211,9 +282,23 @@ export function ApplicationLayout() {
       )}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
-          <NavLink className="sidebar-brand" to={homeRoute} aria-label="Ir al inicio de Valtieris Talent Platform">
-            <BrandLogo variant="horizontal" className="sidebar-brand-logo sidebar-brand-logo-expanded" decorative />
-            <BrandLogo variant="isotype" className="sidebar-brand-logo sidebar-brand-logo-collapsed" decorative />
+          <NavLink className={`sidebar-brand${displayBranding.global ? '' : ' organization-brand'}`} to={homeRoute} aria-label={`Ir al inicio de ${displayBranding.name}`}>
+            {displayBranding.global ? (
+              <>
+                <BrandLogo variant="horizontal" className="sidebar-brand-logo sidebar-brand-logo-expanded" decorative />
+                <BrandLogo variant="isotype" className="sidebar-brand-logo sidebar-brand-logo-collapsed" decorative />
+              </>
+            ) : displayBranding.hasLogo && displayBranding.logoUrl ? (
+              <>
+                <span className="organization-brand-expanded"><img alt="" aria-hidden="true" src={displayBranding.logoUrl} /><strong>{displayBranding.name}</strong></span>
+                <img alt="" aria-hidden="true" className="organization-brand-collapsed" src={displayBranding.logoUrl} />
+              </>
+            ) : (
+              <>
+                <span className="organization-brand-expanded organization-brand-neutral"><b>{initials(displayBranding.name)}</b><strong>{displayBranding.name}</strong></span>
+                <span className="organization-brand-collapsed organization-brand-neutral-mark">{initials(displayBranding.name)}</span>
+              </>
+            )}
           </NavLink>
           <button
             aria-label={collapsed ? 'Expandir menú' : 'Contraer menú'}
@@ -307,7 +392,7 @@ export function ApplicationLayout() {
           })}
         </nav>
         <div className="sidebar-footer">
-          <span className="sidebar-version">Valtieris Talent Platform</span>
+          <span className="sidebar-version">{displayBranding.global ? 'Valtieris Talent Platform' : displayBranding.name}</span>
         </div>
       </aside>
       <div className="app-content">
@@ -323,6 +408,18 @@ export function ApplicationLayout() {
             </button>
             <Breadcrumbs />
           </div>
+          <div className="topbar-actions">
+            {administrator && !globalAdministrationRoute && (
+              <label className="organization-context-switcher">
+                <span>Contexto</span>
+                <select aria-label="Contexto de organización" value={contextOrganization} onChange={(event) => changeOrganizationContext(event.target.value)}>
+                  <option value="">Global · Valtieris</option>
+                  {organizations.map((organization) => (
+                    <option key={organization.publicId} value={organization.publicId}>{organization.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           <div className="account-menu" ref={accountRef}>
             <button
               aria-expanded={accountOpen}
@@ -357,6 +454,7 @@ export function ApplicationLayout() {
                 </button>
               </div>
             )}
+          </div>
           </div>
         </header>
         <Outlet />

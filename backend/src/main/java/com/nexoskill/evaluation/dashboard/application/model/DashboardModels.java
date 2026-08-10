@@ -15,7 +15,7 @@ public final class DashboardModels {
     }
 
     public record Scope(boolean administrator, boolean global, String organizationPublicId,
-            String organizationName) {
+            String organizationName, boolean certificationsEnabled) {
     }
 
     public record Kpis(long activeCollaborators, long talentBank, Double certificationCompliance,
@@ -38,6 +38,11 @@ public final class DashboardModels {
             String description) {
     }
 
+    public record CertificationFocusDetail(String studentPublicId, String collaborator, String role,
+            String technology, String status, String certificationType, String certificationLabel,
+            String expirationDate, boolean secondAttemptFailed) {
+    }
+
     public record FilterOptions(List<Option> organizations, List<Option> roles,
             List<Option> technologies, List<Option> collaboratorStatuses,
             List<Option> certificationTypes, List<Option> certificationStates) {
@@ -48,6 +53,7 @@ public final class DashboardModels {
             List<ChartPoint> certificationStatus, List<CertificationTypePoint> certificationTypes,
             List<ChartPoint> expirations, List<ChartPoint> technologies, List<ChartPoint> roles,
             List<ChartPoint> talentBank, List<OrganizationPoint> organizations,
+            List<ChartPoint> certificationFocus, List<CertificationFocusDetail> certificationFocusDetails,
             List<AttentionItem> attention) {
     }
 

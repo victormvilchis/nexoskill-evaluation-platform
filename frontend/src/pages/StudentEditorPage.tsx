@@ -192,7 +192,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
           appliesAgile: detail.appliesAgile,
           appliesJira: detail.appliesJira
         })
-        if (detail.organization?.appliesCertifications && mode === 'edit') {
+        if (detail.organization && mode === 'edit') {
           setCatalogLoading(true)
           try {
             const response = await getStudentCatalogs(administrator ? detail.organization.publicId : undefined)
@@ -239,7 +239,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
   const technologicalProfileOptions = includeCurrent(catalogs?.technologicalProfiles ?? [], student?.technologicalProfile)
 
   function clearCertificationData() {
-    setProfessionalProfilePublicId(''); setTechnologicalProfilePublicId(''); setFlags(EMPTY_FLAGS)
+    setFlags(EMPTY_FLAGS)
   }
   function requestFlagChange(key: keyof CertificationFlags, nextValue: boolean) {
     if (mode === 'edit' && !nextValue && flags[key]) {
@@ -260,7 +260,7 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
       if (requestId !== organizationRequest.current) return
       if (!response.appliesCertifications && hadData) {
         clearCertificationData()
-        toast.warning('Datos condicionados retirados', 'La organización seleccionada no utiliza gestión de certificaciones. Los datos de perfil y seguimiento fueron retirados.')
+        toast.info('Certificaciones no aplicables', 'La organización seleccionada no utiliza gestión de certificaciones. La clasificación profesional se conserva y solo se retiró la aplicabilidad de certificaciones.')
       }
       setCatalogs(response)
     } catch (requestError) {
@@ -327,10 +327,11 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
     const savedLastName = (talentWorkspace && mode !== 'create' && !talentNameEdited.current.lastName
       ? originalTalentName.current.lastName
       : lastName).trim()
-    const certificationPayload = appliesCertifications ? {
+    const certificationPayload = {
       ...(professionalProfilePublicId ? { professionalProfilePublicId } : {}),
-      ...(technologicalProfilePublicId ? { technologicalProfilePublicId } : {}), ...flags
-    } : {}
+      ...(technologicalProfilePublicId ? { technologicalProfilePublicId } : {}),
+      ...(appliesCertifications ? flags : EMPTY_FLAGS)
+    }
     try {
       if (mode === 'create') {
         const payload = {
@@ -448,9 +449,9 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
         {mode === 'create' && !administrator && catalogError && <div className="error-message" role="alert">{catalogError}</div>}
         {organizationResolved && <>
           <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Datos generales</p><h2>Identidad y acceso</h2></div></div><div className="foundation-form-grid">
-            <label className="form-field ns-field-span-3"><span>Código a nivel organización</span>{manualStudentCode && !readOnly
+            {(mode !== 'create' || manualStudentCode) && <label className="form-field ns-field-span-3"><span>Código a nivel organización</span>{manualStudentCode && !readOnly
               ? <input name="studentCode" value={studentCode} maxLength={80} onChange={(event) => setStudentCode(event.target.value.toUpperCase())} required aria-invalid={Boolean(fieldErrors.studentCode)} />
-              : <strong className="readonly-value">{mode === 'create' ? 'Se generará automáticamente al guardar' : (studentCode || 'N/A')}</strong>}{field('studentCode')}</label>
+              : <strong className="readonly-value">{studentCode || 'N/A'}</strong>}{field('studentCode')}</label>}
             <label className="form-field ns-field-span-3"><span>Usuario corporativo <small>(opcional)</small></span>{readOnly
               ? <strong className="readonly-value">{corporateUser || 'N/A'}</strong>
               : <input name="corporateUser" value={corporateUser} maxLength={100} disabled={!admissionDate || (talentWorkspace && !conversion)}
@@ -462,11 +463,11 @@ export function StudentEditorPage({ mode, workspace = 'collaborators', conversio
             {readOnly && student?.organization && <label className="form-field ns-field-span-6"><span>Organización</span><strong className="readonly-value">{student.organization.name}</strong></label>}
             {readOnly && student && <label className="form-field ns-field-span-6"><span>Estado</span><strong className="readonly-value">{student.effectiveStatus === 'ACTIVE' ? 'Activo' : student.effectiveStatus === 'INACTIVE' ? 'Dado de baja' : 'Dado de baja'}</strong></label>}
           </div></section>
-          {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
-            <label className="form-field ns-field-span-6"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={setProfessionalProfilePublicId} disabled={(!admissionDate && !talentWorkspace) || profileOptions.length === 0} ariaLabel="Perfil" options={[{ value: '', label: 'Seleccionar perfil' }, ...profileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && !admissionDate && <small>El colaborador está inactivo; la información de certificaciones es solo de consulta.</small>}{!readOnly && admissionDate && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
-            <label className="form-field ns-field-span-6"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={setTechnologicalProfilePublicId} disabled={(!admissionDate && !talentWorkspace) || technologicalProfileOptions.length === 0} ariaLabel="Perfil tecnológico" options={[{ value: '', label: 'Seleccionar perfil tecnológico' }, ...technologicalProfileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && admissionDate && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
+          <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Perfil profesional</p><h2>Clasificación profesional</h2></div></div>{catalogLoading && !readOnly && <p className="muted">Cargando catálogos de la organización…</p>}{catalogError && !readOnly && <div className="error-message" role="alert">{catalogError}</div>}{(!catalogLoading || readOnly) && <div className="foundation-form-grid foundation-form-grid--three">
+            <label className="form-field ns-field-span-6"><span>Perfil</span>{readOnly ? <strong className="readonly-value">{student?.professionalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="professionalProfilePublicId" value={professionalProfilePublicId} onChange={setProfessionalProfilePublicId} disabled={profileOptions.length === 0} ariaLabel="Perfil" options={[{ value: '', label: 'Seleccionar perfil' }, ...profileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && profileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles activos configurados.</small>}</label>
+            <label className="form-field ns-field-span-6"><span>Perfil tecnológico</span>{readOnly ? <strong className="readonly-value">{student?.technologicalProfile?.name ?? 'Sin información registrada'}</strong> : <SelectField name="technologicalProfilePublicId" value={technologicalProfilePublicId} onChange={setTechnologicalProfilePublicId} disabled={technologicalProfileOptions.length === 0} ariaLabel="Perfil tecnológico" options={[{ value: '', label: 'Seleccionar perfil tecnológico' }, ...technologicalProfileOptions.map((item) => ({ value: item.publicId, label: item.name }))]} />}{!readOnly && technologicalProfileOptions.length === 0 && <small>Esta organización todavía no tiene perfiles tecnológicos activos.</small>}</label>
 
-          </div>}</section>}
+          </div>}</section>
           {appliesCertifications && <section className="editor-card"><div className="section-heading"><div><p className="eyebrow">Certificaciones</p><h2>Seguimiento inicial</h2></div></div><p className="muted">{admissionDate || talentWorkspace ? 'Selecciona únicamente las áreas que aplican.' : 'El colaborador se encuentra inactivo porque no tiene Fecha de alta. No es posible gestionar sus certificaciones.'}</p><div className="student-certification-flags">{FLAG_OPTIONS.map((option) => readOnly ? <div className="student-certification-flag-readonly" key={option.key}><span>{option.label.replace('Aplica ', '')}</span><strong>{flags[option.key] ? 'Sí aplica' : 'No aplica'}</strong></div> : <div className="student-certification-flag" key={option.key}><input id={`student-${option.key}`} name={option.key} type="checkbox" checked={flags[option.key]} disabled={!admissionDate && !talentWorkspace} onChange={(event) => requestFlagChange(option.key, event.target.checked)} /><label htmlFor={`student-${option.key}`}>{option.label}</label></div>)}</div></section>}
           {talentWorkspace && !conversion && !readOnly && <section className="editor-card"><div className="section-heading"><div><h2>Currículum vitae</h2></div></div><TalentCvUploadField file={cvFile} currentCv={currentCv} disabled={saving} onChange={setCvFile} onViewCurrent={viewCurrentCv} onDownloadCurrent={downloadCurrentCv} /></section>}
           <StudentExperienceFields value={experience} onChange={setExperience} readOnly={readOnly} disabled={saving} />

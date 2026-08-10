@@ -5,6 +5,8 @@ export const AUTH_INVALID_EVENT = 'nexoskill:auth-invalid'
 export const PASSWORD_CHANGE_REQUIRED_EVENT = 'nexoskill:password-change-required'
 export const STUDENT_AUTH_INVALID_EVENT = 'nexoskill:student-auth-invalid'
 export const PLATFORM_REQUEST_FAILURE_EVENT = 'nexoskill:platform-request-failure'
+export const ORGANIZATION_CONTEXT_KEY = 'nexoskill:organization-context'
+export const ORGANIZATION_CONTEXT_CHANGED_EVENT = 'nexoskill:organization-context-changed'
 
 const COLLABORATOR_TERMINOLOGY: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bPersonas estudiantes\b/g, 'Colaboradores'],
@@ -127,6 +129,9 @@ export async function apiRequest<T>(
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...(window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)
+          ? { 'X-Organization-Context': window.localStorage.getItem(ORGANIZATION_CONTEXT_KEY)! }
+          : {}),
         ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers
       }

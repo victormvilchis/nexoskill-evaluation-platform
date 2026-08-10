@@ -76,6 +76,10 @@ export default function App() {
   const location = useLocation()
 
   useEffect(() => {
+    const publicRoute = location.pathname === '/login'
+      || location.pathname === '/student-login'
+      || location.pathname.startsWith('/student')
+    if (!publicRoute) return
     const section = resolveDocumentSection(location.pathname)
     document.title = section
       ? `${section} | Valtieris Talent Platform`

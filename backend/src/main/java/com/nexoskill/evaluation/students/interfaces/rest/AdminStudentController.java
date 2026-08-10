@@ -77,6 +77,7 @@ public class AdminStudentController {
             @RequestParam(required = false) String technologicalProfilePublicId,
             @RequestParam(required = false) String technologyPublicId,
             @RequestParam(required = false) Boolean certificationsEnabled,
+            @RequestParam(required = false) String certificationFocus,
             @RequestParam(defaultValue = "updatedAt") String sort,
             @RequestParam(defaultValue = "DESC") String direction,
             @RequestParam(defaultValue = "0") int page,
@@ -87,7 +88,7 @@ public class AdminStudentController {
         if (foundation == null) return service.search(tenant, query, parsedStatus, false, page, size);
         return foundation.search(tenant, new StudentFoundationService.SearchCriteria(query, parsedStatus,
                 false, organizationPublicId, profilePublicId, technologicalProfilePublicId,
-                technologyPublicId, certificationsEnabled, sort, direction), page, size);
+                technologyPublicId, certificationsEnabled, certificationFocus, sort, direction), page, size);
     }
 
     @GetMapping("/catalogs")
@@ -99,8 +100,9 @@ public class AdminStudentController {
 
     @GetMapping("/filter-options")
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
-    public StudentFoundationService.FilterOptions filterOptions(HttpServletRequest request) {
-        return requireFoundation().filterOptions(tenant(request));
+    public StudentFoundationService.FilterOptions filterOptions(
+            @RequestParam(required = false) String organizationPublicId, HttpServletRequest request) {
+        return requireFoundation().filterOptions(tenant(request), organizationPublicId);
     }
 
     @GetMapping("/{publicId}")

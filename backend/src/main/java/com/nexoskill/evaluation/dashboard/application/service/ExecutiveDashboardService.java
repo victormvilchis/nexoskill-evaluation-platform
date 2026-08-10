@@ -16,6 +16,7 @@ import com.nexoskill.evaluation.certifications.domain.CertificationType;
 import com.nexoskill.evaluation.certifications.domain.CertificationValidityStatus;
 import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.AttentionItem;
 import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.ChartPoint;
+import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.CertificationFocusDetail;
 import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.ComponentDefinition;
 import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.ComponentPreference;
 import com.nexoskill.evaluation.dashboard.application.model.DashboardModels.Configuration;
@@ -64,6 +65,7 @@ public class ExecutiveDashboardService {
             component("KPI_EXPIRING", "Próximas a vencer", "KPI", "SMALL"),
             component("KPI_EXPIRED", "Vencidas", "KPI", "SMALL"),
             component("KPI_RECERTIFICATION", "Recertificaciones pendientes", "KPI", "SMALL"),
+            component("CHART_CERTIFICATION_FOCUS", "Foco de certificaciones", "GRAPH", "MEDIUM"),
             component("CHART_CERTIFICATION_STATUS", "Estado general de certificaciones", "GRAPH", "MEDIUM"),
             component("CHART_EXPIRATIONS", "Próximos vencimientos", "GRAPH", "MEDIUM"),
             component("CHART_TECHNOLOGIES", "Distribución por Tecnología", "GRAPH", "MEDIUM"),
@@ -78,10 +80,10 @@ public class ExecutiveDashboardService {
             pref("KPI_ACTIVE_COLLABORATORS", "SMALL", 0), pref("KPI_TALENT_BANK", "SMALL", 1),
             pref("KPI_COMPLIANCE", "SMALL", 2), pref("KPI_EXPIRING", "SMALL", 3),
             pref("KPI_EXPIRED", "SMALL", 4), pref("KPI_RECERTIFICATION", "SMALL", 5),
-            pref("CHART_CERTIFICATION_STATUS", "MEDIUM", 6), pref("CHART_EXPIRATIONS", "MEDIUM", 7),
-            pref("CHART_TECHNOLOGIES", "MEDIUM", 8), pref("CHART_ROLES", "MEDIUM", 9),
-            pref("CHART_CERTIFICATION_TYPES", "MEDIUM", 10), pref("CHART_TALENT_BANK", "MEDIUM", 11),
-            pref("ATTENTION_REQUIRED", "LARGE", 12));
+            pref("CHART_CERTIFICATION_FOCUS", "MEDIUM", 6), pref("CHART_CERTIFICATION_STATUS", "MEDIUM", 7),
+            pref("CHART_EXPIRATIONS", "MEDIUM", 8), pref("CHART_TECHNOLOGIES", "MEDIUM", 9),
+            pref("CHART_ROLES", "MEDIUM", 10), pref("CHART_CERTIFICATION_TYPES", "MEDIUM", 11),
+            pref("CHART_TALENT_BANK", "MEDIUM", 12), pref("ATTENTION_REQUIRED", "LARGE", 13));
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
@@ -96,8 +98,13 @@ public class ExecutiveDashboardService {
     @Transactional(readOnly = true)
     public Overview overview(TenantContext tenant, AuthenticatedUser actor, Filter requested) {
         boolean administrator = isAdministrator(actor);
-        Filter filter = normalizeFilter(requested);
-        EffectiveScope effective = resolveScope(tenant, administrator, filter.organizationPublicId());
+        Filter normalizedFilter = normalizeFilter(requested);
+        EffectiveScope effective = resolveScope(tenant, administrator, normalizedFilter.organizationPublicId());
+        Filter filter = !effective.certificationsEnabled()
+                && (normalizedFilter.certificationType() != null || normalizedFilter.certificationState() != null)
+                ? new Filter(normalizedFilter.organizationPublicId(), normalizedFilter.role(), normalizedFilter.technology(),
+                        normalizedFilter.collaboratorStatus(), null, null)
+                : normalizedFilter;
 
         List<Collaborator> base = collaborators(effective, filter.collaboratorStatus());
         Map<Long, List<Technology>> technologies = technologies(base.stream().map(Collaborator::id).toList());
@@ -119,6 +126,13 @@ public class ExecutiveDashboardService {
         }
 
         Set<Long> selectedIds = selected.stream().map(Collaborator::id).collect(Collectors.toSet());
+        Map<Long, CertificationFocus> focusByStudent = certificationFocus(selected.stream().map(Collaborator::id).toList());
+        List<ChartPoint> certificationFocus = certificationFocusChart(selected, focusByStudent);
+        boolean canViewCertificationDetail = administrator || (actor != null
+                && (actor.permissions().contains("STUDENT_CERTIFICATION_VIEW")
+                    || actor.permissions().contains("STUDENT_CERTIFICATION_MANAGE")));
+        List<CertificationFocusDetail> certificationFocusDetails = canViewCertificationDetail
+                ? certificationFocusDetails(selected, technologies, focusByStudent) : List.of();
         List<AreaSummary> certificationAreas = selected.stream()
                 .flatMap(item -> summaries.getOrDefault(item.id(), List.of()).stream())
                 .filter(area -> filter.certificationType() == null || area.type().name().equals(filter.certificationType()))
@@ -144,28 +158,33 @@ public class ExecutiveDashboardService {
         List<ChartPoint> talentChart = talentComposition(talentRows);
         List<OrganizationPoint> organizationChart = administrator
                 ? organizationComparison(selected, summaries, talentRows, filter) : List.of();
-        List<AttentionItem> attention = attention(expiring, expired, recert);
+        List<AttentionItem> attention = effective.certificationsEnabled()
+                ? attention(certificationFocus, recert) : List.of();
 
         FilterOptions options = filterOptions(effective, administrator);
         return new Overview(Instant.now(clock), scope(effective, administrator), canPersonalize(actor), filter,
                 options, kpis, certificationStatus, certificationTypes, expirations, technologyChart, roleChart,
-                talentChart, organizationChart, attention);
+                talentChart, organizationChart, certificationFocus, certificationFocusDetails, attention);
     }
 
     @Transactional(readOnly = true)
-    public Configuration configuration(AuthenticatedUser actor) {
+    public Configuration configuration(TenantContext tenant, AuthenticatedUser actor, String organizationPublicId) {
         boolean administrator = isAdministrator(actor);
         boolean canPersonalize = canPersonalize(actor);
-        List<ComponentDefinition> catalog = catalog(administrator);
+        EffectiveScope effective = resolveScope(tenant, administrator, clean(organizationPublicId));
+        List<ComponentDefinition> catalog = catalog(administrator, effective.certificationsEnabled());
         if (!canPersonalize) {
-            return new Configuration(false, false, defaults(administrator), catalog);
+            return new Configuration(false, false, defaults(administrator, effective.certificationsEnabled()), catalog);
         }
         List<String> rows = jdbc.query("SELECT CONFIGURATION_JSON FROM USER_DASHBOARD_PREFERENCE WHERE USER_ID = :userId",
                 Map.of("userId", actor.internalId()), (rs, rowNum) -> rs.getString(1));
-        if (rows.isEmpty()) return new Configuration(false, true, defaults(administrator), catalog);
+        if (rows.isEmpty()) return new Configuration(false, true, defaults(administrator, effective.certificationsEnabled()), catalog);
         try {
             List<ComponentPreference> parsed = objectMapper.readValue(rows.getFirst(), new TypeReference<>() {});
-            return new Configuration(true, true, sanitize(parsed, administrator), catalog);
+            List<ComponentPreference> sanitized = sanitize(parsed, administrator, true);
+            Set<String> visibleCodes = catalog.stream().map(ComponentDefinition::code).collect(Collectors.toSet());
+            List<ComponentPreference> visible = sanitized.stream().filter(item -> visibleCodes.contains(item.code())).toList();
+            return new Configuration(true, true, visible, catalog);
         } catch (JsonProcessingException exception) {
             throw new BusinessException("DASHBOARD_CONFIGURATION_INVALID",
                     "La configuración guardada del Dashboard no es válida. Restablece el Dashboard para continuar.");
@@ -173,16 +192,22 @@ public class ExecutiveDashboardService {
     }
 
     @Transactional
-    public Configuration saveConfiguration(AuthenticatedUser actor, SaveConfigurationCommand command) {
+    public Configuration saveConfiguration(TenantContext tenant, AuthenticatedUser actor,
+            String organizationPublicId, SaveConfigurationCommand command) {
         if (!canPersonalize(actor)) {
             throw new BusinessException("DASHBOARD_PERSONALIZE_FORBIDDEN",
                     "No tienes permiso para personalizar el Dashboard.");
         }
         boolean administrator = isAdministrator(actor);
-        List<ComponentPreference> components = sanitize(command == null ? null : command.components(), administrator);
+        EffectiveScope effective = resolveScope(tenant, administrator, clean(organizationPublicId));
+        List<ComponentPreference> components = sanitize(command == null ? null : command.components(), administrator,
+                effective.certificationsEnabled());
+        List<ComponentPreference> componentsToStore = effective.certificationsEnabled()
+                ? components
+                : preserveHiddenCertificationComponents(actor, administrator, components);
         final String json;
         try {
-            json = objectMapper.writeValueAsString(components);
+            json = objectMapper.writeValueAsString(componentsToStore);
         } catch (JsonProcessingException exception) {
             throw new BusinessException("DASHBOARD_CONFIGURATION_INVALID", "No fue posible guardar la configuración del Dashboard.");
         }
@@ -198,7 +223,7 @@ public class ExecutiveDashboardService {
             WHEN NOT MATCHED THEN INSERT (USER_ID, CONFIGURATION_JSON, CREATED_AT, UPDATED_AT, VERSION_NO)
                 VALUES (:userId, :configuration, SYSTIMESTAMP, SYSTIMESTAMP, 0)
             """, params);
-        return new Configuration(true, true, components, catalog(administrator));
+        return new Configuration(true, true, components, catalog(administrator, effective.certificationsEnabled()));
     }
 
     private List<Collaborator> collaborators(EffectiveScope scope, String status) {
@@ -215,21 +240,30 @@ public class ExecutiveDashboardService {
             where.append(" AND (s.STATUS IN ('INACTIVE','EXPIRED') OR s.ADMISSION_DATE IS NULL) ");
         }
         return jdbc.query("""
-            SELECT s.STUDENT_ID, s.ORGANIZATION_ID, o.PUBLIC_ID ORGANIZATION_PUBLIC_ID, o.ORGANIZATION_NAME,
-                   s.STATUS, s.ADMISSION_DATE, p.PROFILE_NAME, tp.PROFILE_NAME TECH_PROFILE_NAME,
+            SELECT s.STUDENT_ID, s.PUBLIC_ID STUDENT_PUBLIC_ID, s.DISPLAY_NAME,
+                   s.ORGANIZATION_ID, o.PUBLIC_ID ORGANIZATION_PUBLIC_ID, o.ORGANIZATION_NAME,
+                   o.APPLIES_CERTIFICATIONS, s.STATUS, s.ADMISSION_DATE, p.PROFILE_NAME, tp.PROFILE_NAME TECH_PROFILE_NAME,
                    s.APPLIES_TECH_CERT, s.APPLIES_DEV_SECURITY, s.APPLIES_NORMATIVE_TESTING,
                    s.APPLIES_ONE, s.APPLIES_AGILE, s.APPLIES_JIRA
               FROM STUDENT s
               JOIN ORGANIZATION o ON o.ORGANIZATION_ID = s.ORGANIZATION_ID
               LEFT JOIN CERTIFICATION_PROFILE_CATALOG p ON p.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
               LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tp ON tp.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
-            """ + where, params, (rs, rowNum) -> new Collaborator(rs.getLong("STUDENT_ID"),
-                rs.getLong("ORGANIZATION_ID"), rs.getString("ORGANIZATION_PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
-                "ACTIVE".equals(rs.getString("STATUS")) && rs.getDate("ADMISSION_DATE") != null,
-                rs.getString("PROFILE_NAME"), rs.getString("TECH_PROFILE_NAME"),
-                new Applicability(rs.getBoolean("APPLIES_TECH_CERT"), rs.getBoolean("APPLIES_DEV_SECURITY"),
-                        rs.getBoolean("APPLIES_NORMATIVE_TESTING"), rs.getBoolean("APPLIES_ONE"),
-                        rs.getBoolean("APPLIES_AGILE"), rs.getBoolean("APPLIES_JIRA"))));
+            """ + where, params, (rs, rowNum) -> {
+                boolean organizationCertifications = rs.getBoolean("APPLIES_CERTIFICATIONS");
+                return new Collaborator(rs.getLong("STUDENT_ID"), rs.getString("STUDENT_PUBLIC_ID"),
+                        rs.getString("DISPLAY_NAME"), rs.getLong("ORGANIZATION_ID"),
+                        rs.getString("ORGANIZATION_PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"),
+                        organizationCertifications,
+                        "ACTIVE".equals(rs.getString("STATUS")) && rs.getDate("ADMISSION_DATE") != null,
+                        rs.getString("PROFILE_NAME"), rs.getString("TECH_PROFILE_NAME"),
+                        new Applicability(organizationCertifications && rs.getBoolean("APPLIES_TECH_CERT"),
+                                organizationCertifications && rs.getBoolean("APPLIES_DEV_SECURITY"),
+                                organizationCertifications && rs.getBoolean("APPLIES_NORMATIVE_TESTING"),
+                                organizationCertifications && rs.getBoolean("APPLIES_ONE"),
+                                organizationCertifications && rs.getBoolean("APPLIES_AGILE"),
+                                organizationCertifications && rs.getBoolean("APPLIES_JIRA")));
+            });
     }
 
     private Map<Long, List<Technology>> technologies(List<Long> studentIds) {
@@ -311,13 +345,16 @@ public class ExecutiveDashboardService {
         technologyMap.values().stream().flatMap(List::stream).sorted(Comparator.comparing(Technology::label,
                 String.CASE_INSENSITIVE_ORDER)).forEach(value -> technologies.putIfAbsent(value.key(), value.label()));
         List<Option> technologyOptions = technologies.entrySet().stream().map(entry -> new Option(entry.getKey(), entry.getValue())).toList();
+        List<Option> certificationTypes = scope.certificationsEnabled()
+                ? List.of(new Option("TECHNOLOGICAL", "Tecnológica"), new Option("DEVELOPMENT_SECURITY", "Desarrollo Seguro"),
+                        new Option("NORMATIVE_TESTING", "Normativa y Testing"), new Option("ONE", "ONE"),
+                        new Option("AGILE", "Agile"), new Option("JIRA", "Jira")) : List.of();
+        List<Option> certificationStates = scope.certificationsEnabled()
+                ? List.of(new Option("VALID", "Vigentes"), new Option("EXPIRING_SOON", "Próximas a vencer"),
+                        new Option("EXPIRED", "Vencidas"), new Option("PENDING", "Pendientes")) : List.of();
         return new FilterOptions(organizations, roles, technologyOptions,
                 List.of(new Option("ACTIVE", "Activos"), new Option("INACTIVE", "Inactivos"), new Option("ALL", "Todos")),
-                List.of(new Option("TECHNOLOGICAL", "Tecnológica"), new Option("DEVELOPMENT_SECURITY", "Desarrollo Seguro"),
-                        new Option("NORMATIVE_TESTING", "Normativa y Testing"), new Option("ONE", "ONE"),
-                        new Option("AGILE", "Agile"), new Option("JIRA", "Jira")),
-                List.of(new Option("VALID", "Vigentes"), new Option("EXPIRING_SOON", "Próximas a vencer"),
-                        new Option("EXPIRED", "Vencidas"), new Option("PENDING", "Pendientes")));
+                certificationTypes, certificationStates);
     }
 
     private List<Option> organizations() {
@@ -341,33 +378,43 @@ public class ExecutiveDashboardService {
             if (tenant == null || tenant.organizationId() == null || tenant.globalScope()) {
                 throw new BusinessException("DASHBOARD_SCOPE_INVALID", "No existe una organización válida para consultar el Dashboard.");
             }
-            List<String> names = jdbc.query("""
-                SELECT ORGANIZATION_NAME FROM ORGANIZATION
+            List<EffectiveScope> scopes = jdbc.query("""
+                SELECT PUBLIC_ID, ORGANIZATION_NAME, APPLIES_CERTIFICATIONS FROM ORGANIZATION
                  WHERE ORGANIZATION_ID = :organizationId AND ORGANIZATION_TYPE = 'CUSTOMER'
-                """, Map.of("organizationId", tenant.organizationId()), (rs, rowNum) -> rs.getString(1));
-            if (names.isEmpty()) {
+                """, Map.of("organizationId", tenant.organizationId()), (rs, rowNum) -> new EffectiveScope(
+                        tenant.organizationId(), rs.getString("PUBLIC_ID"), rs.getString("ORGANIZATION_NAME"), false,
+                        rs.getBoolean("APPLIES_CERTIFICATIONS")));
+            if (scopes.isEmpty()) {
                 throw new BusinessException("DASHBOARD_SCOPE_INVALID",
                         "La organización asignada no está disponible para consultar el Dashboard.");
             }
-            return new EffectiveScope(tenant.organizationId(), tenant.organizationPublicId(), names.getFirst(), false);
+            return scopes.getFirst();
         }
-        if (requestedOrganization == null) return new EffectiveScope(null, null, "Todas las organizaciones", true);
+        if (requestedOrganization == null) {
+            Integer enabledCount = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM ORGANIZATION
+                 WHERE ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE' AND APPLIES_CERTIFICATIONS = 1
+                """, Map.of(), Integer.class);
+            return new EffectiveScope(null, null, "Todas las organizaciones", true,
+                    enabledCount != null && enabledCount > 0);
+        }
         LocalDate today = LocalDate.now(clock);
         List<EffectiveScope> rows = jdbc.query("""
-            SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME
+            SELECT ORGANIZATION_ID, PUBLIC_ID, ORGANIZATION_NAME, APPLIES_CERTIFICATIONS
               FROM ORGANIZATION
              WHERE PUBLIC_ID = :publicId AND ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
                AND (VALID_FROM IS NULL OR VALID_FROM <= :today)
                AND (EXPIRES_ON IS NULL OR EXPIRES_ON >= :today)
             """, Map.of("publicId", requestedOrganization, "today", java.sql.Date.valueOf(today)),
-                (rs, rowNum) -> new EffectiveScope(rs.getLong(1), rs.getString(2), rs.getString(3), false));
+                (rs, rowNum) -> new EffectiveScope(rs.getLong(1), rs.getString(2), rs.getString(3), false,
+                        rs.getBoolean(4)));
         if (rows.isEmpty()) throw new BusinessException("DASHBOARD_ORGANIZATION_INVALID",
                 "La organización seleccionada no está disponible para consulta.");
         return rows.getFirst();
     }
 
     private static Scope scope(EffectiveScope scope, boolean administrator) {
-        return new Scope(administrator, scope.global(), scope.publicId(), scope.name());
+        return new Scope(administrator, scope.global(), scope.publicId(), scope.name(), scope.certificationsEnabled());
     }
 
     private static Filter normalizeFilter(Filter requested) {
@@ -484,18 +531,106 @@ public class ExecutiveDashboardService {
                         .thenComparing(OrganizationPoint::label)).toList();
     }
 
-    private static List<AttentionItem> attention(long expiring, long expired, long recert) {
-        return List.of(new AttentionItem("EXPIRED", "Certificaciones vencidas", expired, "CRITICAL",
+    private Map<Long, CertificationFocus> certificationFocus(List<Long> studentIds) {
+        Map<Long, CertificationFocus> result = new LinkedHashMap<>();
+        for (List<Long> batch : batches(studentIds)) {
+            jdbc.query("""
+                SELECT STUDENT_ID, FOCUS_STATUS, TRIGGER_CERTIFICATION_TYPE,
+                       RELEVANT_EXPIRATION_DATE, SECOND_ATTEMPT_FAILED
+                  FROM VW_STUDENT_CERTIFICATION_FOCUS
+                 WHERE STUDENT_ID IN (:ids)
+                   AND FOCUS_STATUS IS NOT NULL
+                """, Map.of("ids", batch), (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    result.put(rs.getLong("STUDENT_ID"),
+                            new CertificationFocus(rs.getString("FOCUS_STATUS"), rs.getString("TRIGGER_CERTIFICATION_TYPE"),
+                                    localDate(rs, "RELEVANT_EXPIRATION_DATE"), rs.getBoolean("SECOND_ATTEMPT_FAILED")));
+                });
+        }
+        return result;
+    }
+
+    private static List<ChartPoint> certificationFocusChart(List<Collaborator> collaborators,
+            Map<Long, CertificationFocus> focusByStudent) {
+        Map<String, Long> counts = collaborators.stream()
+                .filter(Collaborator::organizationCertifications)
+                .map(item -> focusByStudent.get(item.id()))
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.groupingBy(CertificationFocus::status, Collectors.counting()));
+        return List.of(
+                new ChartPoint("IN_RULE", "En regla", counts.getOrDefault("IN_RULE", 0L)),
+                new ChartPoint("EXPIRING_SOON", "Próximas a vencer", counts.getOrDefault("EXPIRING_SOON", 0L)),
+                new ChartPoint("EXPIRED", "Vencidas", counts.getOrDefault("EXPIRED", 0L)),
+                new ChartPoint("PENDING_DEACTIVATION", "Pendientes de Baja", counts.getOrDefault("PENDING_DEACTIVATION", 0L)));
+    }
+
+    private static List<CertificationFocusDetail> certificationFocusDetails(List<Collaborator> collaborators,
+            Map<Long, List<Technology>> technologies, Map<Long, CertificationFocus> focusByStudent) {
+        return collaborators.stream().filter(Collaborator::organizationCertifications).map(item -> {
+            CertificationFocus focus = focusByStudent.get(item.id());
+            if (focus == null) return null;
+            String technology = technologies.getOrDefault(item.id(), List.of()).stream()
+                    .map(Technology::label).findFirst().orElse("N/A");
+            String certificationLabel = focus.certificationType() == null ? null
+                    : certificationLabel(CertificationType.valueOf(focus.certificationType()));
+            return new CertificationFocusDetail(item.publicId(), item.displayName(), role(item), technology,
+                    focus.status(), focus.certificationType(), certificationLabel,
+                    focus.expirationDate() == null ? null : focus.expirationDate().toString(), focus.secondAttemptFailed());
+        }).filter(java.util.Objects::nonNull)
+                .sorted(Comparator.comparingInt((CertificationFocusDetail item) -> focusRank(item.status())).reversed()
+                        .thenComparing(CertificationFocusDetail::collaborator, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    private static int focusRank(String status) {
+        return switch (status == null ? "" : status) {
+            case "PENDING_DEACTIVATION" -> 4;
+            case "EXPIRED" -> 3;
+            case "EXPIRING_SOON" -> 2;
+            case "IN_RULE" -> 1;
+            default -> 0;
+        };
+    }
+
+    private static List<AttentionItem> attention(List<ChartPoint> focus, long recert) {
+        Map<String, Long> counts = focus.stream().collect(Collectors.toMap(ChartPoint::key, ChartPoint::value));
+        return List.of(
+                new AttentionItem("PENDING_DEACTIVATION", "Pendientes de Baja",
+                        counts.getOrDefault("PENDING_DEACTIVATION", 0L), "CRITICAL",
+                        "Colaboradores con un segundo intento no aprobado. La baja no se ejecuta automáticamente."),
+                new AttentionItem("EXPIRED", "Colaboradores con certificaciones vencidas",
+                        counts.getOrDefault("EXPIRED", 0L), "CRITICAL",
                         "Requieren seguimiento conforme a las reglas vigentes."),
-                new AttentionItem("EXPIRING_SOON", "Próximas a vencer", expiring, "WARNING",
+                new AttentionItem("EXPIRING_SOON", "Colaboradores con certificaciones próximas a vencer",
+                        counts.getOrDefault("EXPIRING_SOON", 0L), "WARNING",
                         "Conviene anticipar su gestión antes del vencimiento."),
                 new AttentionItem("RECERTIFICATION", "Recertificaciones pendientes", recert, "ATTENTION",
                         "Áreas vencidas que requieren un nuevo ciclo de certificación."));
     }
 
-    private List<ComponentPreference> sanitize(List<ComponentPreference> requested, boolean administrator) {
+    private List<ComponentPreference> preserveHiddenCertificationComponents(AuthenticatedUser actor, boolean administrator,
+            List<ComponentPreference> visible) {
+        List<String> rows = jdbc.query("SELECT CONFIGURATION_JSON FROM USER_DASHBOARD_PREFERENCE WHERE USER_ID = :userId",
+                Map.of("userId", actor.internalId()), (rs, rowNum) -> rs.getString(1));
+        List<ComponentPreference> source = defaults(administrator, true);
+        if (!rows.isEmpty()) {
+            try {
+                List<ComponentPreference> parsed = objectMapper.readValue(rows.getFirst(), new TypeReference<>() {});
+                source = sanitize(parsed, administrator, true);
+            } catch (JsonProcessingException exception) {
+                throw new BusinessException("DASHBOARD_CONFIGURATION_INVALID",
+                        "La configuración guardada del Dashboard no es válida. Restablece el Dashboard para continuar.");
+            }
+        }
+        List<ComponentPreference> merged = new ArrayList<>(visible);
+        source.stream().filter(item -> certificationComponent(item.code()))
+                .forEach(item -> merged.add(new ComponentPreference(item.code(), item.size(), merged.size())));
+        return List.copyOf(merged);
+    }
+
+    private List<ComponentPreference> sanitize(List<ComponentPreference> requested, boolean administrator,
+            boolean certificationsEnabled) {
         if (requested == null) throw new BusinessException("DASHBOARD_CONFIGURATION_REQUIRED", "La configuración del Dashboard es obligatoria.");
-        Map<String, ComponentDefinition> allowed = catalog(administrator).stream()
+        Map<String, ComponentDefinition> allowed = catalog(administrator, certificationsEnabled).stream()
                 .collect(Collectors.toMap(ComponentDefinition::code, Function.identity()));
         Set<String> seen = new LinkedHashSet<>();
         List<ComponentPreference> sorted = requested.stream().sorted(Comparator.comparingInt(ComponentPreference::order)).toList();
@@ -514,12 +649,25 @@ public class ExecutiveDashboardService {
         return List.copyOf(result);
     }
 
-    private static List<ComponentDefinition> catalog(boolean administrator) {
-        return CATALOG.stream().filter(item -> administrator || !item.administratorOnly()).toList();
+    private static boolean certificationComponent(String code) {
+        return code != null && (code.startsWith("KPI_COMPLIANCE") || code.startsWith("KPI_EXPIRING")
+                || code.startsWith("KPI_EXPIRED") || code.startsWith("KPI_RECERTIFICATION")
+                || code.startsWith("CHART_CERTIFICATION") || "CHART_EXPIRATIONS".equals(code)
+                || "ATTENTION_REQUIRED".equals(code));
     }
 
-    private static List<ComponentPreference> defaults(boolean administrator) {
-        return DEFAULT_COMPONENTS.stream().filter(item -> administrator || !"CHART_ORGANIZATIONS".equals(item.code())).toList();
+    private static List<ComponentDefinition> catalog(boolean administrator, boolean certificationsEnabled) {
+        return CATALOG.stream()
+                .filter(item -> administrator || !item.administratorOnly())
+                .filter(item -> certificationsEnabled || !certificationComponent(item.code()))
+                .toList();
+    }
+
+    private static List<ComponentPreference> defaults(boolean administrator, boolean certificationsEnabled) {
+        return DEFAULT_COMPONENTS.stream()
+                .filter(item -> administrator || !"CHART_ORGANIZATIONS".equals(item.code()))
+                .filter(item -> certificationsEnabled || !certificationComponent(item.code()))
+                .toList();
     }
 
     private static boolean isAdministrator(AuthenticatedUser actor) {
@@ -629,11 +777,17 @@ public class ExecutiveDashboardService {
         return clean == null ? null : clean.toUpperCase(Locale.ROOT);
     }
 
-    private record EffectiveScope(Long organizationId, String publicId, String name, boolean global) {
+    private record EffectiveScope(Long organizationId, String publicId, String name, boolean global,
+            boolean certificationsEnabled) {
     }
 
-    private record Collaborator(Long id, Long organizationId, String organizationPublicId, String organizationName,
+    private record Collaborator(Long id, String publicId, String displayName, Long organizationId,
+            String organizationPublicId, String organizationName, boolean organizationCertifications,
             boolean active, String profile, String techProfile, Applicability applicability) {
+    }
+
+    private record CertificationFocus(String status, String certificationType, LocalDate expirationDate,
+            boolean secondAttemptFailed) {
     }
 
     private record Technology(String key, String label) {

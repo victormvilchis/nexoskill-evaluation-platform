@@ -5,7 +5,8 @@ import type {
   OrganizationPayload,
   OrganizationStatus,
   OrganizationStatusHistory,
-  OrganizationSummary
+  OrganizationSummary,
+  OrganizationBranding
 } from '../types/organizations'
 import type { SortDirection } from '../../../shared/types/pagination'
 
@@ -120,4 +121,18 @@ export interface TenantContextView {
 
 export function getTenantContext(signal?: AbortSignal) {
   return apiRequest<TenantContextView>('/tenant-context', { signal })
+}
+
+export function getCurrentOrganizationBranding(signal?: AbortSignal) {
+  return apiRequest<OrganizationBranding>('/organization-branding/current', { signal })
+}
+
+export function getOrganizationBranding(publicId: string, signal?: AbortSignal) {
+  return apiRequest<OrganizationBranding>(`/organization-branding/admin/${publicId}`, { signal })
+}
+
+export function uploadOrganizationLogo(publicId: string, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return apiRequest<OrganizationBranding>(`/organization-branding/admin/${publicId}/logo`, { method: 'POST', body })
 }

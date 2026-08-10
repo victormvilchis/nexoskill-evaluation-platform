@@ -38,13 +38,21 @@ public class StudentFoundationService {
                tech_profile.PROFILE_CODE TECH_PROFILE_CODE, tech_profile.PROFILE_NAME TECH_PROFILE_NAME,
                experience.CURRENT_TECHNOLOGY, experience.EXPERTISE,
                s.APPLIES_TECH_CERT, s.APPLIES_DEV_SECURITY, s.APPLIES_NORMATIVE_TESTING,
-               s.APPLIES_ONE, s.APPLIES_AGILE, s.APPLIES_JIRA
+               s.APPLIES_ONE, s.APPLIES_AGILE, s.APPLIES_JIRA,
+               focus.FOCUS_STATUS CERTIFICATION_FOCUS_STATUS,
+               focus.FOCUS_RANK CERTIFICATION_FOCUS_RANK,
+               focus.TRIGGER_CERTIFICATION_TYPE,
+               focus.RELEVANT_EXPIRATION_DATE CERTIFICATION_FOCUS_EXPIRATION_DATE,
+               focus.SECOND_ATTEMPT_FAILED
           FROM STUDENT s
           JOIN ORGANIZATION o ON o.ORGANIZATION_ID = s.ORGANIZATION_ID
           LEFT JOIN CERTIFICATION_PROFILE_CATALOG profile
             ON profile.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
           LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tech_profile
             ON tech_profile.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
+          LEFT JOIN VW_STUDENT_CERTIFICATION_FOCUS focus
+            ON focus.STUDENT_ID = s.STUDENT_ID
+           AND focus.ORGANIZATION_ID = s.ORGANIZATION_ID
           LEFT JOIN (
                 SELECT exp.STUDENT_ID, exp.ORGANIZATION_ID,
                        LISTAGG(exp.ITEM_NAME, ' · ') WITHIN GROUP
@@ -92,6 +100,9 @@ public class StudentFoundationService {
                 ON profile.CERTIFICATION_PROFILE_ID = s.PROFESSIONAL_PROFILE_ID
               LEFT JOIN TECHNOLOGICAL_PROFILE_CATALOG tech_profile
                 ON tech_profile.TECHNOLOGICAL_PROFILE_ID = s.TECHNOLOGICAL_PROFILE_ID
+              LEFT JOIN VW_STUDENT_CERTIFICATION_FOCUS focus
+                ON focus.STUDENT_ID = s.STUDENT_ID
+               AND focus.ORGANIZATION_ID = s.ORGANIZATION_ID
             """ + where, params, Long.class);
         if (total == 0) return new PageResult(List.of(), safePage, safeSize, 0, 0);
         List<StudentView> content = jdbc.query(BASE_SELECT + where + " ORDER BY "
@@ -215,13 +226,7 @@ public class StudentFoundationService {
 
     private void validateInactiveCertificationChanges(StudentView previous, UpdateCommand command) {
         if (command.admissionDate() != null) return;
-        boolean changed = !java.util.Objects.equals(
-                    previous.professionalProfile() == null ? null : previous.professionalProfile().publicId(),
-                    command.professionalProfilePublicId())
-                || !java.util.Objects.equals(
-                    previous.technologicalProfile() == null ? null : previous.technologicalProfile().publicId(),
-                    command.technologicalProfilePublicId())
-                || previous.appliesTechnologicalCertification() != command.appliesTechnologicalCertification()
+        boolean changed = previous.appliesTechnologicalCertification() != command.appliesTechnologicalCertification()
                 || previous.appliesDevelopmentSecurity() != command.appliesDevelopmentSecurity()
                 || previous.appliesNormativeTesting() != command.appliesNormativeTesting()
                 || previous.appliesOne() != command.appliesOne()
@@ -238,10 +243,7 @@ public class StudentFoundationService {
         OrganizationJpaEntity organization = resolveCatalogOrganization(tenant, organizationPublicId);
         OrganizationRef organizationRef = new OrganizationRef(organization.getPublicId(), organization.getCode(),
                 organization.getName(), organization.isAppliesCertifications(), organization.isManualStudentCode());
-        if (!organization.isAppliesCertifications()) {
-            return new CatalogBundle(organizationRef, false, List.of(), List.of());
-        }
-        return new CatalogBundle(organizationRef, true,
+        return new CatalogBundle(organizationRef, organization.isAppliesCertifications(),
                 catalog("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID", "PUBLIC_ID", "PROFILE_CODE",
                         "PROFILE_NAME", "SORT_ORDER", organization.getId()),
                 catalog("TECHNOLOGICAL_PROFILE_CATALOG", "TECHNOLOGICAL_PROFILE_ID", "PUBLIC_ID", "PROFILE_CODE",
@@ -249,15 +251,46 @@ public class StudentFoundationService {
     }
 
     @Transactional(readOnly = true)
-    public FilterOptions filterOptions(TenantContext tenant) {
+    public FilterOptions filterOptions(TenantContext tenant, String organizationPublicId) {
         requireTenant(tenant);
         MapSqlParameterSource params = new MapSqlParameterSource();
         String tenantWhere;
+        boolean certificationStatusAvailable;
+        List<FilterOption> organizations = List.of();
         if (tenant.globalAdministrator()) {
-            tenantWhere = " AND o.ORGANIZATION_TYPE = 'CUSTOMER' ";
+            if (notBlank(organizationPublicId)) {
+                OrganizationJpaEntity selected = resolveCatalogOrganization(tenant, organizationPublicId);
+                tenantWhere = " AND s.ORGANIZATION_ID = :filterOrganizationId ";
+                params.addValue("filterOrganizationId", selected.getId());
+                certificationStatusAvailable = selected.isAppliesCertifications();
+            } else {
+                tenantWhere = " AND o.ORGANIZATION_TYPE = 'CUSTOMER' ";
+                Integer enabledCount = jdbc.queryForObject("""
+                    SELECT COUNT(*)
+                      FROM ORGANIZATION
+                     WHERE ORGANIZATION_TYPE = 'CUSTOMER'
+                       AND STATUS = 'ACTIVE'
+                       AND APPLIES_CERTIFICATIONS = 1
+                    """, Map.of(), Integer.class);
+                certificationStatusAvailable = enabledCount != null && enabledCount > 0;
+            }
+            organizations = jdbc.query("""
+                SELECT PUBLIC_ID OPTION_VALUE, ORGANIZATION_NAME OPTION_LABEL
+                  FROM ORGANIZATION
+                 WHERE ORGANIZATION_TYPE = 'CUSTOMER' AND STATUS = 'ACTIVE'
+                 ORDER BY LOWER(ORGANIZATION_NAME)
+                """, (rs, rowNum) -> new FilterOption(rs.getString("OPTION_VALUE"), rs.getString("OPTION_LABEL")));
         } else {
+            if (notBlank(organizationPublicId)) {
+                throw new BusinessException("STUDENT_ORGANIZATION_FORBIDDEN",
+                        "La organización se obtiene de la sesión autenticada.");
+            }
             tenantWhere = " AND s.ORGANIZATION_ID = :tenantOrganizationId ";
             params.addValue("tenantOrganizationId", tenant.organizationId());
+            Integer enabled = jdbc.queryForObject("""
+                SELECT APPLIES_CERTIFICATIONS FROM ORGANIZATION WHERE ORGANIZATION_ID = :organizationId
+                """, Map.of("organizationId", tenant.organizationId()), Integer.class);
+            certificationStatusAvailable = enabled != null && enabled == 1;
         }
 
         List<FilterOption> roles = jdbc.query("""
@@ -288,7 +321,7 @@ public class StudentFoundationService {
             """, params, (rs, rowNum) -> new FilterOption(
                 rs.getString("OPTION_VALUE"), rs.getString("OPTION_LABEL")));
 
-        return new FilterOptions(roles, technologies);
+        return new FilterOptions(organizations, roles, technologies, certificationStatusAvailable);
     }
 
     @Transactional(readOnly = true)
@@ -371,12 +404,12 @@ public class StudentFoundationService {
     private void validateCertificationConfiguration(OrganizationJpaEntity organization, LocalDate admissionDate,
             String profile, String technologicalProfile, boolean appliesTechnological, boolean appliesDevelopment,
             boolean appliesNormative, boolean appliesOne, boolean appliesAgile, boolean appliesJira) {
-        boolean hasData = notBlank(profile) || notBlank(technologicalProfile)
-                || appliesTechnological || appliesDevelopment || appliesNormative || appliesOne || appliesAgile || appliesJira;
-        if (!organization.isAppliesCertifications() && hasData) {
+        boolean hasCertificationData = appliesTechnological || appliesDevelopment || appliesNormative
+                || appliesOne || appliesAgile || appliesJira;
+        if (!organization.isAppliesCertifications() && hasCertificationData) {
             throw new BusinessException("STUDENT_CERTIFICATIONS_NOT_ENABLED",
                     "La organización seleccionada no tiene habilitada la gestión de certificaciones.",
-                    Map.of("certifications", "Retira los datos de perfil y certificación para esta organización."));
+                    Map.of("certifications", "Retira únicamente la aplicabilidad de certificaciones para esta organización."));
         }
     }
 
@@ -385,12 +418,12 @@ public class StudentFoundationService {
             boolean appliesDevelopment, boolean appliesNormative, boolean appliesOne, boolean appliesAgile,
             boolean appliesJira, Long actorId, LocalDate previousAdmissionDate) {
         boolean enabled = organization.isAppliesCertifications();
-        Long profileId = enabled ? resolveCatalogId("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID",
+        Long profileId = resolveCatalogId("CERTIFICATION_PROFILE_CATALOG", "CERTIFICATION_PROFILE_ID",
                 professionalProfilePublicId, organization.getId(), "professionalProfilePublicId",
-                "El perfil seleccionado no pertenece a la organización.") : null;
-        Long technologicalProfileId = enabled ? resolveCatalogId("TECHNOLOGICAL_PROFILE_CATALOG",
+                "El perfil seleccionado no pertenece a la organización.");
+        Long technologicalProfileId = resolveCatalogId("TECHNOLOGICAL_PROFILE_CATALOG",
                 "TECHNOLOGICAL_PROFILE_ID", technologicalProfilePublicId, organization.getId(),
-                "technologicalProfilePublicId", "El perfil tecnológico seleccionado no pertenece a la organización.") : null;
+                "technologicalProfilePublicId", "El perfil tecnológico seleccionado no pertenece a la organización.");
         boolean anyArea = enabled && (appliesTechnological || appliesDevelopment || appliesNormative || appliesOne || appliesAgile || appliesJira);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("professionalProfileId", profileId)
@@ -422,12 +455,14 @@ public class StudentFoundationService {
                    UPDATED_AT = SYSTIMESTAMP
              WHERE PUBLIC_ID = :studentPublicId
             """, params);
-        synchronizeCycleApplicability(studentPublicId, params);
         boolean admissionDateChanged = !java.util.Objects.equals(previousAdmissionDate, admissionDate);
-        if (admissionDateChanged && enabled && admissionDate != null) {
-            recalculatePendingDeadlines(studentPublicId, admissionDate);
-        } else if (admissionDateChanged && previousAdmissionDate != null && admissionDate == null) {
-            clearAdmissionBasedDeadlines(studentPublicId, previousAdmissionDate);
+        if (enabled) {
+            synchronizeCycleApplicability(studentPublicId, params);
+            if (admissionDateChanged && admissionDate != null) {
+                recalculatePendingDeadlines(studentPublicId, admissionDate);
+            } else if (admissionDateChanged && previousAdmissionDate != null && admissionDate == null) {
+                clearAdmissionBasedDeadlines(studentPublicId, previousAdmissionDate);
+            }
         }
     }
 
@@ -559,6 +594,10 @@ public class StudentFoundationService {
             where.append(" AND s.CERTIFICATIONS_ENABLED = :certificationsEnabled ");
             params.addValue("certificationsEnabled", criteria.certificationsEnabled() ? 1 : 0);
         }
+        if (notBlank(criteria.certificationFocus())) {
+            where.append(" AND focus.FOCUS_STATUS = :certificationFocus ");
+            params.addValue("certificationFocus", criteria.certificationFocus().trim().toUpperCase(java.util.Locale.ROOT));
+        }
         return where.toString();
     }
 
@@ -587,6 +626,7 @@ public class StudentFoundationService {
             case "expiresAt" -> "s.ACCESS_EXPIRES_ON";
             case "admissionDate" -> "s.ADMISSION_DATE";
             case "organization" -> "LOWER(o.ORGANIZATION_NAME)";
+            case "certificationStatus" -> "NVL(focus.FOCUS_RANK, 0)";
             default -> "NVL(s.UPDATED_AT, s.CREATED_AT)";
         };
         return column + ("ASC".equalsIgnoreCase(direction) ? " ASC" : " DESC") + ", s.STUDENT_ID DESC";
@@ -607,9 +647,13 @@ public class StudentFoundationService {
                 rs.getLong("VERSION_NO"), new OrganizationRef(rs.getString("ORGANIZATION_PUBLIC_ID"),
                         rs.getString("ORGANIZATION_CODE"), rs.getString("ORGANIZATION_NAME"), organizationCertifications,
                         rs.getBoolean("MANUAL_STUDENT_CODE")),
-                organizationCertifications ? ref(rs, "PROFILE_PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME") : null,
-                organizationCertifications ? ref(rs, "TECH_PROFILE_PUBLIC_ID", "TECH_PROFILE_CODE", "TECH_PROFILE_NAME") : null,
+                ref(rs, "PROFILE_PUBLIC_ID", "PROFILE_CODE", "PROFILE_NAME"),
+                ref(rs, "TECH_PROFILE_PUBLIC_ID", "TECH_PROFILE_CODE", "TECH_PROFILE_NAME"),
                 rs.getString("CURRENT_TECHNOLOGY"), rs.getString("EXPERTISE"),
+                organizationCertifications ? rs.getString("CERTIFICATION_FOCUS_STATUS") : null,
+                organizationCertifications ? rs.getString("TRIGGER_CERTIFICATION_TYPE") : null,
+                organizationCertifications ? localDate(rs, "CERTIFICATION_FOCUS_EXPIRATION_DATE") : null,
+                organizationCertifications && rs.getBoolean("SECOND_ATTEMPT_FAILED"),
                 organizationCertifications, organizationCertifications && rs.getBoolean("APPLIES_TECH_CERT"),
                 organizationCertifications && rs.getBoolean("APPLIES_DEV_SECURITY"),
                 organizationCertifications && rs.getBoolean("APPLIES_NORMATIVE_TESTING"),
@@ -718,7 +762,8 @@ public class StudentFoundationService {
 
     public record SearchCriteria(String query, StudentEffectiveStatus status, boolean includeDeleted,
             String organizationPublicId, String profilePublicId, String technologicalProfilePublicId,
-            String technologyPublicId, Boolean certificationsEnabled, String sort, String direction) {}
+            String technologyPublicId, Boolean certificationsEnabled, String certificationFocus,
+            String sort, String direction) {}
     public record CreateCommand(String organizationPublicId, String email, String firstName,
             String lastName, String displayName, StudentStatus status, LocalDate validFrom,
             LocalDate expiresAt, LocalDate admissionDate, String studentCode, String corporateUser,
@@ -758,8 +803,10 @@ public class StudentFoundationService {
     public record CreateResult(StudentView student, String temporaryPassword) {}
     public record CatalogRef(String publicId, String code, String name) {}
     public record FilterOption(String value, String label) {}
-    public record FilterOptions(List<FilterOption> roles, List<FilterOption> technologies) {
+    public record FilterOptions(List<FilterOption> organizations, List<FilterOption> roles,
+            List<FilterOption> technologies, boolean certificationStatusAvailable) {
         public FilterOptions {
+            organizations = organizations == null ? List.of() : List.copyOf(organizations);
             roles = roles == null ? List.of() : List.copyOf(roles);
             technologies = technologies == null ? List.of() : List.copyOf(technologies);
         }
@@ -774,7 +821,8 @@ public class StudentFoundationService {
             Instant temporaryPasswordExpiresAt, Instant lastLoginAt, Instant createdAt, Instant updatedAt,
             Long version, OrganizationRef organization, CatalogRef professionalProfile,
             CatalogRef technologicalProfile, String currentTechnology, String expertise,
-            boolean certificationsEnabled,
+            String certificationFocusStatus, String certificationFocusType, LocalDate certificationFocusExpirationDate,
+            boolean secondAttemptFailed, boolean certificationsEnabled,
             boolean appliesTechnologicalCertification, boolean appliesDevelopmentSecurity,
             boolean appliesNormativeTesting, boolean appliesOne, boolean appliesAgile, boolean appliesJira) {}
     public record PageResult(List<StudentView> content, int page, int size, long totalElements, int totalPages) {

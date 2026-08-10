@@ -24,6 +24,7 @@ export function searchStudents(params: {
   technologicalProfilePublicId?: string
   technologyPublicId?: string
   certificationsEnabled?: boolean
+  certificationFocus?: string
   page?: number
   size?: number
   sort?: string
@@ -43,6 +44,7 @@ export function searchStudents(params: {
   if (params.technologicalProfilePublicId) search.set('technologicalProfilePublicId', params.technologicalProfilePublicId)
   if (params.technologyPublicId) search.set('technologyPublicId', params.technologyPublicId)
   if (typeof params.certificationsEnabled === 'boolean') search.set('certificationsEnabled', String(params.certificationsEnabled))
+  if (params.certificationFocus) search.set('certificationFocus', params.certificationFocus)
   return apiRequest<StudentPage>(`/admin/students?${search.toString()}`, { signal: params.signal }).then((response) => ({
     ...response,
     content: Array.isArray(response.content) ? response.content : [],
@@ -53,10 +55,15 @@ export function searchStudents(params: {
   }))
 }
 
-export function getStudentFilterOptions(signal?: AbortSignal) {
-  return apiRequest<StudentFilterOptions>('/admin/students/filter-options', { signal }).then((response) => ({
+export function getStudentFilterOptions(organizationPublicId?: string, signal?: AbortSignal) {
+  const query = new URLSearchParams()
+  if (organizationPublicId) query.set('organizationPublicId', organizationPublicId)
+  const suffix = query.size ? `?${query.toString()}` : ''
+  return apiRequest<StudentFilterOptions>(`/admin/students/filter-options${suffix}`, { signal }).then((response) => ({
+    organizations: Array.isArray(response.organizations) ? response.organizations : [],
     roles: Array.isArray(response.roles) ? response.roles : [],
-    technologies: Array.isArray(response.technologies) ? response.technologies : []
+    technologies: Array.isArray(response.technologies) ? response.technologies : [],
+    certificationStatusAvailable: Boolean(response.certificationStatusAvailable)
   }))
 }
 
