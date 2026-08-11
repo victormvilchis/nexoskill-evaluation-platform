@@ -5,6 +5,7 @@ import com.nexoskill.evaluation.development.application.model.StudentDevelopment
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.StartPracticeCommand;
 import com.nexoskill.evaluation.development.application.service.StudentEvaluationService;
 import com.nexoskill.evaluation.development.application.service.StudentPracticeService;
+import com.nexoskill.evaluation.development.application.service.StudentPathService;
 import com.nexoskill.evaluation.development.application.service.StudentDevelopmentService;
 import com.nexoskill.evaluation.organizations.application.OrganizationBrandingService;
 import com.nexoskill.evaluation.organizations.application.OrganizationBrandingService.BrandView;
@@ -27,13 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class StudentDevelopmentController {
     private final StudentPracticeService practices;
     private final StudentEvaluationService evaluations;
+    private final StudentPathService paths;
     private final StudentDevelopmentService development;
     private final OrganizationBrandingService branding;
 
     public StudentDevelopmentController(StudentPracticeService practices, StudentEvaluationService evaluations,
-            StudentDevelopmentService development, OrganizationBrandingService branding) {
+            StudentPathService paths, StudentDevelopmentService development, OrganizationBrandingService branding) {
         this.practices = practices;
         this.evaluations = evaluations;
+        this.paths = paths;
         this.development = development;
         this.branding = branding;
     }
@@ -89,6 +92,14 @@ public class StudentDevelopmentController {
     @PostMapping("/practices/{publicId}/abandon")
     public void abandonPractice(@AuthenticationPrincipal AuthenticatedStudent student, @PathVariable String publicId) {
         practices.abandon(student, publicId);
+    }
+
+    @GetMapping("/paths")
+    public Object paths(@AuthenticationPrincipal AuthenticatedStudent student) { return paths.mine(student); }
+
+    @GetMapping("/paths/{assignmentPublicId}")
+    public Object path(@AuthenticationPrincipal AuthenticatedStudent student, @PathVariable String assignmentPublicId) {
+        return paths.mine(student, assignmentPublicId);
     }
 
     @GetMapping("/evaluations")

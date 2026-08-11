@@ -53,6 +53,7 @@ public class RoleManagementService {
             Map.entry("CATALOGS", "Catálogos"),
             Map.entry("QUESTION_BANK", "Banco de preguntas"),
             Map.entry("FORMS", "Formularios"),
+            Map.entry("PATHS", "Paths"),
             Map.entry("GLOBAL_CONTENT", "Contenido global"),
             Map.entry("ROLE_MANAGEMENT", "Roles"),
             Map.entry("ADMIN", "Administración"));
@@ -283,6 +284,7 @@ public class RoleManagementService {
         if (code.startsWith("USER_")) return "USER_VIEW";
         if (code.startsWith("FORM_")) return "FORM_VIEW";
         if (code.startsWith("COLLECTION_")) return "COLLECTION_VIEW";
+        if (code.startsWith("PATH_")) return "PATH_VIEW";
         if (code.startsWith("QUESTION_") || code.startsWith("GLOBAL_CONTENT_")) return "QUESTION_VIEW";
         if (code.startsWith("CATALOG_")) return "CATALOG_VIEW";
         return null;
@@ -306,13 +308,14 @@ public class RoleManagementService {
     private boolean isViewPermission(String code) {
         return Set.of("DASHBOARD_VIEW", "PROFILE_VIEW", "USER_VIEW", "ORGANIZATION_VIEW", "STUDENT_VIEW",
                 "STUDENT_CERTIFICATION_VIEW", "TALENT_VIEW", "CATALOG_VIEW", "QUESTION_VIEW",
-                "COLLECTION_VIEW", "FORM_VIEW").contains(code);
+                "COLLECTION_VIEW", "FORM_VIEW", "PATH_VIEW").contains(code);
     }
 
     private String logicalModuleCode(PermissionJpaEntity permission) {
         String code = permission.getCode();
         if (code.startsWith("GLOBAL_CONTENT_")) return "QUESTION_BANK";
         if (code.startsWith("COLLECTION_")) return "COLLECTIONS";
+        if (code.startsWith("PATH_")) return "PATHS";
         if (code.startsWith("FORM_")) return "FORMS";
         if (code.startsWith("TALENT_")) return "TALENT_BANK";
         if (code.startsWith("STUDENT_CERTIFICATION_")) return "STUDENTS";
@@ -341,7 +344,8 @@ public class RoleManagementService {
             case "QUESTION_BANK" -> 90;
             case "COLLECTIONS" -> 100;
             case "FORMS" -> 110;
-            case "GLOBAL_CONTENT" -> 120;
+            case "PATHS" -> 120;
+            case "GLOBAL_CONTENT" -> 130;
             default -> 500;
         };
     }

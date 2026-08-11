@@ -9,6 +9,7 @@ import com.nexoskill.evaluation.development.application.model.StudentDevelopment
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.HealthCheck;
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.HomeView;
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.PreparationPoint;
+import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.PathCard;
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.Profile;
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.Recommendation;
 import com.nexoskill.evaluation.development.application.model.StudentDevelopmentModels.TrendPoint;
@@ -31,40 +32,45 @@ public class StudentDevelopmentService {
     private final NamedParameterJdbcTemplate jdbc;
     private final StudentPracticeService practices;
     private final StudentEvaluationService evaluations;
+    private final StudentPathService paths;
 
     public StudentDevelopmentService(NamedParameterJdbcTemplate jdbc, StudentPracticeService practices,
-            StudentEvaluationService evaluations) {
+            StudentEvaluationService evaluations, StudentPathService paths) {
         this.jdbc = jdbc;
         this.practices = practices;
         this.evaluations = evaluations;
+        this.paths = paths;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public HomeView home(AuthenticatedStudent student) {
         Profile profile = profile(student);
         boolean certificationsEnabled = certificationsEnabled(student);
         List<CertificationCard> certifications = certificationsEnabled ? certifications(student) : List.of();
         String certificationFocus = certificationsEnabled ? certificationFocus(student) : null;
         List<EvaluationCard> evaluationCards = evaluations.list(student);
+        List<PathCard> pathCards = paths.mine(student);
         List<PreparationPoint> preparation = practices.preparation(student, 3);
         List<PreparationPoint> strengths = preparation.stream().filter(item -> item.percentage() != null
                 && item.percentage().compareTo(BigDecimal.valueOf(80)) >= 0).limit(3).toList();
         List<PreparationPoint> improvement = preparation.stream().filter(item -> item.percentage() != null
                 && item.percentage().compareTo(BigDecimal.valueOf(75)) < 0)
                 .sorted(Comparator.comparing(PreparationPoint::percentage)).limit(3).toList();
-        HealthCheck health = health(certificationFocus, evaluationCards, improvement);
-        Focus focus = focus(certificationFocus, certifications, evaluationCards, improvement);
+        HealthCheck health = health(certificationFocus, evaluationCards, pathCards, improvement);
+        Focus focus = focus(certificationFocus, certifications, evaluationCards, pathCards, improvement);
         ContinueItem continueItem = practices.activePractice(student);
         if (continueItem == null) continueItem = evaluationContinue(evaluationCards);
-        List<Recommendation> recommendations = recommendations(certificationFocus, certifications, evaluationCards, improvement);
+        if (continueItem == null) continueItem = pathContinue(pathCards);
+        List<Recommendation> recommendations = recommendations(certificationFocus, certifications, evaluationCards, pathCards, improvement);
         List<TrendPoint> trend = practices.trend(student);
         List<ActivityItem> activity = new ArrayList<>();
         activity.addAll(practices.recentActivity(student, 8));
         activity.addAll(evaluations.recentActivity(student, 8));
+        activity.addAll(paths.recentActivity(student, 8));
         if (certificationsEnabled) activity.addAll(certificationActivity(student));
         activity = activity.stream().sorted(Comparator.comparing(ActivityItem::occurredAt).reversed()).limit(10).toList();
         return new HomeView(profile, health, focus, continueItem, certificationsEnabled,
-                practices.availableQuestionCount(student), certifications, evaluationCards, List.of(),
+                practices.availableQuestionCount(student), certifications, evaluationCards, pathCards,
                 preparation, strengths, improvement, recommendations, trend, activity);
     }
 
@@ -177,7 +183,7 @@ public class StudentDevelopmentService {
     }
 
     private HealthCheck health(String certificationFocus, List<EvaluationCard> evaluations,
-            List<PreparationPoint> improvement) {
+            List<PathCard> paths, List<PreparationPoint> improvement) {
         if ("PENDING_DEACTIVATION".equals(certificationFocus))
             return new HealthCheck("ATTENTION_PRIORITY", "Atención prioritaria", "Hay una certificación con segundo intento no aprobado.");
         if ("EXPIRED".equals(certificationFocus))
@@ -187,12 +193,15 @@ public class StudentDevelopmentService {
         long pending = evaluations.stream().filter(item -> !"COMPLETED".equals(item.status())).count();
         if (pending > 0) return new HealthCheck("CONTINUE", "Continúa avanzando", pending == 1
                 ? "Tienes una evaluación pendiente." : "Tienes " + pending + " evaluaciones pendientes.");
+        long activePaths = paths.stream().filter(item -> !"COMPLETED".equals(item.status()) && !"EMPTY".equals(item.status())).count();
+        if (activePaths > 0) return new HealthCheck("CONTINUE", "Continúa avanzando", activePaths == 1
+                ? "Tienes un Path de desarrollo activo." : "Tienes " + activePaths + " Paths de desarrollo activos.");
         if (!improvement.isEmpty()) return new HealthCheck("CONTINUE", "Continúa avanzando", "Tu actividad reciente muestra temas que conviene reforzar.");
         return new HealthCheck("ALL_GOOD", "Todo en orden", "No hay situaciones prioritarias en tu información actual.");
     }
 
     private Focus focus(String certificationFocus, List<CertificationCard> certifications,
-            List<EvaluationCard> evaluations, List<PreparationPoint> improvement) {
+            List<EvaluationCard> evaluations, List<PathCard> paths, List<PreparationPoint> improvement) {
         CertificationCard trigger = certifications.stream().filter(item -> item.status().equals(certificationFocus)).findFirst()
                 .orElse(certifications.isEmpty() ? null : certifications.getFirst());
         if (trigger != null && "PENDING_DEACTIVATION".equals(certificationFocus)) {
@@ -218,6 +227,14 @@ public class StudentDevelopmentService {
                             new ActionLink("EVALUATION", evaluation.activeAttemptPublicId() == null ? "Comenzar" : "Continuar",
                                     evaluation.activeAttemptPublicId() == null ? "/student/evaluations" : "/student/evaluations/attempt/" + evaluation.activeAttemptPublicId())));
         }
+        PathCard path = paths.stream().filter(item -> "IN_PROGRESS".equals(item.status())).findFirst()
+                .orElse(paths.stream().filter(item -> "ASSIGNED".equals(item.status())).findFirst().orElse(null));
+        if (path != null) {
+            String detail = path.nextStageTitle() == null ? "Tu ruta de desarrollo está disponible."
+                    : "Tu siguiente etapa es " + path.nextStageTitle() + ".";
+            return new Focus("PATH", "ACTION", "Continúa " + path.name(), detail,
+                    List.of(new ActionLink("PATH", "Continuar Path", "/student/paths/" + path.assignmentPublicId())));
+        }
         if (!improvement.isEmpty()) {
             PreparationPoint item = improvement.getFirst();
             return new Focus("STUDY", "ACTION", "Te conviene reforzar " + item.label(),
@@ -235,8 +252,16 @@ public class StudentDevelopmentService {
                         item.questionCount(), null, "/student/evaluations/attempt/" + item.activeAttemptPublicId())).orElse(null);
     }
 
+    private ContinueItem pathContinue(List<PathCard> paths) {
+        return paths.stream().filter(item -> "IN_PROGRESS".equals(item.status())).findFirst()
+                .map(item -> new ContinueItem("PATH", item.name(),
+                        item.nextStageTitle() == null ? "Path en progreso" : "Siguiente: " + item.nextStageTitle(),
+                        item.completedStages(), item.totalStages(), null,
+                        "/student/paths/" + item.assignmentPublicId())).orElse(null);
+    }
+
     private List<Recommendation> recommendations(String certificationFocus, List<CertificationCard> certifications,
-            List<EvaluationCard> evaluations, List<PreparationPoint> improvement) {
+            List<EvaluationCard> evaluations, List<PathCard> paths, List<PreparationPoint> improvement) {
         List<Recommendation> result = new ArrayList<>();
         if (certificationFocus != null && !"IN_RULE".equals(certificationFocus)) {
             CertificationCard item = certifications.stream().filter(value -> value.status().equals(certificationFocus)).findFirst().orElse(null);
@@ -248,6 +273,10 @@ public class StudentDevelopmentService {
         evaluations.stream().filter(item -> !"COMPLETED".equals(item.status())).limit(2).forEach(item -> result.add(
                 new Recommendation("EVALUATION", "ACTION", item.title(), "Tienes esta evaluación pendiente.",
                         "Ver evaluación", "/student/evaluations")));
+        paths.stream().filter(item -> !"COMPLETED".equals(item.status()) && !"EMPTY".equals(item.status())).limit(1)
+                .forEach(item -> result.add(new Recommendation("PATH", "ACTION", "Continúa " + item.name(),
+                        item.nextStageTitle() == null ? "Tu Path está disponible." : "Siguiente etapa: " + item.nextStageTitle() + ".",
+                        "Continuar Path", "/student/paths/" + item.assignmentPublicId())));
         improvement.stream().limit(2).forEach(item -> result.add(new Recommendation("STUDY", "ACTION",
                 "Refuerza " + item.label(), "Tu desempeño reciente en este tema es de " + item.percentage() + "%.",
                 "Practicar", "/student/study")));

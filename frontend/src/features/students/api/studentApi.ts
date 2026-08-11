@@ -12,6 +12,8 @@ import type {
   StudentIdentity,
   StudentPage,
   StudentFilterOptions,
+  StudentPathOption,
+  StudentAssignedPath,
   StudentCredentialResult,
   StudentSession,
   UpdateStudentPayload
@@ -156,4 +158,24 @@ export function assignStudentEvaluation(publicId: string, formPublicId: string, 
     method: 'POST',
     body: JSON.stringify({ formPublicId, dueAt: dueAt ? new Date(dueAt).toISOString() : null })
   })
+}
+
+
+export function getAssignableStudentPaths(publicId: string) {
+  return apiRequest<StudentPathOption[]>(`/admin/students/${publicId}/development/path-options`)
+}
+
+export function getAssignedStudentPaths(publicId: string) {
+  return apiRequest<StudentAssignedPath[]>(`/admin/students/${publicId}/development/paths`)
+}
+
+export function assignStudentPath(publicId: string, pathPublicId: string) {
+  return apiRequest<StudentAssignedPath>(`/admin/students/${publicId}/development/paths`, {
+    method: 'POST',
+    body: JSON.stringify({ pathPublicId })
+  })
+}
+
+export function removeStudentPath(publicId: string, assignmentPublicId: string) {
+  return apiRequest<void>(`/admin/students/${publicId}/development/paths/${assignmentPublicId}`, { method: 'DELETE' })
 }

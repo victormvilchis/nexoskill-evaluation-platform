@@ -53,17 +53,20 @@ public class StudentEvaluationService {
     private final StudentStudyQuestionRepository questions;
     private final ObjectMapper json;
     private final Clock clock;
+    private final StudentPathService paths;
 
     public StudentEvaluationService(NamedParameterJdbcTemplate jdbc, StudentStudyQuestionRepository questions,
-            ObjectMapper json, Clock clock) {
+            ObjectMapper json, Clock clock, StudentPathService paths) {
         this.jdbc = jdbc;
         this.questions = questions;
         this.json = json;
         this.clock = clock;
+        this.paths = paths;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<EvaluationCard> list(AuthenticatedStudent student) {
+        paths.ensureAvailability(student);
         return jdbc.query("""
                 SELECT assignment.PUBLIC_ID ASSIGNMENT_PUBLIC_ID, form.PUBLIC_ID FORM_PUBLIC_ID,
                        form.TITLE, form.DESCRIPTION, assignment.STATUS, assignment.DUE_AT,
@@ -82,7 +85,15 @@ public class StudentEvaluationService {
                          WHERE active_attempt.FORM_ASSIGNMENT_ID = assignment.FORM_ASSIGNMENT_ID
                            AND active_attempt.STATUS = 'IN_PROGRESS') ACTIVE_ATTEMPT_PUBLIC_ID,
                        form.ALLOW_SAVE_RESUME,
-                       form.ACCEPT_RESPONSES, form.STARTS_AT, form.ENDS_AT
+                       form.ACCEPT_RESPONSES, form.STARTS_AT, form.ENDS_AT,
+                       (SELECT LISTAGG(DISTINCT path_value.PATH_NAME, ' · ') WITHIN GROUP (ORDER BY path_value.PATH_NAME)
+                          FROM STUDENT_FORM_ASSIGNMENT_ORIGIN origin_value
+                          JOIN STUDENT_PATH_ASSIGNMENT path_assignment
+                            ON path_assignment.PATH_ASSIGNMENT_ID=origin_value.PATH_ASSIGNMENT_ID
+                           AND path_assignment.STATUS='ACTIVE'
+                          JOIN LEARNING_PATH path_value ON path_value.PATH_ID=path_assignment.PATH_ID AND path_value.STATUS='ACTIVE'
+                         WHERE origin_value.FORM_ASSIGNMENT_ID=assignment.FORM_ASSIGNMENT_ID
+                           AND origin_value.STATUS='ACTIVE') PATH_NAMES
                   FROM STUDENT_FORM_ASSIGNMENT assignment
                   JOIN EVALUATION_FORM form ON form.FORM_ID = assignment.FORM_ID
                  WHERE assignment.STUDENT_ID = :studentId
@@ -103,7 +114,8 @@ public class StudentEvaluationService {
                             rs.getInt("QUESTION_COUNT"), nullableInt(rs, "DURATION_MINUTES"),
                             rs.getBigDecimal("PASSING_SCORE"), max, used, timestampOffset(rs.getTimestamp("DUE_AT")),
                             active == null && availableNow && remaining && !"COMPLETED".equals(rs.getString("STATUS")),
-                            active != null && rs.getInt("ALLOW_SAVE_RESUME") == 1, active);
+                            active != null && rs.getInt("ALLOW_SAVE_RESUME") == 1, active,
+                            splitPathNames(rs.getString("PATH_NAMES")));
                 });
     }
 
@@ -149,6 +161,20 @@ public class StudentEvaluationService {
                            AND assignment.FORM_ID = form.FORM_ID
                            AND assignment.STATUS IN ('ASSIGNED','IN_PROGRESS')
                    )
+                   AND NOT EXISTS (
+                        SELECT 1
+                          FROM STUDENT_PATH_ASSIGNMENT path_assignment
+                          JOIN LEARNING_PATH path_value ON path_value.PATH_ID = path_assignment.PATH_ID
+                          JOIN LEARNING_PATH_COLLECTION relation_value ON relation_value.PATH_ID = path_value.PATH_ID
+                          JOIN LEARNING_COLLECTION collection_value ON collection_value.COLLECTION_ID = relation_value.COLLECTION_ID
+                          JOIN LEARNING_COLLECTION_LEVEL level_value ON level_value.COLLECTION_ID = collection_value.COLLECTION_ID
+                         WHERE path_assignment.STUDENT_ID = :studentId
+                           AND path_assignment.ORGANIZATION_ID = :organizationId
+                           AND path_assignment.STATUS = 'ACTIVE'
+                           AND path_value.STATUS = 'ACTIVE'
+                           AND collection_value.STATUS = 'ACTIVE'
+                           AND level_value.FORM_ID = form.FORM_ID
+                   )
                  ORDER BY UPPER(form.TITLE), form.PUBLIC_ID
                 """, new MapSqlParameterSource()
                         .addValue("organizationId", target.organizationId())
@@ -163,6 +189,10 @@ public class StudentEvaluationService {
         StudentTarget target = resolveStudent(tenant, studentPublicId);
         String formPublicId = canonical(command == null ? null : command.formPublicId());
         FormRow form = requireAssignableForm(target.organizationId(), formPublicId);
+        if (availableThroughActivePath(target.studentId(), target.organizationId(), form.id())) {
+            throw new BusinessException("EVALUATION_AVAILABLE_THROUGH_PATH",
+                    "La evaluación ya está disponible para el colaborador mediante uno de sus Paths.");
+        }
         OffsetDateTime dueAt = command == null ? null : command.dueAt();
         if (dueAt != null && dueAt.isBefore(OffsetDateTime.now(clock))) {
             throw new BusinessException("EVALUATION_DUE_DATE_INVALID", "La fecha límite de la evaluación debe ser futura.");
@@ -188,6 +218,22 @@ public class StudentEvaluationService {
         return list(target.asAuthenticatedStudent()).stream()
                 .filter(item -> item.assignmentPublicId().equals(publicId)).findFirst()
                 .orElseThrow(() -> new BusinessException("EVALUATION_ASSIGNMENT_NOT_FOUND", "No fue posible consultar la evaluación asignada."));
+    }
+
+    private boolean availableThroughActivePath(Long studentId, Long organizationId, Long formId) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*)
+                  FROM STUDENT_PATH_ASSIGNMENT path_assignment
+                  JOIN LEARNING_PATH path_value ON path_value.PATH_ID=path_assignment.PATH_ID
+                  JOIN LEARNING_PATH_COLLECTION relation_value ON relation_value.PATH_ID=path_value.PATH_ID
+                  JOIN LEARNING_COLLECTION collection_value ON collection_value.COLLECTION_ID=relation_value.COLLECTION_ID
+                  JOIN LEARNING_COLLECTION_LEVEL level_value ON level_value.COLLECTION_ID=collection_value.COLLECTION_ID
+                 WHERE path_assignment.STUDENT_ID=:studentId AND path_assignment.ORGANIZATION_ID=:organizationId
+                   AND path_assignment.STATUS='ACTIVE' AND path_value.STATUS='ACTIVE' AND collection_value.STATUS='ACTIVE'
+                   AND level_value.FORM_ID=:formId
+                """, new MapSqlParameterSource().addValue("studentId", studentId)
+                        .addValue("organizationId", organizationId).addValue("formId", formId), Integer.class);
+        return count != null && count > 0;
     }
 
     @Transactional
@@ -394,6 +440,12 @@ public class StudentEvaluationService {
                     correctPairs, acceptedText));
         }
         return List.copyOf(result);
+    }
+
+    private static List<String> splitPathNames(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return java.util.Arrays.stream(value.split("\\s*·\\s*"))
+                .map(String::trim).filter(item -> !item.isBlank()).distinct().toList();
     }
 
     private static boolean hasText(String value) {

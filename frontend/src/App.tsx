@@ -5,6 +5,10 @@ import { AdminQuestionDetailPage } from './pages/AdminQuestionDetailPage'
 import { AdminCollectionsPage } from './pages/AdminCollectionsPage'
 import { CreateCollectionPage } from './pages/CreateCollectionPage'
 import { CollectionDetailPage } from './pages/CollectionDetailPage'
+import { AdminPathsPage } from './pages/AdminPathsPage'
+import { CreatePathPage } from './pages/CreatePathPage'
+import { PathDetailPage } from './pages/PathDetailPage'
+import { PathManagementPage } from './pages/PathManagementPage'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
@@ -71,6 +75,7 @@ function resolveDocumentSection(pathname: string) {
   if (pathname.startsWith('/admin/questions')) return 'Preguntas'
   if (pathname.startsWith('/admin/forms')) return 'Formularios'
   if (pathname.startsWith('/admin/collections')) return 'Colecciones'
+  if (pathname.startsWith('/admin/paths')) return 'Paths'
   if (pathname.startsWith('/admin/catalogs')) return 'Catálogos'
   if (pathname === '/dashboard') return 'Dashboard'
   if (pathname === '/access-denied') return 'Acceso no disponible'
@@ -110,6 +115,7 @@ export default function App() {
           <Route path="/student/evaluations" element={<StudentEvaluationsPage />} />
           <Route path="/student/evaluations/attempt/:attemptPublicId" element={<StudentEvaluationAttemptPage />} />
           <Route path="/student/paths" element={<StudentPathsPage />} />
+          <Route path="/student/paths/:assignmentPublicId" element={<StudentPathsPage />} />
           <Route path="/student/certifications" element={<StudentCertificationsSelfPage />} />
           <Route path="/student/progress" element={<StudentProgressPage />} />
           <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
@@ -185,7 +191,7 @@ export default function App() {
           <Route element={<PermissionRoute permission="STUDENT_IMPORT" />}>
             <Route path="/admin/collaborators/import" element={<StudentImportPage />} />
           </Route>
-          <Route element={<PermissionRoute anyOf={['STUDENT_STATUS_CHANGE', 'STUDENT_SESSION_MANAGE', 'STUDENT_DELETE']} />}>
+          <Route element={<PermissionRoute anyOf={['STUDENT_UPDATE', 'STUDENT_STATUS_CHANGE', 'STUDENT_SESSION_MANAGE', 'STUDENT_DELETE']} />}>
             <Route path="/admin/collaborators/:publicId/manage" element={<StudentManagementPage />} />
           </Route>
           <Route element={<PermissionRoute permission="STUDENT_CERTIFICATION_VIEW" />}>
@@ -212,6 +218,15 @@ export default function App() {
           <Route element={<PermissionRoute permission="COLLECTION_MANAGE" />}>
             <Route path="/admin/collections/new" element={<CreateCollectionPage />} />
             <Route path="/admin/collections/:publicId/edit" element={<CollectionDetailPage />} />
+          </Route>
+          <Route element={<PermissionRoute permission="PATH_VIEW" />}>
+            <Route path="/admin/paths" element={<AdminPathsPage />} />
+            <Route path="/admin/paths/:publicId" element={<PathDetailPage readOnly />} />
+          </Route>
+          <Route element={<PermissionRoute permission="PATH_MANAGE" />}>
+            <Route path="/admin/paths/new" element={<CreatePathPage />} />
+            <Route path="/admin/paths/:publicId/edit" element={<PathDetailPage />} />
+            <Route path="/admin/paths/:publicId/manage" element={<PathManagementPage />} />
           </Route>
           <Route path="/admin/question-collections" element={<Navigate to="/admin/collections" replace />} />
           <Route path="/admin/question-collections/new" element={<Navigate to="/admin/collections/new" replace />} />

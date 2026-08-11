@@ -4,10 +4,14 @@ import { useAuth } from '../features/authentication/context/AuthContext'
 import {
   activateStudent,
   assignStudentEvaluation,
+  assignStudentPath,
   deactivateStudent,
   getStudentAdministration,
   getAssignableStudentEvaluations,
+  getAssignableStudentPaths,
+  getAssignedStudentPaths,
   getStudentAdministrativeHistory,
+  removeStudentPath,
   resetStudentPassword,
   revokeAllStudentSessions,
   revokeStudentSession
@@ -25,6 +29,8 @@ import type {
   StudentAdministrationView,
   StudentSession,
   StudentEvaluationOption,
+  StudentAssignedPath,
+  StudentPathOption,
   StudentTemporaryCredentials
 } from '../shared/types/students'
 
@@ -86,8 +92,17 @@ export function StudentManagementPage() {
   const [evaluationDueAt, setEvaluationDueAt] = useState('')
   const [evaluationLoading, setEvaluationLoading] = useState(false)
   const [evaluationAssigning, setEvaluationAssigning] = useState(false)
+  const [pathOptions, setPathOptions] = useState<StudentPathOption[]>([])
+  const [assignedPaths, setAssignedPaths] = useState<StudentAssignedPath[]>([])
+  const [pathPublicId, setPathPublicId] = useState('')
+  const [pathLoading, setPathLoading] = useState(false)
+  const [pathAssigning, setPathAssigning] = useState(false)
+  const [pathRemoving, setPathRemoving] = useState(false)
+  const [pathToRemove, setPathToRemove] = useState<StudentAssignedPath>()
 
   const canAssignEvaluations = permissions.has('STUDENT_UPDATE') && permissions.has('FORM_VIEW')
+  const canViewPaths = permissions.has('STUDENT_UPDATE') && permissions.has('PATH_VIEW')
+  const canManagePaths = permissions.has('STUDENT_UPDATE') && permissions.has('PATH_MANAGE')
 
   useEffect(() => {
     if (!canAssignEvaluations || !publicId) return
@@ -133,11 +148,82 @@ export function StudentManagementPage() {
     }
   }
 
+  async function loadPathData() {
+    if (!canViewPaths) return
+    setPathLoading(true)
+    try {
+      const requests: [Promise<StudentAssignedPath[]>, Promise<StudentPathOption[]> | null] = [
+        getAssignedStudentPaths(publicId),
+        canManagePaths ? getAssignableStudentPaths(publicId) : null
+      ]
+      const assigned = await requests[0]
+      const options = requests[1] ? await requests[1] : []
+      setAssignedPaths(Array.isArray(assigned) ? assigned : [])
+      setPathOptions(Array.isArray(options) ? options : [])
+      if (pathPublicId && !options.some((item) => item.publicId === pathPublicId)) setPathPublicId('')
+    } finally {
+      setPathLoading(false)
+    }
+  }
+
+  async function assignPath() {
+    if (!pathPublicId || !canManagePaths) return
+    setPathAssigning(true)
+    setError(undefined)
+    try {
+      const assigned = await assignStudentPath(publicId, pathPublicId)
+      toast.success('Path asignado', `${assigned.name} ya está disponible en Mi Desarrollo del colaborador.`)
+      setPathPublicId('')
+      await loadPathData()
+      setHistoryPage(0)
+    } catch (requestError) {
+      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible asignar el Path.')
+    } finally {
+      setPathAssigning(false)
+    }
+  }
+
+  async function confirmRemovePath() {
+    if (!pathToRemove || !canManagePaths) return
+    setPathRemoving(true)
+    setError(undefined)
+    try {
+      await removeStudentPath(publicId, pathToRemove.assignmentPublicId)
+      toast.success('Path retirado', `${pathToRemove.name} dejó de estar disponible. Los intentos, resultados e historial existentes se conservaron.`)
+      setPathToRemove(undefined)
+      await loadPathData()
+      setHistoryPage(0)
+    } catch (requestError) {
+      setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible retirar el Path.')
+    } finally {
+      setPathRemoving(false)
+    }
+  }
+
   async function loadAdministration() {
     const response = await getStudentAdministration(publicId)
     setAdministration(response)
     return response
   }
+
+  useEffect(() => {
+    if (!canViewPaths || !publicId) return
+    let active = true
+    setPathLoading(true)
+    const assignedRequest = getAssignedStudentPaths(publicId)
+    const optionsRequest = canManagePaths ? getAssignableStudentPaths(publicId) : Promise.resolve<StudentPathOption[]>([])
+    Promise.all([assignedRequest, optionsRequest])
+      .then(([assigned, options]) => {
+        if (!active) return
+        setAssignedPaths(Array.isArray(assigned) ? assigned : [])
+        setPathOptions(Array.isArray(options) ? options : [])
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof ApiRequestError ? requestError.message : 'No fue posible consultar los Paths del colaborador.')
+      })
+      .finally(() => { if (active) setPathLoading(false) })
+    return () => { active = false }
+  }, [canManagePaths, canViewPaths, publicId])
 
   useEffect(() => {
     let active = true
@@ -319,9 +405,18 @@ export function StudentManagementPage() {
         </section>
       )}
 
+      {canViewPaths && (
+        <section className="ns-card student-administration-section student-path-assignment-admin">
+          <div className="ns-card-heading"><div><span className="ns-step">4</span><h2>Paths asignados</h2></div></div>
+          <p className="muted">Cada Path habilita sus Colecciones y Formularios sin duplicarlos. Retirar un Path conserva intentos, resultados e historial existentes.</p>
+          {pathLoading ? <p className="muted">Consultando Paths…</p> : assignedPaths.length === 0 ? <div className="path-assignment-empty"><strong>Sin Paths asignados</strong><span>Este colaborador todavía no tiene una ruta de desarrollo asignada.</span></div> : <div className="path-assignment-list">{assignedPaths.map((path) => <article key={path.assignmentPublicId}><div><strong>{path.name}</strong><small>{path.collectionCount} {path.collectionCount === 1 ? 'Colección' : 'Colecciones'} · {path.formCount} {path.formCount === 1 ? 'Formulario' : 'Formularios'} · Asignado {formatDateTime(path.assignedAt)}</small>{path.description && <span>{path.description}</span>}</div>{canManagePaths && <button className="secondary-button" type="button" disabled={pathRemoving || pathAssigning} onClick={() => setPathToRemove(path)}>Retirar</button>}</article>)}</div>}
+          {canManagePaths && <div className="path-assignment-form"><label className="form-field"><span>Asignar Path</span><select value={pathPublicId} disabled={pathLoading || pathAssigning || pathRemoving} onChange={(event) => setPathPublicId(event.target.value)}><option value="">{pathLoading ? 'Cargando Paths…' : 'Seleccionar Path'}</option>{pathOptions.map((item) => <option key={item.publicId} value={item.publicId}>{item.name} · {item.collectionCount} {item.collectionCount === 1 ? 'Colección' : 'Colecciones'} · {item.organizationName}</option>)}</select>{!pathLoading && pathOptions.length === 0 && <small>No hay Paths activos adicionales disponibles dentro del alcance del colaborador.</small>}</label><button className="primary-button" type="button" disabled={!pathPublicId || pathLoading || pathAssigning || pathRemoving} onClick={() => void assignPath()}>{pathAssigning ? 'Asignando…' : 'Asignar Path'}</button></div>}
+        </section>
+      )}
+
       {canAssignEvaluations && (
         <section className="ns-card student-administration-section">
-          <div className="ns-card-heading"><div><span className="ns-step">4</span><h2>Evaluaciones de Mi Desarrollo</h2></div></div>
+          <div className="ns-card-heading"><div><span className="ns-step">{canViewPaths ? 5 : 4}</span><h2>Evaluaciones de Mi Desarrollo</h2></div></div>
           <p className="muted">Asigna un formulario de evaluación activo al colaborador. La práctica de preparación permanece separada y no consume intentos oficiales.</p>
           <div className="foundation-form-grid">
             <label className="form-field ns-field-span-6"><span>Evaluación</span>
@@ -340,7 +435,7 @@ export function StudentManagementPage() {
       )}
 
       <section className="ns-card student-administration-section">
-        <div className="ns-card-heading"><div><span className="ns-step">{canAssignEvaluations ? 5 : 4}</span><h2>Historial administrativo</h2></div></div>
+        <div className="ns-card-heading"><div><span className="ns-step">{4 + (canViewPaths ? 1 : 0) + (canAssignEvaluations ? 1 : 0)}</span><h2>Historial administrativo</h2></div></div>
         <div className="ns-data-table-wrap">
           <table className="ns-data-table">
             <thead><tr><th>Evento</th><th>Descripción</th><th>Fecha</th></tr></thead>
@@ -374,7 +469,10 @@ export function StudentManagementPage() {
         confirmLabel="Generar contraseña" busy={busy} onCancel={() => setPendingAction(undefined)}
         onConfirm={() => void executePasswordReset()} />
 
-
+      <ConfirmDialog open={Boolean(pathToRemove)} title="Retirar Path"
+        description={pathToRemove ? `${pathToRemove.name} dejará de estar disponible para el colaborador. Los intentos, resultados e historial existentes se conservarán.` : ''}
+        confirmLabel="Retirar Path" busy={pathRemoving} onCancel={() => setPathToRemove(undefined)}
+        onConfirm={() => void confirmRemovePath()} />
 
       {temporaryCredentials && (
         <StudentTemporaryCredentialsDialog title="Contraseña temporal generada"

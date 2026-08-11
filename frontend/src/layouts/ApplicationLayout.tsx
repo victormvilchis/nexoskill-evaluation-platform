@@ -64,7 +64,9 @@ const navigationConfig: NavSection[] = [
     id: 'evaluation',
     label: 'Evaluaciones',
     icon: 'clipboard',
-    items: []
+    items: [
+      { id: 'paths', label: 'Paths', to: '/admin/paths', icon: 'collections', permission: 'PATH_VIEW' }
+    ]
   }
 ]
 
@@ -88,7 +90,7 @@ export function ApplicationLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(['administration', 'catalogs', 'content'])
+    () => new Set(['administration', 'catalogs', 'content', 'evaluation'])
   )
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(['catalogs'])

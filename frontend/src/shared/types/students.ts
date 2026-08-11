@@ -236,3 +236,24 @@ export interface StudentEvaluationAssignment {
   status: string
   dueAt: string | null
 }
+
+export interface StudentPathOption {
+  publicId: string
+  name: string
+  description: string | null
+  collectionCount: number
+  formCount: number
+  contentScope: string
+  organizationName: string
+}
+
+export interface StudentAssignedPath {
+  assignmentPublicId: string
+  pathPublicId: string
+  name: string
+  description: string | null
+  status: string
+  collectionCount: number
+  formCount: number
+  assignedAt: string
+}

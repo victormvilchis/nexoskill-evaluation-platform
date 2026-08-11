@@ -80,6 +80,17 @@ function resolveCrumbs(pathname: string): Crumb[] {
     else if (segments.length > 3) base.push({ label: 'Ver' })
     return base
   }
+  if (pathname.startsWith('/admin/paths')) {
+    const base: Crumb[] = [
+      { label: 'Evaluaciones' },
+      { label: 'Paths', to: '/admin/paths' }
+    ]
+    if (pathname.endsWith('/new')) base.push({ label: 'Nuevo Path' })
+    else if (pathname.endsWith('/edit')) base.push({ label: 'Editar' })
+    else if (pathname.endsWith('/manage')) base.push({ label: 'Administrar' })
+    else if (pathname !== '/admin/paths') base.push({ label: 'Detalle' })
+    return base
+  }
   if (pathname.startsWith('/admin/collections')) {
     const base: Crumb[] = [
       { label: 'Banco de Preguntas' },

@@ -36,12 +36,16 @@ public final class StudentDevelopmentModels {
     public record EvaluationCard(String assignmentPublicId, String formPublicId, String title,
             String description, String status, Integer questionCount, Integer durationMinutes,
             BigDecimal passingScore, Integer maxAttempts, int attemptsUsed, OffsetDateTime dueAt,
-            boolean canStart, boolean canResume, String activeAttemptPublicId) {}
+            boolean canStart, boolean canResume, String activeAttemptPublicId, List<String> pathNames) {
+        public EvaluationCard {
+            pathNames = pathNames == null ? List.of() : List.copyOf(pathNames);
+        }
+    }
 
-    public record PathStage(String formPublicId, String title, int order, String state,
-            BigDecimal score, boolean passed) {}
+    public record PathStage(String collectionPublicId, String title, int order, String state,
+            int completedForms, int totalForms, String nextEvaluationAssignmentPublicId) {}
 
-    public record PathCard(String assignmentPublicId, String collectionPublicId, String name,
+    public record PathCard(String assignmentPublicId, String pathPublicId, String name,
             String description, String status, Integer completedStages, Integer totalStages,
             BigDecimal progressPercent, String nextStageTitle, String nextEvaluationAssignmentPublicId,
             List<PathStage> stages) {
@@ -49,6 +53,12 @@ public final class StudentDevelopmentModels {
             stages = stages == null ? List.of() : List.copyOf(stages);
         }
     }
+
+    public record PathOption(String publicId, String name, String description, int collectionCount,
+            int formCount, String contentScope, String organizationName) {}
+
+    public record AssignedPathAdmin(String assignmentPublicId, String pathPublicId, String name,
+            String description, String status, int collectionCount, int formCount, OffsetDateTime assignedAt) {}
 
     public record PreparationPoint(String key, String label, int answered, int correct,
             BigDecimal percentage) {}
@@ -138,7 +148,7 @@ public final class StudentDevelopmentModels {
     }
 
     public record AssignEvaluationCommand(String formPublicId, OffsetDateTime dueAt) {}
-    public record AssignPathCommand(String collectionPublicId) {}
+    public record AssignPathCommand(String pathPublicId) {}
 
     public record EvaluationAttemptQuestion(String attemptQuestionPublicId, String questionPublicId,
             int position, int total, String type, String statement, String codeLanguage, String codeContent,

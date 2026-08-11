@@ -53,7 +53,7 @@ public class StudentAdministrationService {
 		int safeSize = Math.min(Math.max(size, 1), 100);
 		MapSqlParameterSource params = new MapSqlParameterSource().addValue("studentPublicId", publicId)
 				.addValue("offset", safePage * safeSize).addValue("size", safeSize);
-		String where = " WHERE MODULE_CODE IN ('STUDENTS','STUDENT_CERTIFICATIONS','TALENT_BANK') "
+		String where = " WHERE MODULE_CODE IN ('STUDENTS','STUDENT_CERTIFICATIONS','TALENT_BANK','PATHS') "
 				+ "AND EVENT_TYPE IN ('STUDENT_CREATED','STUDENT_UPDATED','STUDENT_FOUNDATION_CREATED',"
 				+ "'STUDENT_FOUNDATION_UPDATED','STUDENT_ACTIVATED','STUDENT_MOVED_TO_TALENT_BANK',"
 				+ "'STUDENT_PASSWORD_RESET','STUDENT_SESSION_REVOKED','STUDENT_SESSIONS_REVOKED',"
@@ -62,7 +62,8 @@ public class StudentAdministrationService {
 				+ "'STUDENT_CERTIFICATION_CYCLE_UPDATED','STUDENT_CERTIFICATION_PRIMARY_CHANGED',"
 				+ "'STUDENT_CERTIFICATION_CYCLE_CANCELLED','STUDENT_CERTIFICATION_ATTEMPT_CREATED',"
 				+ "'STUDENT_CERTIFICATION_ATTEMPT_UPDATED','TALENT_ACADEMY_CREATED','TALENT_PROSPECT_CREATED',"
-				+ "'TALENT_UPDATED','TALENT_FOUNDATION_UPDATED','TALENT_CV_UPDATED','TALENT_CONVERTED_TO_STUDENT') "
+					+ "'TALENT_UPDATED','TALENT_FOUNDATION_UPDATED','TALENT_CV_UPDATED','TALENT_CONVERTED_TO_STUDENT',"
+					+ "'PATH_ASSIGNED','PATH_REMOVED') "
 				+ "AND DBMS_LOB.INSTR(EVENT_DATA, :studentPublicId) > 0 ";
 		Long total = jdbc.queryForObject("SELECT COUNT(*) FROM AUDIT_EVENT" + where, params, Long.class);
 		List<AdministrativeHistoryItem> content = jdbc.query("""
@@ -105,6 +106,8 @@ public class StudentAdministrationService {
 		case "TALENT_UPDATED", "TALENT_FOUNDATION_UPDATED" -> "Actualización de talento";
 		case "TALENT_CV_UPDATED" -> "Actualización de CV";
 		case "TALENT_CONVERTED_TO_STUDENT" -> "Conversión a colaborador";
+		case "PATH_ASSIGNED" -> "Asignación de Path";
+		case "PATH_REMOVED" -> "Retiro de Path";
 		default -> "Cambio relevante";
 		};
 	}
