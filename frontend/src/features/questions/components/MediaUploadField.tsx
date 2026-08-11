@@ -1,4 +1,4 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { uploadQuestionMedia } from '../api/questionApi'
 import { ApiRequestError, isPlatformRequestFailure } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
@@ -10,19 +10,37 @@ interface MediaUploadFieldProps {
   value?: QuestionMedia
   onChange: (media?: QuestionMedia) => void
   compact?: boolean
+  capturePagePaste?: boolean
 }
 
 const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
-export function MediaUploadField({ label, value, onChange, compact = false }: MediaUploadFieldProps) {
+function clipboardImage(data: DataTransfer | null): File | null {
+  if (!data) return null
+  for (let index = 0; index < data.items.length; index += 1) {
+    const item = data.items[index]
+    if (item?.kind === 'file' && ACCEPTED_TYPES.has(item.type)) {
+      return item.getAsFile()
+    }
+  }
+  return null
+}
+
+export function MediaUploadField({
+  label,
+  value,
+  onChange,
+  compact = false,
+  capturePagePaste = false
+}: MediaUploadFieldProps) {
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
 
-  async function upload(file?: File) {
-    if (!file) return
+  const upload = useCallback(async (file?: File) => {
+    if (!file || busy) return
     if (!ACCEPTED_TYPES.has(file.type)) {
       toast.error('Formato de imagen no compatible', 'Usa PNG, JPEG, WEBP o GIF.')
       return
@@ -43,7 +61,7 @@ export function MediaUploadField({ label, value, onChange, compact = false }: Me
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''
     }
-  }
+  }, [busy, onChange, toast])
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault()
@@ -52,18 +70,34 @@ export function MediaUploadField({ label, value, onChange, compact = false }: Me
   }
 
   function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
-    let image: File | null = null
-    for (let index = 0; index < event.clipboardData.items.length; index += 1) {
-      const item = event.clipboardData.items[index]
-      if (item?.kind === 'file' && item.type.startsWith('image/')) {
-        image = item.getAsFile()
-        break
-      }
-    }
+    const image = clipboardImage(event.clipboardData)
     if (!image) return
     event.preventDefault()
     void upload(image)
   }
+
+  useEffect(() => {
+    if (!capturePagePaste) return
+
+    function handlePagePaste(event: globalThis.ClipboardEvent) {
+      if (event.defaultPrevented) return
+      const target = event.target
+      if (target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable)) {
+        return
+      }
+
+      const image = clipboardImage(event.clipboardData)
+      if (!image) return
+      event.preventDefault()
+      void upload(image)
+    }
+
+    document.addEventListener('paste', handlePagePaste)
+    return () => document.removeEventListener('paste', handlePagePaste)
+  }, [capturePagePaste, upload])
 
   return (
     <div
@@ -78,7 +112,7 @@ export function MediaUploadField({ label, value, onChange, compact = false }: Me
     >
       <div className="media-upload-label-row">
         <label>{label}</label>
-        {!value && <small>Selecciona, arrastra o pega una imagen</small>}
+        {!value && <small>Arrastra, selecciona o pega una imagen · Ctrl + V</small>}
       </div>
       {value ? (
         <div className="media-preview-enhanced">

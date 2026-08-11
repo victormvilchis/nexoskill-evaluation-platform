@@ -328,6 +328,7 @@ export function QuestionEditor({
         </div>
 
         <MediaUploadField
+          capturePagePaste
           label="Imagen del enunciado"
           value={promptMedia}
           onChange={setPromptMedia}

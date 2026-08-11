@@ -24,10 +24,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class OracleQuestionBankAdapter implements QuestionBankPort {
-    private static final String INTERNAL_DIFFICULTY = "JR";
+    private static final Logger LOGGER = LoggerFactory.getLogger(OracleQuestionBankAdapter.class);
+    private static final String INTERNAL_DIFFICULTY = "BASIC";
 
     private final SpringDataQuestionRepository questions;
     private final SpringDataQuestionTypeRepository types;
@@ -95,29 +98,54 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
 
     @Override
     public QuestionDetail create(CreateQuestionCommand command) {
-        var tenant = tenantContextResolver.resolve(request);
-        var target = creationTargetResolver.resolve(tenant, command.contentScope(), command.organizationPublicId());
-        var ownership = new GlobalContentAccessPolicy.Ownership(target.scope(), target.organizationId());
-        var selection = selection(command.typeCode(), command.categoryPublicIds(), Set.of(),
-                ownership.scope(), ownership.organizationId());
-        var settings = command.answerSettings();
-        var entity = QuestionJpaEntity.create(
-                UUID.randomUUID().toString(), selection.type(), difficulty(command.difficultyCode()),
-                technology(command.technologyPublicId(), ownership.scope(), ownership.organizationId(), null), command.levelCode(), selection.categories(),
-                trim(command.statement()), nullable(command.explanation()),
-                optionalMedia(command.promptMediaPublicId(), command.actorUserId(),
-                        ownership.scope(), ownership.organizationId()), javaLanguage(command.codeContent()),
-                nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
-                settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
-                null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
-        entity.assignOwnership(ownership.scope(), ownership.organizationId());
-        addOptions(entity, command.options(), command.actorUserId(),
-                ownership.scope(), ownership.organizationId());
-        QuestionJpaEntity saved = questions.saveAndFlush(entity);
-        tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
-                saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
-        auditQuestion(command.actorUserId(), "QUESTION_CREATED", saved, Map.of());
-        return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
+        TenantContext tenant = null;
+        String stage = "resolve_tenant";
+        try {
+            tenant = tenantContextResolver.resolve(request);
+            stage = "resolve_creation_target";
+            var target = creationTargetResolver.resolve(tenant, command.contentScope(), command.organizationPublicId());
+            var ownership = new GlobalContentAccessPolicy.Ownership(target.scope(), target.organizationId());
+            stage = "resolve_classification";
+            var selection = selection(command.typeCode(), command.categoryPublicIds(), Set.of(),
+                    ownership.scope(), ownership.organizationId());
+            var settings = command.answerSettings();
+            var entity = QuestionJpaEntity.create(
+                    UUID.randomUUID().toString(), selection.type(), difficulty(command.difficultyCode()),
+                    technology(command.technologyPublicId(), ownership.scope(), ownership.organizationId(), null),
+                    command.levelCode(), selection.categories(), trim(command.statement()), nullable(command.explanation()),
+                    optionalMedia(command.promptMediaPublicId(), command.actorUserId(),
+                            ownership.scope(), ownership.organizationId()), javaLanguage(command.codeContent()),
+                    nullable(command.codeContent()), writeAnswers(settings.acceptedAnswers()),
+                    settings.caseSensitive(), selection.type().getCode().equals(QuestionTypeCode.OPEN_TEXT.name()),
+                    null, null, null, settings.maxLength(), command.actorUserId(), clock.instant());
+            entity.assignOwnership(ownership.scope(), ownership.organizationId());
+            stage = "resolve_options";
+            addOptions(entity, command.options(), command.actorUserId(),
+                    ownership.scope(), ownership.organizationId());
+            stage = "persist_question";
+            QuestionJpaEntity saved = questions.saveAndFlush(entity);
+            stage = "persist_tags";
+            tagStore.replace(saved.getId(), command.tags(), saved.getContentScope(),
+                    saved.getOwnerOrganizationId(), command.actorUserId(), clock.instant());
+            stage = "audit_question";
+            auditQuestion(command.actorUserId(), "QUESTION_CREATED", saved, Map.of());
+            stage = "build_response";
+            return toDetail(saved, memberships(List.of(saved.getId())), governanceSearch.metadata(saved.getId()));
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "Unexpected question creation failure stage={} actorUserId={} requestedScope={} "
+                            + "requestedOrganizationPublicId={} tenantOrganizationId={} tenantOrganizationPublicId={} "
+                            + "globalAdministrator={} rootCause={}",
+                    stage, command == null ? null : command.actorUserId(),
+                    command == null ? null : command.contentScope(),
+                    command == null ? null : command.organizationPublicId(),
+                    tenant == null ? null : tenant.organizationId(),
+                    tenant == null ? null : tenant.organizationPublicId(),
+                    tenant != null && tenant.globalAdministrator(), diagnosticType(exception), exception);
+            throw exception;
+        }
     }
     @Override
     public QuestionDetail update(UpdateQuestionCommand command) {
@@ -752,6 +780,15 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         if (value == null) return null;
         String normalized = value.trim();
         return normalized.length() <= max ? normalized : normalized.substring(0, max);
+    }
+
+
+    private String diagnosticType(Throwable exception) {
+        Throwable cursor = exception;
+        while (cursor.getCause() != null && cursor.getCause() != cursor) {
+            cursor = cursor.getCause();
+        }
+        return cursor.getClass().getName();
     }
 
     private BusinessException error(String code, String message) { return new BusinessException(code, message); }

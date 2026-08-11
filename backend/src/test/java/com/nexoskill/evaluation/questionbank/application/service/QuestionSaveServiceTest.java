@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,6 +106,30 @@ class QuestionSaveServiceTest {
                 TenantContext.organization(20L, "org-20", "ORG_20", false), actor)).doesNotThrowAnyException();
 
         verify(availability, never()).update(any(), any(), any(), any());
+    }
+
+    @Test
+    void unexpectedCreationFailureIsPropagatedAndDoesNotPersistAvailability() {
+        RuntimeException failure = new IllegalStateException("unexpected persistence failure");
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        when(create.execute(isNull())).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.create(null, QuestionAvailabilityMode.GLOBAL, List.of(), tenant, actor))
+                .isSameAs(failure);
+
+        verifyNoInteractions(availability);
+    }
+
+    @Test
+    void availabilityFailureIsPropagatedSoTheOuterTransactionCanRollback() {
+        QuestionDetail question = question(ContentScope.GLOBAL);
+        TenantContext tenant = TenantContext.global(1L, "global", "GLOBAL");
+        RuntimeException failure = new IllegalStateException("availability persistence failure");
+        when(create.execute(isNull())).thenReturn(question);
+        when(availability.update(eq(question.publicId()), any(), eq(tenant), any())).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.create(null, QuestionAvailabilityMode.GLOBAL, List.of(), tenant, actor))
+                .isSameAs(failure);
     }
 
     private static QuestionDetail question(ContentScope scope) {
