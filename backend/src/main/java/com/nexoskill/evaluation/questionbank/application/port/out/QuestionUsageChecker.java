@@ -5,6 +5,8 @@ public interface QuestionUsageChecker {
 
     DetachmentResult detachFromForms(Long questionId);
 
+    boolean hasHistoricalActivity(Long questionId);
+
     void deletePermanently(Long questionId);
 
     record DetachmentResult(int fixedFormRelations, int collectionRelations) {

@@ -6,7 +6,7 @@ import {
   getQuestion,
   restoreQuestion
 } from '../features/questions/api/questionApi'
-import { ApiRequestError } from '../shared/api/apiClient'
+import { ApiRequestError, isPlatformRequestFailure } from '../shared/api/apiClient'
 import { BackButton } from '../shared/components/BackButton'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { Icon } from '../shared/components/Icon'
@@ -58,16 +58,18 @@ export function QuestionManagementPage() {
         await changeQuestionStatus(question.publicId, 'ARCHIVED', question.entityVersion)
       } else if (action === 'DELETE') {
         await deleteQuestion(question.publicId, question.entityVersion,
-          'Eliminación lógica desde Administrar pregunta.')
+          'Eliminación física desde Administrar pregunta.')
       } else {
         await restoreQuestion(question.publicId, question.entityVersion)
       }
-      toast.success('Pregunta actualizada correctamente.')
+      toast.success(action === 'DELETE' ? 'Pregunta eliminada correctamente.' : action === 'INACTIVATE' ? 'Pregunta inactivada correctamente.' : action === 'ACTIVATE' ? 'Pregunta activada correctamente.' : 'Pregunta restaurada correctamente.')
       setAction(undefined)
       reload()
     } catch (requestError) {
-      toast.error('No fue posible completar la operación.',
-        requestError instanceof ApiRequestError ? requestError.message : undefined)
+      if (!isPlatformRequestFailure(requestError)) {
+        toast.error('No fue posible completar la operación.',
+          requestError instanceof ApiRequestError ? requestError.message : undefined)
+      }
     } finally {
       setBusy(false)
     }
@@ -84,17 +86,17 @@ export function QuestionManagementPage() {
       : action === 'DELETE' ? 'Eliminar pregunta'
         : 'Restaurar pregunta'
   const description = action === 'DELETE' && hasDependencies
-    ? 'La pregunta tiene dependencias. El backend validará que no se rompa contenido activo o histórico.'
+    ? 'La pregunta está relacionada con contenido actual. La eliminación será física y el backend impedirá la operación si existe actividad histórica que deba conservarse.'
     : action === 'DELETE'
-      ? 'La eliminación será lógica y conservará la trazabilidad histórica.'
+      ? 'La eliminación será física y definitiva. Si existe actividad histórica, la operación será rechazada y deberás inactivar la pregunta.'
       : action === 'INACTIVATE'
-        ? 'La pregunta dejará de estar disponible para nuevos usos, pero conservará sus relaciones.'
+        ? 'La pregunta dejará de estar disponible para nuevos usos y se retirará de relaciones operativas, conservando la información histórica.'
         : 'Confirma el cambio de estado de la pregunta.'
 
   return (
     <main className="content-page narrow-content resource-page">
       <BackButton fallback="/admin/questions" />
-      <div className="page-heading resource-heading"><div><p className="eyebrow">Banco de preguntas</p><h1>Administrar pregunta</h1><p className="muted">Estados, dependencias y eliminación lógica.</p></div></div>
+      <div className="page-heading resource-heading"><div><p className="eyebrow">Banco de preguntas</p><h1>Administrar pregunta</h1><p className="muted">Inactivación lógica, dependencias y eliminación física.</p></div></div>
 
       <section className="detail-card">
         <div className="question-card-top"><span className={`status-badge status-${question.status.toLowerCase()}`}>{labels[question.status]}</span><span>{question.ownership.scope === 'GLOBAL' ? 'GLOBAL' : question.ownership.organizationName}</span></div>

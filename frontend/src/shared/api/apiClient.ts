@@ -62,6 +62,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function isPlatformRequestFailure(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError && (error.status === 0 || error.status >= 500)
+}
+
 function publishAuthenticationFailure(code: string, message: string) {
   if (
     code === 'ACCESS_EXPIRED' ||

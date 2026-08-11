@@ -323,38 +323,6 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         return copyGlobalSourceToOrganization(source, tenant.organizationId(), actor);
     }
 
-    @Override
-    public QuestionDetail copyGlobalToOrganization(String id, String organizationPublicId, Long actor) {
-        var tenant = tenantContextResolver.resolve(request);
-        if (tenant == null || !tenant.globalAdministrator()) {
-            throw error("QUESTION_DISTRIBUTION_FORBIDDEN",
-                    "Solo el Administrador global puede distribuir preguntas hacia organizaciones.");
-        }
-        var target = creationTargetResolver.resolve(tenant, ContentScope.ORGANIZATION.name(),
-                organizationPublicId);
-        var source = lockedForDuplicate(id);
-        assertReadable(source);
-        return copyGlobalSourceToOrganization(source, target.organizationId(), actor);
-    }
-
-    @Override
-    public List<String> activeCommercialOrganizationPublicIds() {
-        var tenant = tenantContextResolver.resolve(request);
-        if (tenant == null || !tenant.globalAdministrator()) {
-            throw error("QUESTION_DISTRIBUTION_FORBIDDEN",
-                    "Solo el Administrador global puede consultar destinos de distribución.");
-        }
-        return jdbc.queryForList("""
-            SELECT PUBLIC_ID
-              FROM ORGANIZATION
-             WHERE ORGANIZATION_TYPE = 'CUSTOMER'
-               AND STATUS = 'ACTIVE'
-               AND VALID_FROM <= TRUNC(SYSDATE)
-               AND (EXPIRES_ON IS NULL OR EXPIRES_ON >= TRUNC(SYSDATE))
-             ORDER BY ORGANIZATION_NAME, ORGANIZATION_CODE
-            """, Map.of(), String.class);
-    }
-
     private QuestionDetail copyGlobalSourceToOrganization(QuestionJpaEntity source,
             Long targetOrganizationId, Long actor) {
         if (source.getContentScope() != ContentScope.GLOBAL) {
@@ -451,6 +419,10 @@ public class OracleQuestionBankAdapter implements QuestionBankPort {
         var entity = locked(id);
         assertEditable(entity);
         checkVersion(entity, expected);
+        if (usage.hasHistoricalActivity(entity.getId())) {
+            throw error("QUESTION_HISTORY_EXISTS",
+                    "La pregunta tiene prácticas, evaluaciones o respuestas históricas. Inactívala para conservar la trazabilidad; no puede eliminarse definitivamente.");
+        }
         boolean activeDependencies = usage.isUsedByActiveExam(entity.getId());
         QuestionUsageChecker.DetachmentResult detachment = usage.detachFromForms(entity.getId());
         auditQuestion(actor, "QUESTION_PERMANENTLY_DELETED", entity,

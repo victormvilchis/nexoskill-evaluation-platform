@@ -65,4 +65,20 @@ class OracleQuestionUsageCheckerTest {
 
         assertThat(new OracleQuestionUsageChecker(jdbc).isUsedByActiveExam(10L)).isFalse();
     }
+    @Test
+    void detectsHistoricalPracticeOrEvaluationUsage() {
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        when(jdbc.queryForObject(contains("HISTORICAL_USAGE_COUNT"), anyMap(), eq(Integer.class))).thenReturn(1);
+
+        assertThat(new OracleQuestionUsageChecker(jdbc).hasHistoricalActivity(10L)).isTrue();
+    }
+
+    @Test
+    void reportsNoHistoricalUsageWhenQuestionHasNeverBeenAnswered() {
+        NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
+        when(jdbc.queryForObject(contains("HISTORICAL_USAGE_COUNT"), anyMap(), eq(Integer.class))).thenReturn(0);
+
+        assertThat(new OracleQuestionUsageChecker(jdbc).hasHistoricalActivity(10L)).isFalse();
+    }
+
 }

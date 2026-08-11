@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { Link } from 'react-router-dom'
 import { getQuestionCatalogs, getQuestionCategoryOptions, getQuestionTechnologyOptions } from '../api/questionApi'
-import { ApiRequestError } from '../../../shared/api/apiClient'
+import { ApiRequestError, isPlatformRequestFailure } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
 import { useToast } from '../../../shared/components/ToastProvider'
 import type {
@@ -107,7 +107,7 @@ export function QuestionEditor({
   const [availableCategories, setAvailableCategories] = useState<QuestionCatalogs['categories']>()
   const [availableTechnologies, setAvailableTechnologies] = useState<QuestionCatalogs['technologies']>([])
   const [catalogLoading, setCatalogLoading] = useState(true)
-  const [catalogError, setCatalogError] = useState<string>()
+  const [catalogUnavailable, setCatalogUnavailable] = useState(false)
   const [type, setType] = useState<QuestionTypeCode>(initial?.typeCode ?? 'SINGLE_CHOICE')
   const [difficultyCode, setDifficultyCode] = useState(initial?.difficultyCode ?? 'JR')
   const [technologyPublicId, setTechnologyPublicId] = useState(initial?.technology?.publicId ?? '')
@@ -131,7 +131,7 @@ export function QuestionEditor({
   useEffect(() => {
     const controller = new AbortController()
     setCatalogLoading(true)
-    setCatalogError(undefined)
+    setCatalogUnavailable(false)
     setAvailableCategories(undefined)
     setAvailableTechnologies([])
     Promise.allSettled([
@@ -169,9 +169,15 @@ export function QuestionEditor({
         failures.push('No fue posible cargar las tecnologías disponibles.')
       }
       if (failures.length > 0) {
-        const message = failures.join(' ')
-        setCatalogError(message)
-        toast.error('No fue posible preparar el formulario de la pregunta.', message)
+        const failedResults = [catalogResult, categoryResult, technologyResult]
+          .filter((result) => result.status === 'rejected')
+        const platformFailure = failedResults.some((result) =>
+          result.status === 'rejected' && isPlatformRequestFailure(result.reason)
+        )
+        setCatalogUnavailable(true)
+        if (!platformFailure) {
+          toast.error('No fue posible preparar el formulario de la pregunta.', failures.join(' '))
+        }
       }
       setCatalogLoading(false)
     })
@@ -287,7 +293,9 @@ export function QuestionEditor({
       }
       await onSubmit(payload)
     } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 409) {
+      if (isPlatformRequestFailure(error)) {
+        // apiClient ya publicó el único feedback global para fallas de plataforma.
+      } else if (error instanceof ApiRequestError && error.status === 409) {
         toast.warning(
           'La pregunta cambió mientras la editabas',
           `${error.message} Tus datos permanecen en el formulario para que puedas revisarlos.`
@@ -412,7 +420,7 @@ export function QuestionEditor({
               onChange={(event) => setCategoryQuery(event.target.value)}
               placeholder="Buscar categoría"
               aria-label="Buscar categoría"
-              disabled={catalogLoading || Boolean(catalogError)}
+              disabled={catalogLoading || catalogUnavailable}
             />
           </div>
           {selectedCategories.length > 0 && (
@@ -434,12 +442,11 @@ export function QuestionEditor({
               )}
             </div>
           )}
-          {catalogLoading && !catalogError && <small>Cargando categorías disponibles…</small>}
-          {catalogError && <p className="field-error" role="alert">{catalogError}</p>}
-          {availableCategories && !catalogError && categoryOptions.length === 0 && (
+          {catalogLoading && !catalogUnavailable && <small>Cargando categorías disponibles…</small>}
+          {availableCategories && !catalogUnavailable && categoryOptions.length === 0 && (
             <p className="empty-inline-message">No existen categorías activas disponibles para crear una pregunta.</p>
           )}
-          {availableCategories && !catalogError && categoryOptions.length > 0 && filteredCategoryOptions.length === 0 && (
+          {availableCategories && !catalogUnavailable && categoryOptions.length > 0 && filteredCategoryOptions.length === 0 && (
             <p className="empty-inline-message">No hay categorías que coincidan con la búsqueda.</p>
           )}
           {filteredCategoryOptions.length > 0 && (
@@ -637,7 +644,7 @@ export function QuestionEditor({
 
       <div className="sticky-form-actions">
         <Link className="secondary-button button-link" to="/admin/questions">Cancelar</Link>
-        <button className="primary-button" disabled={busy || catalogLoading || Boolean(catalogError) || !catalogs || categoryOptions.length === 0 || categoryPublicIds.length === 0} type="submit">
+        <button className="primary-button" disabled={busy || catalogLoading || catalogUnavailable || !catalogs || categoryOptions.length === 0 || categoryPublicIds.length === 0} type="submit">
           {busy ? 'Guardando…' : submitLabel}
         </button>
       </div>

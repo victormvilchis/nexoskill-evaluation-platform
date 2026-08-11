@@ -5,7 +5,7 @@ import type { ContentScope, QuestionDetail, QuestionPayload } from '../../../sha
 import { ApiRequestError } from '../../../shared/api/apiClient'
 import { SelectField } from '../../../shared/components/SelectField'
 import { QuestionEditor } from './QuestionEditor'
-import type { QuestionAvailabilityMode } from '../api/questionAvailabilityApi'
+import { getQuestionAvailability, type QuestionAvailabilityMode } from '../api/questionAvailabilityApi'
 
 interface Props {
   initial?: QuestionDetail
@@ -41,7 +41,6 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
   const [selected, setSelected] = useState<string[]>([])
   const [organizations, setOrganizations] = useState<OrganizationSummary[]>([])
   const [loadingOrganizations, setLoadingOrganizations] = useState(false)
-  const [error, setError] = useState<string>()
   const globalQuestion = targetScope === 'GLOBAL'
 
   useEffect(() => {
@@ -56,10 +55,23 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
     })
       .then((items) => setOrganizations((current) => mergeOrganizations(current,
         items.filter((item) => item.organizationType === 'CUSTOMER'))))
-      .catch(() => { if (!controller.signal.aborted) setError('No fue posible consultar las organizaciones.') })
+      .catch(() => undefined)
       .finally(() => { if (!controller.signal.aborted) setLoadingOrganizations(false) })
     return () => controller.abort()
   }, [globalAdministrator])
+
+  useEffect(() => {
+    if (!globalAdministrator || !initial || initial.ownership.scope !== 'GLOBAL') return
+    const controller = new AbortController()
+    getQuestionAvailability(initial.publicId, controller.signal)
+      .then((availability) => {
+        if (controller.signal.aborted) return
+        setMode(availability.mode)
+        setSelected(availability.organizations.map((organization) => organization.publicId))
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [globalAdministrator, initial])
 
   const selectedOrganizations = useMemo(() => organizations.filter(
     (organization) => selected.includes(organization.publicId)
@@ -71,7 +83,6 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
     setOwnerOrganizationPublicId('')
     setSelected([])
     setMode('NONE')
-    setError(undefined)
   }
 
   function toggle(publicId: string) {
@@ -81,15 +92,12 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
   }
 
   async function submit(payload: QuestionPayload) {
-    setError(undefined)
     if (globalAdministrator && !editing && targetScope === 'ORGANIZATION' && !ownerOrganizationPublicId) {
       const message = 'Selecciona la organización propietaria de la pregunta.'
-      setError(message)
       throw new ApiRequestError(message, 'QUESTION_OWNER_ORGANIZATION_REQUIRED', 400)
     }
     if (globalAdministrator && !editing && globalQuestion && mode === 'SELECTED_ORGANIZATIONS' && selected.length === 0) {
       const message = 'Selecciona al menos una organización para esta pregunta.'
-      setError(message)
       throw new ApiRequestError(message, 'QUESTION_ORGANIZATIONS_REQUIRED', 400)
     }
     const cleanPayload: QuestionPayload = {
@@ -99,9 +107,9 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
       organizationPublicId: globalAdministrator && !editing && targetScope === 'ORGANIZATION'
         ? ownerOrganizationPublicId
         : undefined,
-      availabilityMode: globalAdministrator && !editing && globalQuestion ? mode : undefined,
-      availabilityOrganizationPublicIds: globalAdministrator && !editing && globalQuestion && mode === 'SELECTED_ORGANIZATIONS'
-        ? selectedOrganizations.map((organization) => organization.publicId)
+      availabilityMode: globalAdministrator && globalQuestion ? mode : undefined,
+      availabilityOrganizationPublicIds: globalAdministrator && globalQuestion && mode === 'SELECTED_ORGANIZATIONS'
+        ? selected
         : undefined
     }
     await onSubmit(cleanPayload)
@@ -146,26 +154,26 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
         </section>
       )}
 
-      {globalAdministrator && !editing && globalQuestion && (
+      {globalAdministrator && globalQuestion && (
         <section className="editor-card question-availability-card">
           <div className="section-heading">
-            <div><p className="eyebrow">Distribución</p><h2>Copias organizacionales</h2></div>
+            <div><p className="eyebrow">Disponibilidad</p><h2>Disponibilidad para organizaciones</h2></div>
             <span className="availability-count">
               {mode === 'NONE' ? 'Solo GLOBAL' : mode === 'GLOBAL' ? 'Todas' : `${selected.length} seleccionadas`}
             </span>
           </div>
-          <div className="availability-mode" role="radiogroup" aria-label="Distribución de la pregunta">
+          <div className="availability-mode" role="radiogroup" aria-label="Disponibilidad de la pregunta">
             <label>
               <input type="radio" name="availabilityMode" checked={mode === 'NONE'} onChange={() => { setMode('NONE'); setSelected([]) }} />
-              <span><strong>Crear únicamente en GLOBAL</strong><small>No se generará ninguna copia organizacional.</small></span>
+              <span><strong>Solo GLOBAL</strong><small>La pregunta no estará disponible para organizaciones.</small></span>
             </label>
             <label>
               <input type="radio" name="availabilityMode" checked={mode === 'GLOBAL'} onChange={() => { setMode('GLOBAL'); setSelected([]) }} />
-              <span><strong>Crear para todas las organizaciones</strong><small>Se generará una copia independiente para cada organización comercial activa.</small></span>
+              <span><strong>Todas las organizaciones</strong><small>La misma pregunta GLOBAL estará disponible por referencia para todas las organizaciones comerciales.</small></span>
             </label>
             <label>
               <input type="radio" name="availabilityMode" checked={mode === 'SELECTED_ORGANIZATIONS'} onChange={() => setMode('SELECTED_ORGANIZATIONS')} />
-              <span><strong>Crear para organizaciones seleccionadas</strong><small>Cada destino recibirá una copia independiente de la pregunta global.</small></span>
+              <span><strong>Organizaciones seleccionadas</strong><small>La misma pregunta GLOBAL estará disponible únicamente para las organizaciones elegidas.</small></span>
             </label>
           </div>
           {mode === 'SELECTED_ORGANIZATIONS' && (
@@ -193,7 +201,6 @@ export function QuestionEditorV2({ initial, globalAdministrator, submitLabel, on
           )}
         </section>
       )}
-      {error && <p className="error-message" role="alert">{error}</p>}
       <QuestionEditor
         initial={initial}
         onSubmit={submit}

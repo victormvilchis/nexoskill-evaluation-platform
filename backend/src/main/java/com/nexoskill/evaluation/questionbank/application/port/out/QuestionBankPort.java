@@ -12,9 +12,7 @@ public interface QuestionBankPort {
     QuestionDetail duplicate(String publicId, Long actorUserId);
 
     QuestionDetail copyToOrganization(String publicId, Long actorUserId);
-    QuestionDetail copyGlobalToOrganization(String publicId, String organizationPublicId, Long actorUserId);
     QuestionDetail duplicateGlobalToOrganization(String publicId, String organizationPublicId, Long actorUserId);
-    List<String> activeCommercialOrganizationPublicIds();
     QuestionDetail changeStatus(String publicId, QuestionStatus status, long expectedEntityVersion, Long actorUserId);
     void deletePermanently(String publicId, long expectedEntityVersion, String reason, Long actorUserId);
     QuestionDetail restore(String publicId, long expectedEntityVersion, Long actorUserId);

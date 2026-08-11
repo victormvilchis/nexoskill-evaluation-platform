@@ -22,13 +22,16 @@ public interface StudentStudyQuestionRepository extends Repository<QuestionJpaEn
                     OR (
                         q.CONTENT_SCOPE = 'GLOBAL'
                         AND (
-                            NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
-                            OR EXISTS (
+                            NVL(q.AVAILABILITY_MODE, 'NONE') = 'GLOBAL'
+                            OR (
+                                NVL(q.AVAILABILITY_MODE, 'NONE') = 'SELECTED_ORGANIZATIONS'
+                                AND EXISTS (
                                 SELECT 1
                                   FROM QUESTION_ORGANIZATION_AVAILABILITY availability
                                  WHERE availability.QUESTION_ID = q.QUESTION_ID
                                    AND availability.ORGANIZATION_ID = :organizationId
                                    AND availability.STATUS = 'ACTIVE'
+                                )
                             )
                         )
                         AND (
@@ -70,12 +73,15 @@ public interface StudentStudyQuestionRepository extends Repository<QuestionJpaEn
                     OR (
                         q.CONTENT_SCOPE = 'GLOBAL'
                         AND (
-                            NVL(q.AVAILABILITY_MODE, 'GLOBAL') = 'GLOBAL'
-                            OR EXISTS (
+                            NVL(q.AVAILABILITY_MODE, 'NONE') = 'GLOBAL'
+                            OR (
+                                NVL(q.AVAILABILITY_MODE, 'NONE') = 'SELECTED_ORGANIZATIONS'
+                                AND EXISTS (
                                 SELECT 1 FROM QUESTION_ORGANIZATION_AVAILABILITY availability
                                  WHERE availability.QUESTION_ID = q.QUESTION_ID
                                    AND availability.ORGANIZATION_ID = :organizationId
                                    AND availability.STATUS = 'ACTIVE'
+                                )
                             )
                         )
                         AND (

@@ -648,16 +648,17 @@ public class StudentEvaluationService {
         return """
                 ((%s.CONTENT_SCOPE='ORGANIZATION' AND %s.OWNER_ORGANIZATION_ID=:organizationId)
                  OR (%s.CONTENT_SCOPE='GLOBAL'
-                     AND (NVL(%s.AVAILABILITY_MODE,'GLOBAL')='GLOBAL'
-                          OR EXISTS (SELECT 1 FROM QUESTION_ORGANIZATION_AVAILABILITY availability
-                                     WHERE availability.QUESTION_ID=%s.QUESTION_ID
-                                       AND availability.ORGANIZATION_ID=:organizationId AND availability.STATUS='ACTIVE'))
+                     AND (NVL(%s.AVAILABILITY_MODE,'NONE')='GLOBAL'
+                          OR (NVL(%s.AVAILABILITY_MODE,'NONE')='SELECTED_ORGANIZATIONS'
+                              AND EXISTS (SELECT 1 FROM QUESTION_ORGANIZATION_AVAILABILITY availability
+                                          WHERE availability.QUESTION_ID=%s.QUESTION_ID
+                                            AND availability.ORGANIZATION_ID=:organizationId AND availability.STATUS='ACTIVE')))
                      AND (NOT EXISTS (SELECT 1 FROM GLOBAL_CONTENT_VERSION version_value
                                       WHERE version_value.CONTENT_TYPE='QUESTION' AND version_value.CONTENT_ID=%s.QUESTION_ID)
                           OR EXISTS (SELECT 1 FROM GLOBAL_CONTENT_VERSION version_value
                                      WHERE version_value.CONTENT_TYPE='QUESTION' AND version_value.CONTENT_ID=%s.QUESTION_ID
                                        AND version_value.EDITORIAL_STATUS='PUBLISHED'))))
-                """.formatted(alias, alias, alias, alias, alias, alias, alias);
+                """.formatted(alias, alias, alias, alias, alias, alias, alias, alias);
     }
 
     private FormRow requireAssignableForm(Long organizationId, String formPublicId) {

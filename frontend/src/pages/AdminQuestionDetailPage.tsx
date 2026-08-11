@@ -2,6 +2,8 @@ import { BackButton } from '../shared/components/BackButton'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getQuestion } from '../features/questions/api/questionApi'
+import { getQuestionAvailability, type QuestionAvailability } from '../features/questions/api/questionAvailabilityApi'
+import { useAuth } from '../features/authentication/context/AuthContext'
 import { JavaCodePreview } from '../features/questions/components/JavaCodePanel'
 import { ApiRequestError } from '../shared/api/apiClient'
 import { Icon } from '../shared/components/Icon'
@@ -10,8 +12,11 @@ import type { QuestionDetail } from '../shared/types/questions'
 
 export function AdminQuestionDetailPage() {
   const { publicId = '' } = useParams()
+  const { user } = useAuth()
+  const globalAdministrator = Boolean(user?.roles.includes('ADMINISTRATOR'))
   const [question, setQuestion] = useState<QuestionDetail>()
   const [error, setError] = useState<string>()
+  const [availability, setAvailability] = useState<QuestionAvailability>()
   const [reloadKey, setReloadKey] = useState(0)
   const reload = useCallback(() => setReloadKey((value) => value + 1), [])
 
@@ -29,6 +34,18 @@ export function AdminQuestionDetailPage() {
       })
     return () => controller.abort()
   }, [publicId, reloadKey])
+
+  useEffect(() => {
+    if (!globalAdministrator || question?.ownership.scope !== 'GLOBAL') {
+      setAvailability(undefined)
+      return
+    }
+    const controller = new AbortController()
+    getQuestionAvailability(question.publicId, controller.signal)
+      .then(setAvailability)
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [globalAdministrator, question?.ownership.scope, question?.publicId])
 
   if (error && !question) {
     return (
@@ -80,6 +97,18 @@ export function AdminQuestionDetailPage() {
           <div><span>Organización propietaria</span><strong>{question.ownership.organizationName ?? 'Sin propietario'}</strong></div>
           <div><span>Tecnología</span><strong>{question.technology?.name ?? 'Sin tecnología'}</strong></div>
           <div><span>Dificultad</span><strong>{question.difficultyName ?? 'Sin dificultad'}</strong></div>
+          {globalAdministrator && question.ownership.scope === 'GLOBAL' && (
+            <div className="question-governance-wide">
+              <span>Disponibilidad organizacional</span>
+              <strong>
+                {availability?.mode === 'GLOBAL'
+                  ? 'Todas las organizaciones'
+                  : availability?.mode === 'SELECTED_ORGANIZATIONS'
+                    ? availability.organizations.map((organization) => organization.name).join(', ') || 'Sin organizaciones seleccionadas'
+                    : 'Solo GLOBAL'}
+              </strong>
+            </div>
+          )}
           <div><span>Usuario creador</span><strong>{question.ownership.creatorName ?? 'Sin registro'}</strong></div>
           {question.ownership.clonedToGlobal && (
             <div className="question-governance-wide"><span>Origen organizacional</span><strong>{question.ownership.sourceOrganizationName ?? 'Sin registro'} · Versión {question.ownership.sourceQuestionVersion ?? '—'}</strong></div>

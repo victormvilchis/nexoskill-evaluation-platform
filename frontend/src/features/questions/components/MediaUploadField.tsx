@@ -1,6 +1,6 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { uploadQuestionMedia } from '../api/questionApi'
-import { ApiRequestError } from '../../../shared/api/apiClient'
+import { ApiRequestError, isPlatformRequestFailure } from '../../../shared/api/apiClient'
 import { Icon } from '../../../shared/components/Icon'
 import { useToast } from '../../../shared/components/ToastProvider'
 import type { QuestionMedia } from '../../../shared/types/questions'
@@ -36,7 +36,9 @@ export function MediaUploadField({ label, value, onChange, compact = false }: Me
       onChange(await uploadQuestionMedia(file))
       toast.success('Imagen cargada')
     } catch (error) {
-      toast.error('No fue posible cargar la imagen', error instanceof ApiRequestError ? error.message : undefined)
+      if (!isPlatformRequestFailure(error)) {
+        toast.error('No fue posible cargar la imagen', error instanceof ApiRequestError ? error.message : undefined)
+      }
     } finally {
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''

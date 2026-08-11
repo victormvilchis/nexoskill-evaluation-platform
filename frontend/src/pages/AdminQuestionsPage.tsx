@@ -17,7 +17,7 @@ import {
   restoreQuestion,
   searchQuestions
 } from '../features/questions/api/questionApi'
-import { ApiRequestError } from '../shared/api/apiClient'
+import { ApiRequestError, isPlatformRequestFailure } from '../shared/api/apiClient'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { FilterToolbar } from '../shared/components/FilterToolbar'
 import { Icon } from '../shared/components/Icon'
@@ -247,9 +247,11 @@ export function AdminQuestionsPage() {
       toast.success('Pregunta duplicada', 'La copia se creó correctamente dentro de tu organización.')
       navigate(`/admin/questions/${copy.publicId}/edit`)
     } catch (requestError) {
-      toast.error('No fue posible duplicar la pregunta', requestError instanceof ApiRequestError
-        ? requestError.message
-        : 'No fue posible duplicar la pregunta dentro del contexto actual.')
+      if (!isPlatformRequestFailure(requestError)) {
+        toast.error('No fue posible duplicar la pregunta', requestError instanceof ApiRequestError
+          ? requestError.message
+          : 'No fue posible duplicar la pregunta dentro del contexto actual.')
+      }
     } finally {
       setBusyId(undefined)
     }
@@ -283,7 +285,7 @@ export function AdminQuestionsPage() {
       setDuplicateState((current) => current ? {
         ...current,
         busy: false,
-        error: requestError instanceof ApiRequestError
+        error: isPlatformRequestFailure(requestError) ? undefined : requestError instanceof ApiRequestError
           ? requestError.message
           : 'No fue posible duplicar la pregunta.'
       } : current)
@@ -297,8 +299,10 @@ export function AdminQuestionsPage() {
       toast.success('Copia organizacional creada', 'La pregunta quedó disponible para editarse en tu organización.')
       navigate(`/admin/questions/${copy.publicId}/edit`)
     } catch (requestError) {
-      toast.error('No fue posible crear la copia organizacional',
-        requestError instanceof ApiRequestError ? requestError.message : undefined)
+      if (!isPlatformRequestFailure(requestError)) {
+        toast.error('No fue posible crear la copia organizacional',
+          requestError instanceof ApiRequestError ? requestError.message : undefined)
+      }
     } finally {
       setBusyId(undefined)
     }
@@ -334,7 +338,8 @@ export function AdminQuestionsPage() {
       setCloneState((current) => current ? {
         ...current,
         busy: false,
-        error: requestError instanceof ApiRequestError ? requestError.message : 'No fue posible clonar la pregunta al catálogo global.'
+        error: isPlatformRequestFailure(requestError) ? undefined
+          : requestError instanceof ApiRequestError ? requestError.message : 'No fue posible clonar la pregunta al catálogo global.'
       } : current)
     }
   }
@@ -359,7 +364,9 @@ export function AdminQuestionsPage() {
       reload()
     } catch (requestError) {
       const message = requestError instanceof ApiRequestError ? requestError.message : 'No fue posible completar la operación.'
-      if (requestError instanceof ApiRequestError && requestError.status === 409) {
+      if (isPlatformRequestFailure(requestError)) {
+        // El mecanismo global ya informó la falla de plataforma.
+      } else if (requestError instanceof ApiRequestError && requestError.status === 409) {
         toast.warning('La pregunta cambió mientras trabajabas', message)
         reload()
       } else {

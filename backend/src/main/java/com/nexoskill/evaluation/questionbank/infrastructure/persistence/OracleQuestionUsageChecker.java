@@ -104,6 +104,24 @@ public class OracleQuestionUsageChecker implements QuestionUsageChecker {
     }
 
     @Override
+    public boolean hasHistoricalActivity(Long questionId) {
+        if (questionId == null) return false;
+        Integer count = jdbc.queryForObject("""
+            SELECT (
+                SELECT COUNT(*)
+                  FROM STUDENT_PRACTICE_QUESTION
+                 WHERE QUESTION_ID = :questionId
+            ) + (
+                SELECT COUNT(*)
+                  FROM STUDENT_EVALUATION_QUESTION
+                 WHERE QUESTION_ID = :questionId
+            ) AS HISTORICAL_USAGE_COUNT
+              FROM DUAL
+            """, Map.of("questionId", questionId), Integer.class);
+        return count != null && count > 0;
+    }
+
+    @Override
     public void deletePermanently(Long questionId) {
         if (questionId == null) return;
         Map<String, Object> params = Map.of("questionId", questionId);
